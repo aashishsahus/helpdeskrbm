@@ -1,21 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { ProfileSelectorModal } from './ProfileSelectorModal';
 import {
-  UserCheck,
   X,
-  Search,
   Shield,
-  Briefcase,
   Mail,
-  Building,
   CheckCircle2,
   LogIn,
   KeyRound,
   AlertCircle,
   ShieldAlert
 } from 'lucide-react';
-import { UserRole, User } from '../types';
+import { User } from '../types';
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -23,19 +19,16 @@ interface LoginModalProps {
 }
 
 export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
-  const { currentUser, setCurrentUser, users, detectAndLoginSystemUser, loginByIdOrQuery, loginWithGoogleEmail } = useApp();
+  const { currentUser, setCurrentUser, users, loginByIdOrQuery, loginWithGoogleEmail } = useApp();
 
-  const [loginMethod, setLoginMethod] = useState<'quick' | 'email' | 'google'>('email');
+  const [loginMethod, setLoginMethod] = useState<'email' | 'google'>('email');
   const [emailInput, setEmailInput] = useState('');
-  const [employeeIdInput, setEmployeeIdInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [googleEmailInput, setGoogleEmailInput] = useState('');
-  const [selectedRoleFilter, setSelectedRoleFilter] = useState<string>('All');
-  const [searchQuery, setSearchQuery] = useState('');
   const [loginError, setLoginError] = useState('');
-  const [isDetecting, setIsDetecting] = useState(false);
   const [detectedMessage, setDetectedMessage] = useState('');
-  const [isOAuthLoading, setIsOAuthLoading] = useState(false);
+
+  const passwordInputRef = useRef<HTMLInputElement>(null);
 
   // Multi-profile state
   const [isProfileSelectorOpen, setIsProfileSelectorOpen] = useState(false);
@@ -72,51 +65,12 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
     setLoginError('');
     setDetectedMessage('');
 
-    const targetEmail = googleEmailInput.trim() || 'misrpr@rathibuildmart.com';
-    processLoginForEmail(targetEmail);
-  };
-
-  const roles: (UserRole | 'All')[] = ['All', 'Employee', 'Support Agent', 'Support Manager', 'Admin', 'Super Admin'];
-
-  const filteredUsers = users.filter(user => {
-    const matchesRole = selectedRoleFilter === 'All' || user.role === selectedRoleFilter;
-    const matchesQuery =
-      user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.employeeId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.department.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesRole && matchesQuery;
-  });
-
-  const handleSelectUserWithPinCheck = (user: typeof users[0]) => {
-    setLoginError('');
-    setDetectedMessage('');
-
-    // PIN check for account security
-    const targetPin = user.pin || user.password || (user.role === 'Super Admin' ? '2026' : '1234');
-    const enteredPin = window.prompt(
-      `Enter PIN / Password for ${user.name} (${user.role}).\n(Default PIN for ${user.name}: ${targetPin})`
-    );
-
-    if (enteredPin === null) return; // User cancelled
-
-    const cleanPin = enteredPin.trim();
-    if (
-      cleanPin === targetPin ||
-      cleanPin === '1234' ||
-      cleanPin === '123456' ||
-      cleanPin === '2026' ||
-      cleanPin === user.employeeId.replace(/\D/g, '')
-    ) {
-      setCurrentUser(user);
-      setDetectedMessage(`Logged in as ${user.name} (${user.employeeId} - ${user.role})`);
-      setTimeout(() => {
-        onClose();
-      }, 300);
-    } else {
-      setLoginError(`Incorrect PIN/Password for ${user.name}. Access denied.`);
+    if (!googleEmailInput.trim()) {
+      setLoginError('Please enter your registered Google Workspace email address.');
+      return;
     }
+
+    processLoginForEmail(googleEmailInput.trim());
   };
 
   const handleEmailLoginSubmit = (e: React.FormEvent) => {
@@ -124,9 +78,14 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
     setLoginError('');
     setDetectedMessage('');
 
-    const query = emailInput.trim() || employeeIdInput.trim();
+    const query = emailInput.trim();
     if (!query) {
-      setLoginError('Please enter a valid User ID, Employee ID, Name, or Email.');
+      setLoginError('Please enter a valid Employee ID, User ID, Name, or Email.');
+      return;
+    }
+
+    if (!passwordInput.trim()) {
+      setLoginError('Password / PIN is required. Please enter your account PIN.');
       return;
     }
 
@@ -145,29 +104,14 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
     }
   };
 
-  const getRoleBadgeColor = (role: UserRole) => {
-    switch (role) {
-      case 'Super Admin':
-        return 'bg-purple-100 text-purple-800 border-purple-200';
-      case 'Admin':
-        return 'bg-rose-100 text-rose-800 border-rose-200';
-      case 'Support Manager':
-        return 'bg-amber-100 text-amber-800 border-amber-200';
-      case 'Support Agent':
-        return 'bg-blue-100 text-blue-800 border-blue-200';
-      default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
-    }
-  };
-
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="bg-gradient-to-r from-slate-900 via-blue-900 to-indigo-900 text-white p-6 relative shrink-0">
           <button
             onClick={onClose}
-            className="absolute top-5 right-5 text-gray-300 hover:text-white bg-white/10 p-1.5 rounded-full transition-colors"
+            className="absolute top-5 right-5 text-gray-300 hover:text-white bg-white/10 p-1.5 rounded-full transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -179,7 +123,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
             <div>
               <h2 className="text-xl font-bold">Help Desk Account Portal</h2>
               <p className="text-xs text-blue-200">
-                Detect User by Employee ID, Name, or Email
+                Secure Authentication & Role-Based Access
               </p>
             </div>
           </div>
@@ -203,11 +147,15 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
           </div>
         </div>
 
-        {/* Tab Toggle (ID / Email Login vs Select Corporate Profile) */}
+        {/* Tab Toggle (Login by ID/Password vs Google Workspace SSO) */}
         <div className="flex border-b border-gray-200 bg-gray-50 px-6 shrink-0">
           <button
-            onClick={() => setLoginMethod('email')}
-            className={`py-3.5 px-4 text-xs font-bold border-b-2 flex items-center gap-2 transition-all ${
+            onClick={() => {
+              setLoginMethod('email');
+              setLoginError('');
+              setDetectedMessage('');
+            }}
+            className={`py-3.5 px-5 text-xs font-bold border-b-2 flex items-center gap-2 transition-all cursor-pointer ${
               loginMethod === 'email'
                 ? 'border-blue-600 text-blue-600 bg-white'
                 : 'border-transparent text-gray-500 hover:text-gray-800'
@@ -217,8 +165,12 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
             <span>Login by ID / Password</span>
           </button>
           <button
-            onClick={() => setLoginMethod('google')}
-            className={`py-3.5 px-4 text-xs font-bold border-b-2 flex items-center gap-2 transition-all ${
+            onClick={() => {
+              setLoginMethod('google');
+              setLoginError('');
+              setDetectedMessage('');
+            }}
+            className={`py-3.5 px-5 text-xs font-bold border-b-2 flex items-center gap-2 transition-all cursor-pointer ${
               loginMethod === 'google'
                 ? 'border-blue-600 text-blue-600 bg-white'
                 : 'border-transparent text-gray-500 hover:text-gray-800'
@@ -226,17 +178,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
           >
             <Shield className="w-4 h-4 text-blue-500" />
             <span>Google Workspace SSO</span>
-          </button>
-          <button
-            onClick={() => setLoginMethod('quick')}
-            className={`py-3.5 px-4 text-xs font-bold border-b-2 flex items-center gap-2 transition-all ${
-              loginMethod === 'quick'
-                ? 'border-blue-600 text-blue-600 bg-white'
-                : 'border-transparent text-gray-500 hover:text-gray-800'
-            }`}
-          >
-            <UserCheck className="w-4 h-4" />
-            <span>Select Profile ({users.length})</span>
           </button>
         </div>
 
@@ -262,7 +203,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
               <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-indigo-950 text-white rounded-2xl p-5 shadow-lg border border-blue-800/40 space-y-3">
                 <div className="flex items-center gap-2 text-blue-300 font-bold text-xs uppercase tracking-wider">
                   <Shield className="w-4 h-4 text-blue-400" />
-                  <span>Google Workspace OAuth 2.0 Single Sign-On</span>
+                  <span>Google Workspace Single Sign-On</span>
                 </div>
                 <h3 className="font-bold text-base text-white">Sign in with Corporate Google Account</h3>
                 <p className="text-xs text-blue-200 leading-relaxed">
@@ -288,35 +229,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                 </div>
               </div>
 
-              <div className="space-y-2 pt-1">
-                <label className="text-xs font-bold text-gray-700">Quick Google Test Accounts</label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setGoogleEmailInput('misrpr@rathibuildmart.com');
-                      processLoginForEmail('misrpr@rathibuildmart.com');
-                    }}
-                    className="p-2.5 border border-emerald-200 hover:border-emerald-500 bg-emerald-50/60 hover:bg-emerald-100/80 rounded-xl text-left transition-all cursor-pointer"
-                  >
-                    <div className="font-bold text-emerald-900 text-xs">Misr Pr (Super Admin)</div>
-                    <div className="text-[10px] text-emerald-700 font-mono">misrpr@rathibuildmart.com</div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setGoogleEmailInput('accountsrpr@rathibuildmart.com');
-                      processLoginForEmail('accountsrpr@rathibuildmart.com');
-                    }}
-                    className="p-2.5 border border-blue-200 hover:border-blue-500 bg-blue-50/60 hover:bg-blue-100/80 rounded-xl text-left transition-all cursor-pointer"
-                  >
-                    <div className="font-bold text-blue-900 text-xs">Ashish Rathi (Admin)</div>
-                    <div className="text-[10px] text-blue-700 font-mono">accountsrpr@rathibuildmart.com</div>
-                  </button>
-                </div>
-              </div>
-
               <button
                 type="submit"
                 className="w-full py-3 bg-[#4285F4] hover:bg-[#3367D6] text-white font-extrabold rounded-xl text-xs shadow-md transition-all flex items-center justify-center gap-2.5 cursor-pointer mt-3"
@@ -330,16 +242,16 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                 <span>Authenticate via Google SSO</span>
               </button>
             </form>
-          ) : loginMethod === 'email' ? (
+          ) : (
             /* ID / Email Login Form */
             <form onSubmit={handleEmailLoginSubmit} className="space-y-4 max-w-md mx-auto py-2">
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-3.5 text-xs text-blue-800 space-y-1">
                 <div className="font-bold flex items-center gap-1.5">
                   <Shield className="w-4 h-4 text-blue-600" />
-                  Exact ID & Role Password Detection
+                  ID & Password Authentication
                 </div>
                 <p className="text-[11px] leading-relaxed text-blue-700">
-                  Enter your Employee ID (e.g. <code className="bg-blue-100 px-1 py-0.5 rounded text-blue-900 font-bold">EMP-1011</code>, <code className="bg-blue-100 px-1 py-0.5 rounded text-blue-900 font-bold">1010</code>, <code className="bg-blue-100 px-1 py-0.5 rounded text-blue-900 font-bold">EMP-2026</code>), Name, or Email Address along with your PIN/Password.
+                  Enter your Employee ID (e.g. <code className="bg-blue-100 px-1 py-0.5 rounded text-blue-900 font-bold">EMP-1011</code>, <code className="bg-blue-100 px-1 py-0.5 rounded text-blue-900 font-bold">1010</code>, <code className="bg-blue-100 px-1 py-0.5 rounded text-blue-900 font-bold">EMP-2026</code>), User ID, or Email Address along with your Password/PIN.
                 </p>
               </div>
 
@@ -354,7 +266,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                       setEmailInput(e.target.value);
                       setLoginError('');
                     }}
-                    placeholder="e.g. EMP-1011, 1010, Dhaneshwari, or accountsrpr@rathibuildmart.com"
+                    placeholder="e.g. EMP-1011, 1010, Dhaneshwari, or misrpr@rathibuildmart.com"
                     className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-xs text-gray-900 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none font-medium"
                     autoFocus
                   />
@@ -364,26 +276,27 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-gray-700">Password / Employee PIN</label>
-                  <span className="text-[10px] text-gray-500 font-mono">Default PIN: 1234 or 2026</span>
+                  <span className="text-[10px] text-gray-500 font-mono">PIN e.g.: 1011, 1234 or 2026</span>
                 </div>
                 <div className="relative">
                   <KeyRound className="absolute left-3.5 top-3 w-4 h-4 text-gray-400" />
                   <input
+                    ref={passwordInputRef}
                     type="password"
                     value={passwordInput}
                     onChange={e => {
                       setPasswordInput(e.target.value);
                       setLoginError('');
                     }}
-                    placeholder="Enter account PIN or password..."
+                    placeholder="Enter password or PIN..."
                     className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-xs text-gray-900 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none"
                   />
                 </div>
               </div>
 
-              {/* Sample Quick Login Pills */}
+              {/* Registered Accounts Quick Autofill (Selects account ID, requires Password) */}
               <div className="space-y-1.5 pt-1">
-                <label className="text-xs font-bold text-gray-700">Registered Accounts (Click to Select)</label>
+                <label className="text-xs font-bold text-gray-700">Registered Accounts (Click to Select ID)</label>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
                   {users.slice(0, 6).map(u => (
                     <button
@@ -391,7 +304,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                       type="button"
                       onClick={() => {
                         setEmailInput(u.employeeId);
-                        handleSelectUserWithPinCheck(u);
+                        setPasswordInput('');
+                        setLoginError('');
+                        setDetectedMessage(`Selected account: ${u.name} (${u.employeeId}). Enter password to sign in.`);
+                        passwordInputRef.current?.focus();
                       }}
                       className="p-2 border border-gray-200 hover:border-blue-400 rounded-xl text-left bg-gray-50 hover:bg-blue-50/60 transition-all cursor-pointer flex flex-col justify-between"
                     >
@@ -413,108 +329,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                 <span>Verify Credentials & Sign In</span>
               </button>
             </form>
-          ) : (
-            /* Multi-User Directory Quick Selector with PIN enforcement */
-            <div className="space-y-4">
-              {/* Filter controls */}
-              <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
-                {/* Search */}
-                <div className="relative w-full sm:w-64">
-                  <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
-                    placeholder="Search ID, name, email, role..."
-                    className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none"
-                  />
-                </div>
-
-                {/* Role Pills */}
-                <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
-                  {roles.map(r => (
-                    <button
-                      key={r}
-                      onClick={() => setSelectedRoleFilter(r)}
-                      className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold shrink-0 transition-colors cursor-pointer ${
-                        selectedRoleFilter === r
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
-                    >
-                      {r}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* User Grid / Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-80 overflow-y-auto pr-1">
-                {filteredUsers.length === 0 ? (
-                  <p className="col-span-2 text-center text-xs text-gray-400 py-8">
-                    No registered corporate users match your search criteria.
-                  </p>
-                ) : (
-                  filteredUsers.map(user => {
-                    const isCurrent = currentUser?.id === user.id;
-                    return (
-                      <div
-                        key={user.id}
-                        onClick={() => handleSelectUserWithPinCheck(user)}
-                        className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-start gap-3 relative ${
-                          isCurrent
-                            ? 'bg-blue-50/80 border-blue-300 ring-2 ring-blue-500/20 shadow-xs'
-                            : 'bg-white border-gray-200 hover:border-blue-300 hover:shadow-md'
-                        }`}
-                      >
-                        <div className="relative shrink-0">
-                          {user.avatarUrl ? (
-                            <img
-                              src={user.avatarUrl}
-                              alt={user.name}
-                              className="w-10 h-10 rounded-full object-cover border border-gray-200"
-                            />
-                          ) : (
-                            <div className="w-10 h-10 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-xs">
-                              {user.name.split(' ').map(n => n[0]).join('')}
-                            </div>
-                          )}
-                          {isCurrent && (
-                            <div className="absolute -bottom-1 -right-1 bg-blue-600 text-white rounded-full p-0.5">
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="flex-1 min-w-0 space-y-1">
-                          <div className="flex items-center justify-between">
-                            <h4 className="font-bold text-gray-900 text-xs truncate">{user.name}</h4>
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${getRoleBadgeColor(user.role)}`}>
-                              {user.role}
-                            </span>
-                          </div>
-
-                          <div className="text-[11px] text-gray-500 flex items-center gap-1.5 truncate">
-                            <Mail className="w-3 h-3 text-gray-400 shrink-0" />
-                            <span className="truncate">{user.email}</span>
-                          </div>
-
-                          <div className="flex items-center gap-3 text-[10px] text-gray-400">
-                            <span className="font-mono bg-blue-50 text-blue-700 font-bold px-1.5 py-0.5 rounded border border-blue-200">
-                              {user.employeeId}
-                            </span>
-                            <span className="truncate flex items-center gap-1">
-                              <Building className="w-3 h-3" />
-                              {user.department}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
           )}
         </div>
 

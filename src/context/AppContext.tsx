@@ -169,17 +169,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Helper to verify PIN or Password
   const verifyPasswordOrPin = (user: User, passwordInput?: string): boolean => {
     if (!passwordInput || !passwordInput.trim()) {
-      // If user has an explicit PIN/password, password is required
-      if (user.pin || user.password) {
-        return false;
-      }
-      return true;
+      return false; // Password / PIN is strictly required for every user!
     }
     const cleanPass = passwordInput.trim();
     if (user.pin && (cleanPass === user.pin || cleanPass === '1234' || cleanPass === '123456')) return true;
     if (user.password && (cleanPass === user.password || cleanPass === 'admin123' || cleanPass === '123456')) return true;
     if (cleanPass === '1234' || cleanPass === '123456' || cleanPass === '2026') return true;
-    const empNum = user.employeeId.replace(/\D/g, '');
+    const empNum = user.employeeId ? user.employeeId.replace(/\D/g, '') : '';
     if (empNum && cleanPass === empNum) return true;
     return false;
   };
