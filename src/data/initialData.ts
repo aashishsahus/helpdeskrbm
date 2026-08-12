@@ -25,7 +25,9 @@ export const initialUsers: User[] = [
     status: 'Active',
     mobile: '+91 98765 43210',
     joiningDate: '2022-01-01',
-    avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'
+    avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+    pin: '2026',
+    password: 'admin123'
   },
   {
     id: 'u_ashish',
@@ -36,7 +38,9 @@ export const initialUsers: User[] = [
     department: 'IT Operations',
     designation: 'MIS Executive',
     location: 'RPR',
-    status: 'Active'
+    status: 'Active',
+    pin: '1010',
+    password: '123456'
   },
   {
     id: 'u_dhaneshwari',
@@ -47,7 +51,9 @@ export const initialUsers: User[] = [
     department: 'Accounts',
     designation: 'Senior Accountant',
     location: 'RPR',
-    status: 'Active'
+    status: 'Active',
+    pin: '1011',
+    password: '123456'
   },
   {
     id: 'u_lekhram',

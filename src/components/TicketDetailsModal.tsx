@@ -56,7 +56,7 @@ export const TicketDetailsModal: React.FC = () => {
   const ticketHistoryList = history.filter(h => h.ticketId === ticket.id);
   const agentsList = users.filter(u => u.role === 'Support Agent' || u.role === 'Support Manager');
 
-  const isStaff = currentUser.role !== 'Employee';
+  const isStaff = currentUser ? currentUser.role !== 'Employee' : false;
 
   // Calculate SLA Remaining Time
   const getSLARemaining = () => {

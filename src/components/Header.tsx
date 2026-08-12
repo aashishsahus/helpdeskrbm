@@ -42,14 +42,16 @@ export const Header: React.FC = () => {
   const [isProfileSelectorOpen, setIsProfileSelectorOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  const unreadNotifs = notifications.filter(n => !n.read && n.userId === currentUser.id);
+  const unreadNotifs = currentUser
+    ? notifications.filter(n => !n.read && n.userId === currentUser.id)
+    : [];
 
   // Get all profiles associated with the current email
-  const userProfilesForCurrentEmail = users.filter(
-    u => u.email.toLowerCase() === currentUser.email.toLowerCase()
-  );
+  const userProfilesForCurrentEmail = currentUser
+    ? users.filter(u => u.email.toLowerCase() === currentUser.email.toLowerCase())
+    : [];
 
-  const firstName = currentUser.name ? currentUser.name.split(' ')[0] : 'User';
+  const firstName = currentUser?.name ? currentUser.name.split(' ')[0] : 'Guest';
 
   const handleManualSync = () => {
     setIsSyncing(true);
@@ -60,11 +62,7 @@ export const Header: React.FC = () => {
 
   const handleLogout = () => {
     setIsUserSwitchOpen(false);
-    try {
-      localStorage.removeItem('helpdesk_user_session');
-    } catch (e) {
-      // ignore
-    }
+    setCurrentUser(null);
     setIsLoginModalOpen(true);
   };
 
@@ -85,59 +83,69 @@ export const Header: React.FC = () => {
 
         {/* Right Status Controls & Actions */}
         <div className="flex items-center gap-2.5">
-          {/* Active Profile Dropdown Pill */}
-          <div className="relative">
+          {/* Active Profile Dropdown Pill or Sign In Button */}
+          {!currentUser ? (
             <button
-              id="user-profile-dropdown-btn"
-              onClick={() => setIsUserSwitchOpen(!isUserSwitchOpen)}
-              className="flex items-center gap-2 px-3 py-1 bg-emerald-50 hover:bg-emerald-100/80 text-[#063B2C] border border-emerald-200 rounded-full text-xs font-bold transition-all shadow-2xs group"
-              title="View Profile & Switch Account"
+              id="header-login-trigger-btn"
+              onClick={() => setIsLoginModalOpen(true)}
+              className="flex items-center gap-2 px-3.5 py-1.5 bg-[#063B2C] hover:bg-[#084D3A] text-white rounded-full text-xs font-extrabold transition-all shadow-sm"
             >
-              <div className="w-5 h-5 rounded-full bg-[#063B2C] text-emerald-300 flex items-center justify-center font-black text-[10px] border border-emerald-400/40">
-                {currentUser.avatarUrl ? (
-                  <img src={currentUser.avatarUrl} alt={currentUser.name} className="w-full h-full rounded-full object-cover" />
-                ) : (
-                  <span>{firstName.charAt(0)}</span>
-                )}
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-extrabold text-gray-900">{firstName}</span>
-                <span className="text-[10px] font-bold bg-[#10B981] text-[#031A12] px-1.5 py-0.2 rounded-full font-mono">
-                  {currentUser.location || 'RPR'}
-                </span>
-              </div>
-              <ChevronDown className="w-3.5 h-3.5 text-emerald-700 ml-0.5 group-hover:translate-y-0.5 transition-transform" />
+              <LogIn className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Sign In to Portal</span>
             </button>
-
-            {/* Profile Dropdown Menu */}
-            {isUserSwitchOpen && (
-              <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-gray-200 p-3 z-50 animate-in fade-in duration-150">
-                {/* Profile Card Summary */}
-                <div className="p-3.5 bg-[#063B2C] text-white rounded-xl mb-2">
-                  <div className="flex items-center justify-between text-[10px] text-emerald-300 font-bold uppercase tracking-wider mb-1">
-                    <span>Active Session</span>
-                    <span className="bg-emerald-800/80 px-1.5 py-0.5 rounded text-emerald-200 font-mono">
-                      {currentUser.role}
-                    </span>
-                  </div>
-                  <div className="font-extrabold text-base leading-tight flex items-center justify-between">
-                    <span>{currentUser.name}</span>
-                  </div>
-                  <div className="text-xs text-emerald-200/90 truncate flex items-center gap-1 mt-1">
-                    <Mail className="w-3 h-3 text-emerald-300 shrink-0" />
-                    <span className="truncate">{currentUser.email}</span>
-                  </div>
-
-                  <div className="mt-2.5 pt-2 border-t border-emerald-700/60 flex items-center justify-between text-[11px] text-emerald-100">
-                    <div className="flex items-center gap-1 font-bold">
-                      <MapPin className="w-3 h-3 text-emerald-400" />
-                      <span>{currentUser.location || 'RPR'}</span>
-                    </div>
-                    <span className="text-[10px] bg-emerald-900/80 text-emerald-200 px-2 py-0.5 rounded-full font-medium">
-                      {currentUser.department}
-                    </span>
-                  </div>
+          ) : (
+            <div className="relative">
+              <button
+                id="user-profile-dropdown-btn"
+                onClick={() => setIsUserSwitchOpen(!isUserSwitchOpen)}
+                className="flex items-center gap-2 px-3 py-1 bg-emerald-50 hover:bg-emerald-100/80 text-[#063B2C] border border-emerald-200 rounded-full text-xs font-bold transition-all shadow-2xs group"
+                title="View Profile & Switch Account"
+              >
+                <div className="w-5 h-5 rounded-full bg-[#063B2C] text-emerald-300 flex items-center justify-center font-black text-[10px] border border-emerald-400/40">
+                  {currentUser?.avatarUrl ? (
+                    <img src={currentUser.avatarUrl} alt={currentUser.name} className="w-full h-full rounded-full object-cover" />
+                  ) : (
+                    <span>{firstName.charAt(0)}</span>
+                  )}
                 </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-extrabold text-gray-900">{firstName}</span>
+                  <span className="text-[10px] font-bold bg-[#10B981] text-[#031A12] px-1.5 py-0.2 rounded-full font-mono">
+                    {currentUser?.location || 'RPR'}
+                  </span>
+                </div>
+                <ChevronDown className="w-3.5 h-3.5 text-emerald-700 ml-0.5 group-hover:translate-y-0.5 transition-transform" />
+              </button>
+
+              {/* Profile Dropdown Menu */}
+              {isUserSwitchOpen && (
+                <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-gray-200 p-3 z-50 animate-in fade-in duration-150">
+                  {/* Profile Card Summary */}
+                  <div className="p-3.5 bg-[#063B2C] text-white rounded-xl mb-2">
+                    <div className="flex items-center justify-between text-[10px] text-emerald-300 font-bold uppercase tracking-wider mb-1">
+                      <span>Active Session</span>
+                      <span className="bg-emerald-800/80 px-1.5 py-0.5 rounded text-emerald-200 font-mono">
+                        {currentUser?.role}
+                      </span>
+                    </div>
+                    <div className="font-extrabold text-base leading-tight flex items-center justify-between">
+                      <span>{currentUser?.name}</span>
+                    </div>
+                    <div className="text-xs text-emerald-200/90 truncate flex items-center gap-1 mt-1">
+                      <Mail className="w-3 h-3 text-emerald-300 shrink-0" />
+                      <span className="truncate">{currentUser?.email}</span>
+                    </div>
+
+                    <div className="mt-2.5 pt-2 border-t border-emerald-700/60 flex items-center justify-between text-[11px] text-emerald-100">
+                      <div className="flex items-center gap-1 font-bold">
+                        <MapPin className="w-3 h-3 text-emerald-400" />
+                        <span>{currentUser?.location || 'RPR'}</span>
+                      </div>
+                      <span className="text-[10px] bg-emerald-900/80 text-emerald-200 px-2 py-0.5 rounded-full font-medium">
+                        {currentUser?.department}
+                      </span>
+                    </div>
+                  </div>
 
                 {/* Profile Menu Actions */}
                 <div className="space-y-1 my-1">
@@ -195,6 +203,7 @@ export const Header: React.FC = () => {
               </div>
             )}
           </div>
+          )}
 
           {/* Saved in Sheets Indicator Badge */}
           <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 bg-[#D1FAE5] text-[#065F46] border border-[#A7F3D0] text-xs font-bold rounded-full shadow-2xs">
@@ -282,9 +291,9 @@ export const Header: React.FC = () => {
       <ProfileSelectorModal
         isOpen={isProfileSelectorOpen}
         onClose={() => setIsProfileSelectorOpen(false)}
-        email={currentUser.email}
+        email={currentUser?.email || ''}
         profiles={userProfilesForCurrentEmail}
-        currentProfileId={currentUser.id}
+        currentProfileId={currentUser?.id || ''}
         onSelectProfile={(profile) => {
           setCurrentUser(profile);
           setIsProfileSelectorOpen(false);

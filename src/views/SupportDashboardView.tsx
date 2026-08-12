@@ -39,7 +39,7 @@ export const SupportDashboardView: React.FC = () => {
   // KPI calculations
   const totalOpen = tickets.filter(t => t.status === 'Open' || t.status === 'In Progress').length;
   const unassigned = tickets.filter(t => !t.assignedAgentId && t.status !== 'Closed' && t.status !== 'Resolved').length;
-  const myAssigned = tickets.filter(t => t.assignedAgentId === currentUser.id && t.status !== 'Closed').length;
+  const myAssigned = currentUser ? tickets.filter(t => t.assignedAgentId === currentUser.id && t.status !== 'Closed').length : 0;
   const highPriority = tickets.filter(t => t.priority === 'High' && t.status !== 'Closed').length;
   const criticalCount = tickets.filter(t => t.priority === 'Critical' && t.status !== 'Closed').length;
   const slaBreached = tickets.filter(t => t.slaStatus === 'Breached' && t.status !== 'Resolved' && t.status !== 'Closed').length;
@@ -50,7 +50,7 @@ export const SupportDashboardView: React.FC = () => {
 
   // Filter queue
   const filteredQueue = tickets.filter(t => {
-    if (viewTab === 'my' && t.assignedAgentId !== currentUser.id) return false;
+    if (viewTab === 'my' && (!currentUser || t.assignedAgentId !== currentUser.id)) return false;
     if (viewTab === 'unassigned' && t.assignedAgentId) return false;
 
     const matchesSearch =
@@ -289,7 +289,7 @@ export const SupportDashboardView: React.FC = () => {
                     <td className="px-6 py-4 text-center" onClick={e => e.stopPropagation()}>
                       {!t.assignedAgentId && (
                         <button
-                          onClick={() => assignTicket(t.id, currentUser.id)}
+                          onClick={() => currentUser && assignTicket(t.id, currentUser.id)}
                           className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded text-[10px] shadow-2xs"
                         >
                           Claim

@@ -26,12 +26,12 @@ export const Sidebar: React.FC = () => {
   const { currentUser, activeView, setActiveView, tickets, notifications } = useApp();
   const [isExpanded, setIsExpanded] = useState(false);
 
-  const isEmployee = currentUser.role === 'Employee';
-  const isAgent = currentUser.role === 'Support Agent' || currentUser.role === 'Support Manager';
-  const isAdmin = currentUser.role === 'Admin' || currentUser.role === 'Super Admin';
+  const isEmployee = currentUser ? currentUser.role === 'Employee' : true;
+  const isAgent = currentUser ? (currentUser.role === 'Support Agent' || currentUser.role === 'Support Manager') : false;
+  const isAdmin = currentUser ? (currentUser.role === 'Admin' || currentUser.role === 'Super Admin') : false;
 
   const openTicketsCount = tickets.filter(t => t.status === 'Open' || t.status === 'In Progress').length;
-  const unreadNotifCount = notifications.filter(n => !n.read && n.userId === currentUser.id).length;
+  const unreadNotifCount = currentUser ? notifications.filter(n => !n.read && n.userId === currentUser.id).length : 0;
 
   const navItems = [
     {
@@ -234,17 +234,17 @@ export const Sidebar: React.FC = () => {
           }`}
         >
           <div className="w-7 h-7 rounded-full bg-emerald-700 border border-emerald-400/40 flex items-center justify-center font-extrabold text-white text-[10px] shrink-0 shadow-inner">
-            {currentUser.avatarUrl ? (
+            {currentUser?.avatarUrl ? (
               <img src={currentUser.avatarUrl} alt={currentUser.name} className="w-full h-full rounded-full object-cover" />
             ) : (
-              currentUser.name.split(' ').map(n => n[0]).join('')
+              currentUser?.name ? currentUser.name.split(' ').map(n => n[0]).join('') : 'G'
             )}
           </div>
           {isExpanded && (
             <div className="overflow-hidden flex-1">
-              <p className="text-[11px] font-bold text-white truncate leading-tight">{currentUser.name}</p>
+              <p className="text-[11px] font-bold text-white truncate leading-tight">{currentUser?.name || 'Guest Session'}</p>
               <span className="text-[8px] font-mono text-emerald-400 font-bold uppercase block truncate">
-                {currentUser.role}
+                {currentUser?.role || 'Sign In Required'}
               </span>
             </div>
           )}

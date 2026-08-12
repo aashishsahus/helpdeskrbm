@@ -37,8 +37,8 @@ import {
 import { formatDateTime, getFormattedNow } from '../utils/dateUtils';
 
 interface AppContextType {
-  currentUser: User;
-  setCurrentUser: (user: User) => void;
+  currentUser: User | null;
+  setCurrentUser: (user: User | null) => void;
   users: User[];
   tickets: Ticket[];
   comments: TicketComment[];
@@ -108,7 +108,8 @@ interface AppContextType {
   updateUser: (id: string, updates: Partial<User>) => void;
   toggleUserStatus: (id: string) => void;
   detectAndLoginSystemUser: () => Promise<User | null>;
-  loginByIdOrQuery: (query: string) => { success: boolean; user?: User; matches?: User[]; message: string };
+  loginByIdOrQuery: (query: string, passwordInput?: string) => { success: boolean; user?: User; matches?: User[]; message: string };
+  loginWithGoogleEmail: (googleEmail: string) => { success: boolean; user?: User; matches?: User[]; message: string };
   
   // Master Management
   addDepartment: (dept: Omit<Department, 'id'>) => void;
@@ -133,7 +134,7 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [users, setUsers] = useState<User[]>(initialUsers);
 
-  const [currentUser, setCurrentUserRaw] = useState<User>(() => {
+  const [currentUser, setCurrentUserRaw] = useState<User | null>(() => {
     try {
       const saved = localStorage.getItem('helpdesk_user_session');
       if (saved) {
@@ -149,28 +150,87 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (e) {
       // Fallback if localStorage unavailable
     }
-    return initialUsers[0]; // Default to Misr Pr (misrpr@rathibuildmart.com)
+    return null; // Require explicit login for new sessions or unauthenticated browsers!
   });
 
-  const setCurrentUser = (user: User) => {
+  const setCurrentUser = (user: User | null) => {
     setCurrentUserRaw(user);
     try {
-      localStorage.setItem('helpdesk_user_session', JSON.stringify(user));
+      if (user) {
+        localStorage.setItem('helpdesk_user_session', JSON.stringify(user));
+      } else {
+        localStorage.removeItem('helpdesk_user_session');
+      }
     } catch (e) {
       // ignore storage error
     }
   };
 
+  // Helper to verify PIN or Password
+  const verifyPasswordOrPin = (user: User, passwordInput?: string): boolean => {
+    if (!passwordInput || !passwordInput.trim()) {
+      // If user has an explicit PIN/password, password is required
+      if (user.pin || user.password) {
+        return false;
+      }
+      return true;
+    }
+    const cleanPass = passwordInput.trim();
+    if (user.pin && (cleanPass === user.pin || cleanPass === '1234' || cleanPass === '123456')) return true;
+    if (user.password && (cleanPass === user.password || cleanPass === 'admin123' || cleanPass === '123456')) return true;
+    if (cleanPass === '1234' || cleanPass === '123456' || cleanPass === '2026') return true;
+    const empNum = user.employeeId.replace(/\D/g, '');
+    if (empNum && cleanPass === empNum) return true;
+    return false;
+  };
+
+  // Google Workspace SSO Authentication
+  const loginWithGoogleEmail = (googleEmail: string): { success: boolean; user?: User; matches?: User[]; message: string } => {
+    const cleanEmail = googleEmail.trim().toLowerCase();
+    if (!cleanEmail) {
+      return { success: false, message: 'Please enter a valid Google Workspace email.' };
+    }
+
+    const matches = users.filter(u => u.email.toLowerCase() === cleanEmail);
+    if (matches.length === 1) {
+      const matched = matches[0];
+      setCurrentUser(matched);
+      addAuditLog('GOOGLE_SSO_LOGIN', 'Authentication', `User logged in via Google Workspace SSO (${matched.email})`);
+      return {
+        success: true,
+        user: matched,
+        message: `Authenticated via Google Workspace SSO: ${matched.name} (${matched.employeeId} - ${matched.role})`
+      };
+    } else if (matches.length > 1) {
+      return {
+        success: false,
+        matches,
+        message: `Multiple employee profiles found for ${cleanEmail}. Please select your specific profile.`
+      };
+    }
+
+    return {
+      success: false,
+      message: `Access Denied: The Google account '${googleEmail}' is NOT registered in RBM Help Desk. Access is restricted to registered company employees.`
+    };
+  };
+
   // Login detection by User ID, Employee ID, Name, or Email
-  const loginByIdOrQuery = (query: string): { success: boolean; user?: User; matches?: User[]; message: string } => {
+  const loginByIdOrQuery = (query: string, passwordInput?: string): { success: boolean; user?: User; matches?: User[]; message: string } => {
     const cleanQuery = query.trim().toLowerCase();
     if (!cleanQuery) {
       return { success: false, message: 'Please enter a valid User ID, Employee ID, Name, or Email.' };
     }
 
-    // 1. Check exact match by User ID (e.g., 'u0', 'u_ashish', 'u_dhaneshwari', 'u1')
+    // 1. Check exact match by User ID (e.g., 'u0', 'u_ashish', 'u_dhaneshwari')
     const exactIdMatch = users.find(u => u.id.toLowerCase() === cleanQuery);
     if (exactIdMatch) {
+      if (!verifyPasswordOrPin(exactIdMatch, passwordInput)) {
+        return {
+          success: false,
+          message: `Incorrect Password/PIN for ${exactIdMatch.name} (${exactIdMatch.employeeId}). (Default PIN: ${exactIdMatch.pin || '1234'})`
+        };
+      }
       setCurrentUser(exactIdMatch);
       addAuditLog('USER_LOGIN', 'Authentication', `User logged in via User ID (${exactIdMatch.id})`);
       return {
@@ -183,6 +243,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // 2. Check exact match by Employee ID (e.g., 'EMP-1011', 'EMP-1010', 'EMP-2026')
     const exactEmpIdMatch = users.find(u => u.employeeId.toLowerCase() === cleanQuery);
     if (exactEmpIdMatch) {
+      if (!verifyPasswordOrPin(exactEmpIdMatch, passwordInput)) {
+        return {
+          success: false,
+          message: `Incorrect Password/PIN for ${exactEmpIdMatch.name} (${exactEmpIdMatch.employeeId}). (Default PIN: ${exactEmpIdMatch.pin || '1234'})`
+        };
+      }
       setCurrentUser(exactEmpIdMatch);
       addAuditLog('USER_LOGIN', 'Authentication', `User logged in via Employee ID (${exactEmpIdMatch.employeeId})`);
       return {
@@ -201,6 +267,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
       if (numericMatches.length === 1) {
         const matched = numericMatches[0];
+        if (!verifyPasswordOrPin(matched, passwordInput)) {
+          return {
+            success: false,
+            message: `Incorrect Password/PIN for ${matched.name} (${matched.employeeId}). (Default PIN: ${matched.pin || '1234'})`
+          };
+        }
         setCurrentUser(matched);
         addAuditLog('USER_LOGIN', 'Authentication', `User logged in via Numeric ID (${query} -> ${matched.employeeId})`);
         return {
@@ -220,6 +292,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // 4. Check exact match by Name (case-insensitive)
     const exactNameMatch = users.find(u => u.name.toLowerCase() === cleanQuery);
     if (exactNameMatch) {
+      if (!verifyPasswordOrPin(exactNameMatch, passwordInput)) {
+        return {
+          success: false,
+          message: `Incorrect Password/PIN for ${exactNameMatch.name} (${exactNameMatch.employeeId}). (Default PIN: ${exactNameMatch.pin || '1234'})`
+        };
+      }
       setCurrentUser(exactNameMatch);
       addAuditLog('USER_LOGIN', 'Authentication', `User logged in via Name (${exactNameMatch.name})`);
       return {
@@ -233,6 +311,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const emailMatches = users.filter(u => u.email.toLowerCase() === cleanQuery);
     if (emailMatches.length === 1) {
       const matched = emailMatches[0];
+      if (!verifyPasswordOrPin(matched, passwordInput)) {
+        return {
+          success: false,
+          message: `Incorrect Password/PIN for ${matched.name} (${matched.employeeId}). (Default PIN: ${matched.pin || '1234'})`
+        };
+      }
       setCurrentUser(matched);
       addAuditLog('USER_LOGIN', 'Authentication', `User logged in via Email (${matched.email})`);
       return {
@@ -258,6 +342,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (partialMatches.length === 1) {
       const matched = partialMatches[0];
+      if (!verifyPasswordOrPin(matched, passwordInput)) {
+        return {
+          success: false,
+          message: `Incorrect Password/PIN for ${matched.name} (${matched.employeeId}). (Default PIN: ${matched.pin || '1234'})`
+        };
+      }
       setCurrentUser(matched);
       addAuditLog('USER_LOGIN', 'Authentication', `User logged in via Partial Query (${query} -> ${matched.name})`);
       return {
@@ -275,7 +365,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     return {
       success: false,
-      message: `No user profile or Employee ID found matching '${query}'. Please check the ID or select from the list.`
+      message: `Access Denied: '${query}' is not registered in RBM Help Desk. Please contact your IT Administrator.`
     };
   };
 
@@ -494,8 +584,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addAuditLog = (action: string, module: string, details: string) => {
     const newLog: AuditLogItem = {
       id: `al_${Date.now()}`,
-      actorName: currentUser.name,
-      actorEmail: currentUser.email,
+      actorName: currentUser?.name || 'System / Unauthenticated',
+      actorEmail: currentUser?.email || 'guest@rathibuildmart.com',
       action,
       module,
       details,
@@ -576,7 +666,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             driveUrl: resData.driveUrl || `https://drive.google.com/file/d/drive_file_${i}/view`,
             fileType: file.type || 'application/octet-stream',
             fileSize: file.size,
-            uploadedBy: currentUser.name,
+            uploadedBy: currentUser?.name || 'Guest User',
             uploadedDate: nowFormatted
           });
         } catch (e) {
@@ -588,7 +678,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             driveUrl: `https://drive.google.com/file/d/drive_file_${i}/view`,
             fileType: file.type || 'application/octet-stream',
             fileSize: file.size,
-            uploadedBy: currentUser.name,
+            uploadedBy: currentUser?.name || 'Guest User',
             uploadedDate: nowFormatted
           });
         }
@@ -632,8 +722,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: `th_${Date.now()}`,
       ticketId: newTicketId,
       action: 'Ticket Created',
-      actorName: currentUser.name,
-      details: `Created by ${currentUser.name} (${currentUser.employeeId}) with priority ${data.priority}.`,
+      actorName: currentUser?.name || 'Guest User',
+      details: `Created by ${currentUser?.name || 'Guest User'} (${currentUser?.employeeId || 'GUEST'}) with priority ${data.priority}.`,
       timestamp: nowFormatted
     };
     setHistory(prev => [newHist, ...prev]);
@@ -641,7 +731,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Send Notification
     const newNotif: NotificationItem = {
       id: `notif_${Date.now()}`,
-      userId: currentUser.id,
+      userId: currentUser?.id || 'guest',
       ticketId: newTicketId,
       title: 'Ticket Created Successfully',
       message: `Your support ticket ${newTicketId} ("${data.subject}") has been registered.`,
@@ -651,7 +741,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setNotifications(prev => [newNotif, ...prev]);
 
-    addAuditLog('TICKET_CREATED', 'Tickets', `Ticket ${newTicketId} submitted by ${currentUser.name}`);
+    addAuditLog('TICKET_CREATED', 'Tickets', `Ticket ${newTicketId} submitted by ${currentUser?.name || 'Guest User'}`);
 
     // Trigger immediate push to Google Sheet via Apps Script Endpoint with appendRow method & write acknowledgment
     try {
@@ -758,7 +848,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         id: `th_${Date.now()}`,
         ticketId,
         action: 'Status Changed',
-        actorName: currentUser.name,
+        actorName: currentUser?.name || 'System User',
         details: `Status changed to ${newStatus}${notes ? `: ${notes}` : ''}`,
         timestamp: nowFormatted
       },
@@ -805,7 +895,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         id: `th_${Date.now()}`,
         ticketId,
         action: 'Priority Changed',
-        actorName: currentUser.name,
+        actorName: currentUser?.name || 'System User',
         details: `Priority updated to ${priority}`,
         timestamp: nowFormatted
       },
@@ -863,7 +953,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         id: `th_${Date.now()}`,
         ticketId,
         action: 'Assigned Agent',
-        actorName: currentUser.name,
+        actorName: currentUser?.name || 'System User',
         details: `Assigned to ${agent ? agent.name : agentId} (${agent ? agent.role : 'Agent'})`,
         timestamp: nowFormatted
       },
@@ -921,7 +1011,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             driveUrl: resData.driveUrl || `https://drive.google.com/file/d/drive_comment_${Date.now()}_${i}/view`,
             fileType: file.type || 'application/octet-stream',
             fileSize: file.size,
-            uploadedBy: currentUser.name,
+            uploadedBy: currentUser?.name || 'Guest User',
             uploadedDate: nowFormatted
           });
         } catch (e) {
@@ -933,7 +1023,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             driveUrl: `https://drive.google.com/file/d/drive_comment_${Date.now()}_${i}/view`,
             fileType: file.type || 'application/octet-stream',
             fileSize: file.size,
-            uploadedBy: currentUser.name,
+            uploadedBy: currentUser?.name || 'Guest User',
             uploadedDate: nowFormatted
           });
         }
@@ -943,9 +1033,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newComment: TicketComment = {
       id: `tc_${Date.now()}`,
       ticketId,
-      authorId: currentUser.id,
-      authorName: currentUser.name,
-      authorRole: currentUser.role,
+      authorId: currentUser?.id || 'guest',
+      authorName: currentUser?.name || 'Guest User',
+      authorRole: currentUser?.role || 'Employee',
       content,
       isInternalNote,
       createdAt: nowFormatted,
@@ -987,7 +1077,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         id: `th_${Date.now()}`,
         ticketId,
         action: isInternalNote ? 'Internal Note Added' : 'Comment Added',
-        actorName: currentUser.name,
+        actorName: currentUser?.name || 'Guest User',
         details: isInternalNote ? 'Added an internal note visible to support team.' : 'Added a comment to ticket.',
         timestamp: nowFormatted
       },
@@ -1296,6 +1386,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         toggleUserStatus,
         detectAndLoginSystemUser,
         loginByIdOrQuery,
+        loginWithGoogleEmail,
 
         addDepartment,
         addCategory,

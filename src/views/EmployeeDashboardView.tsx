@@ -28,9 +28,11 @@ export const EmployeeDashboardView: React.FC = () => {
   const [priorityFilter, setPriorityFilter] = useState<string>('All');
 
   // Filter user's own tickets
-  const myTickets = tickets.filter(
-    t => t.employeeId === currentUser.employeeId || t.employeeEmail === currentUser.email
-  );
+  const myTickets = currentUser
+    ? tickets.filter(
+        t => t.employeeId === currentUser.employeeId || t.employeeEmail === currentUser.email
+      )
+    : [];
 
   const openCount = myTickets.filter(t => t.status === 'Open').length;
   const pendingCount = myTickets.filter(t => t.status === 'Pending').length;
@@ -87,9 +89,9 @@ export const EmployeeDashboardView: React.FC = () => {
       <div className="bg-gradient-to-r from-[#111827] to-indigo-950 text-white p-6 rounded-2xl shadow-md border border-gray-800 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-white flex items-center gap-2">
-            Welcome back, {currentUser.name}!
+            Welcome back, {currentUser?.name || 'Guest User'}!
             <span className="text-xs px-2 py-0.5 bg-blue-600/30 text-blue-300 rounded font-mono font-semibold border border-blue-500/30">
-              {currentUser.department}
+              {currentUser?.department || 'RPR Help Desk'}
             </span>
           </h1>
           <p className="text-xs text-gray-300 mt-1">

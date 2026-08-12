@@ -24,15 +24,15 @@ export const CreateTicketModal: React.FC = () => {
     createTicket
   } = useApp();
 
-  const [department, setDepartment] = useState(currentUser.department || 'IT Support');
-  const [location, setLocation] = useState(currentUser.location || 'Headquarters - NY');
+  const [department, setDepartment] = useState(currentUser?.department || 'IT Operations');
+  const [location, setLocation] = useState(currentUser?.location || 'RPR');
   const [category, setCategory] = useState('Hardware');
   const [subCategory, setSubCategory] = useState('Laptop');
   const [subject, setSubject] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<TicketPriority>('Medium');
   const [requiredByDate, setRequiredByDate] = useState('');
-  const [contactNumber, setContactNumber] = useState(currentUser.mobile || '+1 (555) 019-2834');
+  const [contactNumber, setContactNumber] = useState(currentUser?.mobile || '+91 98765 43210');
   const [files, setFiles] = useState<File[]>([]);
   const [fileError, setFileError] = useState('');
 
@@ -88,9 +88,9 @@ export const CreateTicketModal: React.FC = () => {
     setSubmitting(true);
     try {
       const newTicket = await createTicket({
-        employeeId: currentUser.employeeId,
-        employeeName: currentUser.name,
-        employeeEmail: currentUser.email,
+        employeeId: currentUser?.employeeId || 'EMP-GUEST',
+        employeeName: currentUser?.name || 'Guest User',
+        employeeEmail: currentUser?.email || 'guest@rathibuildmart.com',
         department,
         location,
         category,
@@ -181,15 +181,15 @@ export const CreateTicketModal: React.FC = () => {
             <div className="grid grid-cols-3 gap-3 p-3 bg-gray-50 rounded-xl border border-gray-200 text-xs">
               <div>
                 <span className="text-gray-400 block text-[10px] uppercase font-bold">Employee ID</span>
-                <span className="font-semibold text-gray-900 font-mono">{currentUser.employeeId}</span>
+                <span className="font-semibold text-gray-900 font-mono">{currentUser?.employeeId || 'GUEST'}</span>
               </div>
               <div>
                 <span className="text-gray-400 block text-[10px] uppercase font-bold">Employee Name</span>
-                <span className="font-semibold text-gray-900">{currentUser.name}</span>
+                <span className="font-semibold text-gray-900">{currentUser?.name || 'Guest User'}</span>
               </div>
               <div>
                 <span className="text-gray-400 block text-[10px] uppercase font-bold">Email</span>
-                <span className="font-semibold text-gray-900 truncate block">{currentUser.email}</span>
+                <span className="font-semibold text-gray-900 truncate block">{currentUser?.email || 'unauthenticated'}</span>
               </div>
             </div>
 

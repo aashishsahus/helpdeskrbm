@@ -19,6 +19,8 @@ export interface User {
   mobile?: string;
   joiningDate?: string;
   avatarUrl?: string;
+  pin?: string;
+  password?: string;
 }
 
 export interface Ticket {

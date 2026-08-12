@@ -23,10 +23,18 @@ import { AuditLogsView } from './views/AdminPanel/AuditLogsView';
 import { SystemSettingsView } from './views/AdminPanel/SystemSettingsView';
 import { MasterDropdownsView } from './views/AdminPanel/MasterDropdownsView';
 
+import { LoginModal } from './components/LoginModal';
+
 const MainLayout: React.FC = () => {
   const { activeView, currentUser } = useApp();
+  const [isLoginModalOpen, setIsLoginModalOpen] = React.useState(false);
+
+  // Automatically prompt login if user is not authenticated
+  const showLoginPrompt = !currentUser;
 
   const renderCurrentView = () => {
+    const userRole = currentUser?.role || 'Employee';
+
     switch (activeView) {
       case 'dashboard':
       case 'employee_dashboard':
@@ -36,10 +44,10 @@ const MainLayout: React.FC = () => {
         if (activeView === 'support_dashboard') return <SupportDashboardView />;
         if (activeView === 'admin_dashboard') return <AdminDashboardView />;
 
-        if (currentUser.role === 'Admin' || currentUser.role === 'Super Admin') {
+        if (userRole === 'Admin' || userRole === 'Super Admin') {
           return <AdminDashboardView />;
         }
-        if (currentUser.role === 'Support Agent' || currentUser.role === 'Support Manager') {
+        if (userRole === 'Support Agent' || userRole === 'Support Manager') {
           return <SupportDashboardView />;
         }
         return <EmployeeDashboardView />;
@@ -96,10 +104,10 @@ const MainLayout: React.FC = () => {
         return <SystemSettingsView />;
 
       default:
-        if (currentUser.role === 'Admin' || currentUser.role === 'Super Admin') {
+        if (userRole === 'Admin' || userRole === 'Super Admin') {
           return <AdminDashboardView />;
         }
-        if (currentUser.role === 'Support Agent' || currentUser.role === 'Support Manager') {
+        if (userRole === 'Support Agent' || userRole === 'Support Manager') {
           return <SupportDashboardView />;
         }
         return <EmployeeDashboardView />;
@@ -125,6 +133,7 @@ const MainLayout: React.FC = () => {
       {/* Modals */}
       <CreateTicketModal />
       <TicketDetailsModal />
+      <LoginModal isOpen={showLoginPrompt || isLoginModalOpen} onClose={() => setIsLoginModalOpen(false)} />
     </div>
   );
 };
