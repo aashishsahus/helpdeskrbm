@@ -108,6 +108,7 @@ interface AppContextType {
   updateUser: (id: string, updates: Partial<User>) => void;
   toggleUserStatus: (id: string) => void;
   detectAndLoginSystemUser: () => Promise<User | null>;
+  loginByIdOrQuery: (query: string) => { success: boolean; user?: User; matches?: User[]; message: string };
   
   // Master Management
   addDepartment: (dept: Omit<Department, 'id'>) => void;
@@ -160,6 +161,124 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  // Login detection by User ID, Employee ID, Name, or Email
+  const loginByIdOrQuery = (query: string): { success: boolean; user?: User; matches?: User[]; message: string } => {
+    const cleanQuery = query.trim().toLowerCase();
+    if (!cleanQuery) {
+      return { success: false, message: 'Please enter a valid User ID, Employee ID, Name, or Email.' };
+    }
+
+    // 1. Check exact match by User ID (e.g., 'u0', 'u_ashish', 'u_dhaneshwari', 'u1')
+    const exactIdMatch = users.find(u => u.id.toLowerCase() === cleanQuery);
+    if (exactIdMatch) {
+      setCurrentUser(exactIdMatch);
+      addAuditLog('USER_LOGIN', 'Authentication', `User logged in via User ID (${exactIdMatch.id})`);
+      return {
+        success: true,
+        user: exactIdMatch,
+        message: `Detected User ID: ${exactIdMatch.employeeId} (${exactIdMatch.name} - ${exactIdMatch.role})`
+      };
+    }
+
+    // 2. Check exact match by Employee ID (e.g., 'EMP-1011', 'EMP-1010', 'EMP-2026')
+    const exactEmpIdMatch = users.find(u => u.employeeId.toLowerCase() === cleanQuery);
+    if (exactEmpIdMatch) {
+      setCurrentUser(exactEmpIdMatch);
+      addAuditLog('USER_LOGIN', 'Authentication', `User logged in via Employee ID (${exactEmpIdMatch.employeeId})`);
+      return {
+        success: true,
+        user: exactEmpIdMatch,
+        message: `Detected Employee ID: ${exactEmpIdMatch.employeeId} (${exactEmpIdMatch.name} - ${exactEmpIdMatch.role})`
+      };
+    }
+
+    // 3. Check numeric match on Employee ID or ID (e.g., '1011' matches 'EMP-1011', '1010' matches 'EMP-1010')
+    if (/^\d+$/.test(cleanQuery)) {
+      const numericMatches = users.filter(u => {
+        const empNum = u.employeeId.replace(/\D/g, '');
+        const idNum = u.id.replace(/\D/g, '');
+        return empNum === cleanQuery || idNum === cleanQuery;
+      });
+      if (numericMatches.length === 1) {
+        const matched = numericMatches[0];
+        setCurrentUser(matched);
+        addAuditLog('USER_LOGIN', 'Authentication', `User logged in via Numeric ID (${query} -> ${matched.employeeId})`);
+        return {
+          success: true,
+          user: matched,
+          message: `Detected Employee ID: ${matched.employeeId} (${matched.name} - ${matched.role})`
+        };
+      } else if (numericMatches.length > 1) {
+        return {
+          success: false,
+          matches: numericMatches,
+          message: `Multiple profiles matched numeric ID '${query}'. Please select your profile.`
+        };
+      }
+    }
+
+    // 4. Check exact match by Name (case-insensitive)
+    const exactNameMatch = users.find(u => u.name.toLowerCase() === cleanQuery);
+    if (exactNameMatch) {
+      setCurrentUser(exactNameMatch);
+      addAuditLog('USER_LOGIN', 'Authentication', `User logged in via Name (${exactNameMatch.name})`);
+      return {
+        success: true,
+        user: exactNameMatch,
+        message: `Detected User Name: ${exactNameMatch.name} (${exactNameMatch.employeeId} - ${exactNameMatch.role})`
+      };
+    }
+
+    // 5. Check match by Email
+    const emailMatches = users.filter(u => u.email.toLowerCase() === cleanQuery);
+    if (emailMatches.length === 1) {
+      const matched = emailMatches[0];
+      setCurrentUser(matched);
+      addAuditLog('USER_LOGIN', 'Authentication', `User logged in via Email (${matched.email})`);
+      return {
+        success: true,
+        user: matched,
+        message: `Detected Email Account: ${matched.email} (${matched.name} - ${matched.role})`
+      };
+    } else if (emailMatches.length > 1) {
+      return {
+        success: false,
+        matches: emailMatches,
+        message: `Multiple profiles found for email '${query}'. Please select your specific profile.`
+      };
+    }
+
+    // 6. Partial match on Name, Employee ID, or Email
+    const partialMatches = users.filter(u =>
+      u.id.toLowerCase().includes(cleanQuery) ||
+      u.employeeId.toLowerCase().includes(cleanQuery) ||
+      u.name.toLowerCase().includes(cleanQuery) ||
+      u.email.toLowerCase().includes(cleanQuery)
+    );
+
+    if (partialMatches.length === 1) {
+      const matched = partialMatches[0];
+      setCurrentUser(matched);
+      addAuditLog('USER_LOGIN', 'Authentication', `User logged in via Partial Query (${query} -> ${matched.name})`);
+      return {
+        success: true,
+        user: matched,
+        message: `Detected Profile: ${matched.name} (${matched.employeeId} - ${matched.role})`
+      };
+    } else if (partialMatches.length > 1) {
+      return {
+        success: false,
+        matches: partialMatches,
+        message: `Multiple profiles match '${query}'. Please select your specific profile.`
+      };
+    }
+
+    return {
+      success: false,
+      message: `No user profile or Employee ID found matching '${query}'. Please check the ID or select from the list.`
+    };
+  };
+
   // Auto detect system email from backend API
   const detectAndLoginSystemUser = async (): Promise<User | null> => {
     try {
@@ -193,22 +312,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
     } catch (err) {
-      console.warn('System user auto-detect API call failed, using default session:', err);
+      console.warn('System user auto-detect API call failed:', err);
     }
     return null;
   };
-
-  // Trigger system user detection on initial mount if no session is saved
-  useEffect(() => {
-    try {
-      const hasSession = localStorage.getItem('helpdesk_user_session');
-      if (!hasSession) {
-        detectAndLoginSystemUser();
-      }
-    } catch {
-      detectAndLoginSystemUser();
-    }
-  }, []);
 
   const [tickets, setTickets] = useState<Ticket[]>(() => {
     try {
@@ -1188,6 +1295,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateUser,
         toggleUserStatus,
         detectAndLoginSystemUser,
+        loginByIdOrQuery,
 
         addDepartment,
         addCategory,

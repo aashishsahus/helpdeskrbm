@@ -22,13 +22,11 @@ interface LoginModalProps {
 }
 
 export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
-  const { currentUser, setCurrentUser, users, detectAndLoginSystemUser } = useApp();
+  const { currentUser, setCurrentUser, users, detectAndLoginSystemUser, loginByIdOrQuery } = useApp();
 
   const isSuperAdmin = currentUser?.role === 'Super Admin';
 
-  const [loginMethod, setLoginMethod] = useState<'quick' | 'email'>(
-    currentUser?.role === 'Super Admin' ? 'quick' : 'email'
-  );
+  const [loginMethod, setLoginMethod] = useState<'quick' | 'email'>('email');
   const [emailInput, setEmailInput] = useState('');
   const [employeeIdInput, setEmployeeIdInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
@@ -44,17 +42,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
   const [multiProfileEmail, setMultiProfileEmail] = useState('');
   const [multiProfiles, setMultiProfiles] = useState<User[]>([]);
 
-  // Keep login method synced with Super Admin privilege
-  React.useEffect(() => {
-    if (isOpen) {
-      if (currentUser?.role === 'Super Admin') {
-        setLoginMethod('quick');
-      } else {
-        setLoginMethod('email');
-      }
-    }
-  }, [isOpen, currentUser?.role]);
-
   // Function to process login for an email address
   const processLoginForEmail = (email: string) => {
     setLoginError('');
@@ -66,7 +53,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
       return false;
     } else if (matches.length === 1) {
       setCurrentUser(matches[0]);
-      onClose();
+      setDetectedMessage(`Logged in as ${matches[0].name} (${matches[0].employeeId})`);
+      setTimeout(() => {
+        onClose();
+      }, 300);
       return true;
     } else {
       setMultiProfileEmail(cleanEmail);
@@ -106,9 +96,13 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
     setIsDetecting(false);
 
     if (user) {
-      processLoginForEmail(user.email);
+      setCurrentUser(user);
+      setDetectedMessage(`Auto-detected system account: ${user.name} (${user.employeeId})`);
+      setTimeout(() => {
+        onClose();
+      }, 400);
     } else {
-      setLoginError('Could not auto-detect system account. Please choose a profile below.');
+      setLoginError('Could not auto-detect system account. Please enter your Employee ID below.');
     }
   };
 
@@ -141,49 +135,42 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
       user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
       user.employeeId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      user.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
       user.department.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesRole && matchesQuery;
   });
 
   const handleSelectUser = (user: typeof users[0]) => {
-    processLoginForEmail(user.email);
+    setCurrentUser(user);
+    setDetectedMessage(`Logged in as ${user.name} (${user.employeeId} - ${user.role})`);
+    setTimeout(() => {
+      onClose();
+    }, 300);
   };
 
   const handleEmailLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
+    setDetectedMessage('');
 
     const query = emailInput.trim() || employeeIdInput.trim();
     if (!query) {
-      setLoginError('Please enter a valid Email ID or Employee ID.');
+      setLoginError('Please enter a valid User ID, Employee ID, Name, or Email.');
       return;
     }
 
-    // Try matching by exact email first
-    const emailMatches = users.filter(u => u.email.toLowerCase() === query.toLowerCase());
-    if (emailMatches.length > 0) {
-      if (emailMatches.length === 1) {
-        setCurrentUser(emailMatches[0]);
+    const result = loginByIdOrQuery(query);
+    if (result.success && result.user) {
+      setDetectedMessage(result.message);
+      setTimeout(() => {
         onClose();
-      } else {
-        setMultiProfileEmail(query);
-        setMultiProfiles(emailMatches);
-        setIsProfileSelectorOpen(true);
-      }
-      return;
-    }
-
-    // Try matching by employee ID or name
-    const foundUser = users.find(
-      u =>
-        u.employeeId.toLowerCase() === query.toLowerCase() ||
-        u.name.toLowerCase() === query.toLowerCase()
-    );
-
-    if (foundUser) {
-      processLoginForEmail(foundUser.email);
+      }, 400);
+    } else if (result.matches && result.matches.length > 0) {
+      setMultiProfileEmail(query);
+      setMultiProfiles(result.matches);
+      setIsProfileSelectorOpen(true);
     } else {
-      setLoginError("Profile Not Found: We couldn't find a profile associated with this email address. Please contact the administrator.");
+      setLoginError(result.message);
     }
   };
 
@@ -221,7 +208,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
             <div>
               <h2 className="text-xl font-bold">Help Desk Account Portal</h2>
               <p className="text-xs text-blue-200">
-                Multi-User Authentication & Role Switcher
+                Detect User by Employee ID, Name, or Email
               </p>
             </div>
           </div>
@@ -231,43 +218,36 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
             <span>Currently Active User:</span>
             <div className="flex items-center gap-2 font-bold bg-white/10 px-3 py-1 rounded-lg">
               <span>{currentUser.name}</span>
-              <span className="text-[10px] opacity-80">({currentUser.role})</span>
+              <span className="text-[10px] opacity-80">({currentUser.employeeId} - {currentUser.role})</span>
             </div>
           </div>
         </div>
 
-        {/* Tab Toggle (Quick Select vs Email/ID Login) */}
-        {isSuperAdmin ? (
-          <div className="flex border-b border-gray-200 bg-gray-50 px-6 shrink-0">
-            <button
-              onClick={() => setLoginMethod('quick')}
-              className={`py-3.5 px-4 text-xs font-bold border-b-2 flex items-center gap-2 transition-all ${
-                loginMethod === 'quick'
-                  ? 'border-blue-600 text-blue-600 bg-white'
-                  : 'border-transparent text-gray-500 hover:text-gray-800'
-              }`}
-            >
-              <UserCheck className="w-4 h-4" />
-              <span>Select Corporate Profile ({users.length})</span>
-            </button>
-            <button
-              onClick={() => setLoginMethod('email')}
-              className={`py-3.5 px-4 text-xs font-bold border-b-2 flex items-center gap-2 transition-all ${
-                loginMethod === 'email'
-                  ? 'border-blue-600 text-blue-600 bg-white'
-                  : 'border-transparent text-gray-500 hover:text-gray-800'
-              }`}
-            >
-              <KeyRound className="w-4 h-4" />
-              <span>Login by Email / Employee ID</span>
-            </button>
-          </div>
-        ) : (
-          <div className="border-b border-gray-200 bg-gray-50 px-6 py-3.5 shrink-0 flex items-center gap-2 text-xs font-bold text-gray-700">
-            <KeyRound className="w-4 h-4 text-blue-600" />
-            <span>Login by Email / Employee ID</span>
-          </div>
-        )}
+        {/* Tab Toggle (ID / Email Login vs Select Corporate Profile) */}
+        <div className="flex border-b border-gray-200 bg-gray-50 px-6 shrink-0">
+          <button
+            onClick={() => setLoginMethod('email')}
+            className={`py-3.5 px-4 text-xs font-bold border-b-2 flex items-center gap-2 transition-all ${
+              loginMethod === 'email'
+                ? 'border-blue-600 text-blue-600 bg-white'
+                : 'border-transparent text-gray-500 hover:text-gray-800'
+            }`}
+          >
+            <KeyRound className="w-4 h-4" />
+            <span>Login by ID / Email</span>
+          </button>
+          <button
+            onClick={() => setLoginMethod('quick')}
+            className={`py-3.5 px-4 text-xs font-bold border-b-2 flex items-center gap-2 transition-all ${
+              loginMethod === 'quick'
+                ? 'border-blue-600 text-blue-600 bg-white'
+                : 'border-transparent text-gray-500 hover:text-gray-800'
+            }`}
+          >
+            <UserCheck className="w-4 h-4" />
+            <span>Select Corporate Profile ({users.length})</span>
+          </button>
+        </div>
 
         {/* Modal Content */}
         <div className="p-6 overflow-y-auto space-y-5 flex-1">
@@ -280,7 +260,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
               </div>
               <h3 className="font-bold text-sm text-white">Sign in with Google Workspace Account</h3>
               <p className="text-[11px] text-blue-200">
-                Authenticate with your corporate email address <code className="bg-blue-900/60 px-1 py-0.5 rounded border border-blue-700/50 text-white font-mono">misrpr@rathibuildmart.com</code>
+                Authenticate with corporate email <code className="bg-blue-900/60 px-1 py-0.5 rounded border border-blue-700/50 text-white font-mono">misrpr@rathibuildmart.com</code>
               </p>
             </div>
             
@@ -307,16 +287,16 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
             </div>
           )}
 
-          {loginMethod === 'email' || !isSuperAdmin ? (
-            /* Email / Employee ID Login Form */
+          {loginMethod === 'email' ? (
+            /* ID / Email Login Form */
             <form onSubmit={handleEmailLoginSubmit} className="space-y-4 max-w-md mx-auto py-2">
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-xs text-blue-800 space-y-1">
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-3.5 text-xs text-blue-800 space-y-1">
                 <div className="font-bold flex items-center gap-1.5">
                   <Shield className="w-4 h-4 text-blue-600" />
-                  Single Email Multi-User System
+                  Exact ID Detection System
                 </div>
                 <p className="text-[11px] leading-relaxed text-blue-700">
-                  You can enter your assigned company Email ID or Employee ID (e.g. <code className="bg-blue-100 px-1 py-0.5 rounded text-blue-900">EMP-1001</code> or <code className="bg-blue-100 px-1 py-0.5 rounded text-blue-900">sarah.connor@company.com</code>) to access your specific role dashboard.
+                  Enter your Employee ID (e.g. <code className="bg-blue-100 px-1 py-0.5 rounded text-blue-900 font-bold">EMP-1011</code>, <code className="bg-blue-100 px-1 py-0.5 rounded text-blue-900 font-bold">1010</code>, <code className="bg-blue-100 px-1 py-0.5 rounded text-blue-900 font-bold">EMP-2026</code>), Name, or Email Address to detect and load your account directly.
                 </p>
               </div>
 
@@ -328,22 +308,26 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
               )}
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-gray-700">Company Email Address or Employee ID</label>
+                <label className="text-xs font-bold text-gray-700">Employee ID / User ID / Email Address</label>
                 <div className="relative">
                   <Mail className="absolute left-3.5 top-3 w-4 h-4 text-gray-400" />
                   <input
                     type="text"
                     value={emailInput}
-                    onChange={e => setEmailInput(e.target.value)}
-                    placeholder="e.g. admin@company.com or EMP-1001"
-                    className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-xs text-gray-900 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                    onChange={e => {
+                      setEmailInput(e.target.value);
+                      setLoginError('');
+                    }}
+                    placeholder="e.g. EMP-1011, 1010, Dhaneshwari, or accountsrpr@rathibuildmart.com"
+                    className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-xs text-gray-900 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none font-medium"
+                    autoFocus
                   />
                 </div>
               </div>
 
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-gray-700">Password / PIN</label>
+                  <label className="text-xs font-bold text-gray-700">Password / PIN (Optional)</label>
                   <span className="text-[10px] text-gray-400">Default: Any password or 123456</span>
                 </div>
                 <div className="relative">
@@ -358,34 +342,38 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                 </div>
               </div>
 
-              {isSuperAdmin && (
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-gray-700">Preset Sample Accounts (Click to Autofill)</label>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    {users.slice(0, 4).map(u => (
-                      <button
-                        key={u.id}
-                        type="button"
-                        onClick={() => {
-                          setEmailInput(u.email);
-                          setLoginError('');
-                        }}
-                        className="p-2 border border-gray-200 hover:border-blue-400 rounded-lg text-left bg-gray-50 hover:bg-blue-50/50 transition-all"
-                      >
+              {/* Sample Quick Login Pills */}
+              <div className="space-y-1.5 pt-1">
+                <label className="text-xs font-bold text-gray-700">Sample Employee IDs (Click to Detect & Login Directly)</label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                  {users.slice(0, 6).map(u => (
+                    <button
+                      key={u.id}
+                      type="button"
+                      onClick={() => {
+                        setEmailInput(u.employeeId);
+                        setCurrentUser(u);
+                        setDetectedMessage(`Detected Employee ID: ${u.employeeId} (${u.name} - ${u.role})`);
+                        setTimeout(() => onClose(), 350);
+                      }}
+                      className="p-2 border border-gray-200 hover:border-blue-400 rounded-xl text-left bg-gray-50 hover:bg-blue-50/60 transition-all cursor-pointer flex flex-col justify-between"
+                    >
+                      <div>
                         <div className="font-bold text-gray-800 text-[11px] truncate">{u.name}</div>
-                        <div className="text-[10px] text-gray-500 truncate">{u.email}</div>
-                      </button>
-                    ))}
-                  </div>
+                        <div className="text-[10px] text-blue-600 font-mono font-bold">{u.employeeId}</div>
+                      </div>
+                      <div className="text-[9px] text-gray-500 font-medium truncate mt-1">{u.role}</div>
+                    </button>
+                  ))}
                 </div>
-              )}
+              </div>
 
               <button
                 type="submit"
-                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow-md transition-all flex items-center justify-center gap-2"
+                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer mt-2"
               >
                 <LogIn className="w-4 h-4" />
-                <span>Log In to Account</span>
+                <span>Detect Account & Log In</span>
               </button>
             </form>
           ) : (
@@ -400,7 +388,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                     type="text"
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
-                    placeholder="Search name, email, role..."
+                    placeholder="Search ID, name, email, role..."
                     className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none"
                   />
                 </div>
@@ -411,7 +399,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                     <button
                       key={r}
                       onClick={() => setSelectedRoleFilter(r)}
-                      className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold shrink-0 transition-colors ${
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold shrink-0 transition-colors cursor-pointer ${
                         selectedRoleFilter === r
                           ? 'bg-blue-600 text-white'
                           : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -475,7 +463,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                           </div>
 
                           <div className="flex items-center gap-3 text-[10px] text-gray-400">
-                            <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">
+                            <span className="font-mono bg-blue-50 text-blue-700 font-bold px-1.5 py-0.5 rounded border border-blue-200">
                               {user.employeeId}
                             </span>
                             <span className="truncate flex items-center gap-1">
@@ -498,7 +486,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
           <span>Active Role Determines Navigation & Admin Permissions</span>
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold rounded-lg transition-colors"
+            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold rounded-lg transition-colors cursor-pointer"
           >
             Close
           </button>
@@ -514,7 +502,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
         onSelectProfile={(profile) => {
           setCurrentUser(profile);
           setIsProfileSelectorOpen(false);
-          onClose();
+          setDetectedMessage(`Logged in as ${profile.name} (${profile.employeeId})`);
+          setTimeout(() => {
+            onClose();
+          }, 300);
         }}
         isSwitchMode={false}
       />
