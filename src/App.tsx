@@ -1,0 +1,138 @@
+import React from 'react';
+import { AppProvider, useApp } from './context/AppContext';
+import { Header } from './components/Header';
+import { Sidebar } from './components/Sidebar';
+import { CreateTicketModal } from './components/CreateTicketModal';
+import { TicketDetailsModal } from './components/TicketDetailsModal';
+
+import { EmployeeDashboardView } from './views/EmployeeDashboardView';
+import { SupportDashboardView } from './views/SupportDashboardView';
+import { AdminDashboardView } from './views/AdminDashboardView';
+import { TicketDirectoryView } from './views/TicketDirectoryView';
+import { KnowledgeBaseView } from './views/KnowledgeBaseView';
+import { ReportsView } from './views/ReportsView';
+import { FeedbackDashboardView } from './views/FeedbackDashboardView';
+
+import { UserManagement } from './views/AdminPanel/UserManagement';
+import { DepartmentManagement } from './views/AdminPanel/DepartmentManagement';
+import { CategoryManagement } from './views/AdminPanel/CategoryManagement';
+import { SLAManagement } from './views/AdminPanel/SLAManagement';
+import { GoogleDriveIntegration } from './views/AdminPanel/GoogleDriveIntegration';
+import { GoogleAppsScriptView } from './views/AdminPanel/GoogleAppsScriptView';
+import { AuditLogsView } from './views/AdminPanel/AuditLogsView';
+import { SystemSettingsView } from './views/AdminPanel/SystemSettingsView';
+import { MasterDropdownsView } from './views/AdminPanel/MasterDropdownsView';
+
+const MainLayout: React.FC = () => {
+  const { activeView, currentUser } = useApp();
+
+  const renderCurrentView = () => {
+    switch (activeView) {
+      case 'dashboard':
+      case 'employee_dashboard':
+      case 'support_dashboard':
+      case 'admin_dashboard':
+        if (activeView === 'employee_dashboard') return <EmployeeDashboardView />;
+        if (activeView === 'support_dashboard') return <SupportDashboardView />;
+        if (activeView === 'admin_dashboard') return <AdminDashboardView />;
+
+        if (currentUser.role === 'Admin' || currentUser.role === 'Super Admin') {
+          return <AdminDashboardView />;
+        }
+        if (currentUser.role === 'Support Agent' || currentUser.role === 'Support Manager') {
+          return <SupportDashboardView />;
+        }
+        return <EmployeeDashboardView />;
+
+      case 'tickets':
+      case 'ticket_directory':
+        return <TicketDirectoryView />;
+
+      case 'feedback':
+      case 'feedback_dashboard':
+        return <FeedbackDashboardView />;
+
+      case 'knowledge-base':
+      case 'knowledge_base':
+        return <KnowledgeBaseView />;
+
+      case 'reports':
+        return <ReportsView />;
+
+      case 'dropdown-settings':
+      case 'admin_dropdowns':
+        return <MasterDropdownsView />;
+
+      case 'users':
+      case 'admin_users':
+        return <UserManagement />;
+
+      case 'departments':
+      case 'admin_departments':
+        return <DepartmentManagement />;
+
+      case 'categories':
+      case 'admin_categories':
+        return <CategoryManagement />;
+
+      case 'sla':
+      case 'admin_sla':
+        return <SLAManagement />;
+
+      case 'google-drive':
+      case 'admin_drive':
+        return <GoogleDriveIntegration />;
+
+      case 'apps-script':
+      case 'admin_script':
+        return <GoogleAppsScriptView />;
+
+      case 'audit-logs':
+      case 'admin_audit':
+        return <AuditLogsView />;
+
+      case 'settings':
+      case 'admin_settings':
+        return <SystemSettingsView />;
+
+      default:
+        if (currentUser.role === 'Admin' || currentUser.role === 'Super Admin') {
+          return <AdminDashboardView />;
+        }
+        if (currentUser.role === 'Support Agent' || currentUser.role === 'Support Manager') {
+          return <SupportDashboardView />;
+        }
+        return <EmployeeDashboardView />;
+    }
+  };
+
+  return (
+    <div className="flex h-screen w-screen overflow-hidden bg-[#F3F4F6] text-gray-900 font-sans">
+      {/* Enterprise Technical Dashboard Sidebar */}
+      <Sidebar />
+
+      {/* Main Right Content Panel */}
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+        {/* Top Header Navigation */}
+        <Header />
+
+        {/* View Main Content Area */}
+        <main className="flex-1 overflow-hidden flex flex-col relative">
+          {renderCurrentView()}
+        </main>
+      </div>
+
+      {/* Modals */}
+      <CreateTicketModal />
+      <TicketDetailsModal />
+    </div>
+  );
+};
+
+export default function App() {
+  return (
+    <AppProvider>
+      <MainLayout />
+    </AppProvider>
+  );
+}

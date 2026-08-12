@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+@media print {
+  body, html, #root {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  aside, header, #app-sidebar, #app-header, .print\:hidden {
+    display: none !important;
+  }
+  main, div {
+    overflow: visible !important;
+    height: auto !important;
+  }
+  .print\:p-0 {
+    padding: 0 !important;
+  }
+  .print\:border-none {
+    border: none !important;
+  }
+  .print\:shadow-none {
+    box-shadow: none !important;
+  }
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+  th, td {
+    padding: 8px 12px !important;
+    border: 1px solid #d1d5db !important;
+    font-size: 11px !important;
+    color: #111827 !important;
+  }
+  tr {
+    page-break-inside: avoid;
+  }
+}
