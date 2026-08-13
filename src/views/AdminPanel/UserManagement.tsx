@@ -25,6 +25,8 @@ export const UserManagement: React.FC = () => {
   const [name, setName] = useState('');
   const [employeeId, setEmployeeId] = useState('');
   const [email, setEmail] = useState('');
+  const [pin, setPin] = useState('');
+  const [password, setPassword] = useState('');
   const [role, setRole] = useState<UserRole>('Employee');
   const [department, setDepartment] = useState(departments[0]?.name || 'IT Support');
   const [designation, setDesignation] = useState('');
@@ -46,9 +48,12 @@ export const UserManagement: React.FC = () => {
 
   const handleOpenAddModal = () => {
     setEditingUser(null);
-    setEmployeeId(`EMP-${1000 + users.length + 1}`);
+    const newEmpId = `EMP-${1000 + users.length + 1}`;
+    setEmployeeId(newEmpId);
     setName('');
     setEmail('');
+    setPin('1234');
+    setPassword('123456');
     setRole('Employee');
     setDepartment(departments[0]?.name || 'IT Support');
     setDesignation('');
@@ -63,6 +68,8 @@ export const UserManagement: React.FC = () => {
     setEmployeeId(u.employeeId);
     setName(u.name);
     setEmail(u.email);
+    setPin(u.pin || u.employeeId.replace(/\D/g, '') || '1234');
+    setPassword(u.password || '123456');
     setRole(u.role);
     setDepartment(u.department);
     setDesignation(u.designation || '');
@@ -81,6 +88,8 @@ export const UserManagement: React.FC = () => {
         employeeId,
         name,
         email,
+        pin,
+        password,
         role,
         department,
         designation: designation || 'Staff Member',
@@ -93,6 +102,8 @@ export const UserManagement: React.FC = () => {
         employeeId,
         name,
         email,
+        pin,
+        password,
         role,
         department,
         designation: designation || 'Staff Member',
@@ -284,6 +295,40 @@ export const UserManagement: React.FC = () => {
                     placeholder="+1 (555) 000-0000"
                     className="w-full p-2 border rounded-lg"
                   />
+                </div>
+              </div>
+
+              {/* Password & PIN Configuration */}
+              <div className="grid grid-cols-2 gap-3 bg-blue-50/60 p-3 rounded-xl border border-blue-100">
+                <div>
+                  <label className="block font-bold text-blue-900 mb-1 flex items-center justify-between">
+                    <span>Employee PIN *</span>
+                    <span className="text-[10px] text-blue-600 font-mono">Quick PIN</span>
+                  </label>
+                  <input
+                    required
+                    type="text"
+                    value={pin}
+                    onChange={e => setPin(e.target.value)}
+                    placeholder="e.g. 1011 or 1234"
+                    className="w-full p-2 bg-white border border-blue-200 rounded-lg text-xs font-mono font-bold"
+                  />
+                  <span className="text-[9px] text-gray-500 mt-0.5 block">Used for fast ID sign-in</span>
+                </div>
+                <div>
+                  <label className="block font-bold text-blue-900 mb-1 flex items-center justify-between">
+                    <span>Password *</span>
+                    <span className="text-[10px] text-blue-600 font-mono">Account Pass</span>
+                  </label>
+                  <input
+                    required
+                    type="text"
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    placeholder="e.g. admin123 or pass123"
+                    className="w-full p-2 bg-white border border-blue-200 rounded-lg text-xs font-mono"
+                  />
+                  <span className="text-[9px] text-gray-500 mt-0.5 block">Account authentication password</span>
                 </div>
               </div>
 

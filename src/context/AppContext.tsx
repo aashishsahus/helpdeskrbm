@@ -188,6 +188,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const matches = users.filter(u => u.email.toLowerCase() === cleanEmail);
+    if (matches.length === 0) {
+      return {
+        success: false,
+        message: `Access Denied: The Google account '${googleEmail}' is NOT registered in RBM Help Desk. Access is restricted to registered company employees.`
+      };
+    }
+
     if (matches.length === 1) {
       const matched = matches[0];
       setCurrentUser(matched);
@@ -197,18 +204,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         user: matched,
         message: `Authenticated via Google Workspace SSO: ${matched.name} (${matched.employeeId} - ${matched.role})`
       };
-    } else if (matches.length > 1) {
+    } else {
       return {
         success: false,
         matches,
-        message: `Multiple employee profiles found for ${cleanEmail}. Please select your specific profile.`
+        message: `Multiple employee profiles found for ${cleanEmail}. Please select your specific account profile.`
       };
     }
-
-    return {
-      success: false,
-      message: `Access Denied: The Google account '${googleEmail}' is NOT registered in RBM Help Desk. Access is restricted to registered company employees.`
-    };
   };
 
   // Login detection by User ID, Employee ID, Name, or Email
