@@ -24,13 +24,16 @@ import { SystemSettingsView } from './views/AdminPanel/SystemSettingsView';
 import { MasterDropdownsView } from './views/AdminPanel/MasterDropdownsView';
 
 import { LoginModal } from './components/LoginModal';
+import { LoginPage } from './views/LoginPage';
 
 const MainLayout: React.FC = () => {
   const { activeView, currentUser } = useApp();
   const [isLoginModalOpen, setIsLoginModalOpen] = React.useState(false);
 
-  // Automatically prompt login if user is not authenticated
-  const showLoginPrompt = !currentUser;
+  // If user is not authenticated, show standalone Login Page first
+  if (!currentUser) {
+    return <LoginPage />;
+  }
 
   const renderCurrentView = () => {
     const userRole = currentUser?.role || 'Employee';
@@ -133,7 +136,7 @@ const MainLayout: React.FC = () => {
       {/* Modals */}
       <CreateTicketModal />
       <TicketDetailsModal />
-      <LoginModal isOpen={showLoginPrompt || isLoginModalOpen} onClose={() => setIsLoginModalOpen(false)} />
+      <LoginModal isOpen={isLoginModalOpen} onClose={() => setIsLoginModalOpen(false)} />
     </div>
   );
 };

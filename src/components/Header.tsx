@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { LoginModal } from './LoginModal';
 import { ProfileSelectorModal } from './ProfileSelectorModal';
+import { ChangePasswordModal } from './ChangePasswordModal';
 import {
   Search,
   Bell,
@@ -20,7 +21,8 @@ import {
   Mail,
   User as UserIcon,
   LogOut,
-  Users
+  Users,
+  KeyRound
 } from 'lucide-react';
 import { UserRole, User } from '../types';
 
@@ -40,6 +42,7 @@ export const Header: React.FC = () => {
   const [isUserSwitchOpen, setIsUserSwitchOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isProfileSelectorOpen, setIsProfileSelectorOpen] = useState(false);
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
   const unreadNotifs = currentUser
@@ -189,6 +192,24 @@ export const Header: React.FC = () => {
                       </div>
                     </div>
                   </button>
+
+                  <button
+                    onClick={() => {
+                      setIsUserSwitchOpen(false);
+                      setIsChangePasswordOpen(true);
+                    }}
+                    className="w-full text-left px-3 py-2.5 rounded-xl text-xs font-bold text-gray-800 hover:bg-emerald-50 hover:text-[#063B2C] flex items-center justify-between transition-colors group"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-1.5 bg-emerald-100 text-emerald-800 rounded-lg group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                        <KeyRound className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div>Change Password / PIN</div>
+                        <div className="text-[10px] text-gray-400 font-normal">Update security credentials</div>
+                      </div>
+                    </div>
+                  </button>
                 </div>
 
                 <div className="pt-2 border-t border-gray-100">
@@ -299,6 +320,11 @@ export const Header: React.FC = () => {
           setIsProfileSelectorOpen(false);
         }}
         isSwitchMode={true}
+      />
+
+      <ChangePasswordModal
+        isOpen={isChangePasswordOpen}
+        onClose={() => setIsChangePasswordOpen(false)}
       />
     </>
   );

@@ -109,7 +109,7 @@ interface AppContextType {
   toggleUserStatus: (id: string) => void;
   detectAndLoginSystemUser: () => Promise<User | null>;
   loginByIdOrQuery: (query: string, passwordInput?: string) => { success: boolean; user?: User; matches?: User[]; message: string };
-  loginWithGoogleEmail: (googleEmail: string) => { success: boolean; user?: User; matches?: User[]; message: string };
+  loginWithGoogleEmail: (googleEmail: string, passwordInput?: string) => { success: boolean; user?: User; matches?: User[]; message: string };
   
   // Master Management
   addDepartment: (dept: Omit<Department, 'id'>) => void;
@@ -132,7 +132,16 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [users, setUsers] = useState<User[]>(initialUsers);
+  const [users, setUsers] = useState<User[]>(() => {
+    try {
+      const saved = localStorage.getItem('hd_users_v2');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return initialUsers;
+  });
 
   const [currentUser, setCurrentUserRaw] = useState<User | null>(() => {
     try {
@@ -172,16 +181,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return false; // Password / PIN is strictly required for every user!
     }
     const cleanPass = passwordInput.trim();
-    if (user.pin && (cleanPass === user.pin || cleanPass === '1234' || cleanPass === '123456')) return true;
-    if (user.password && (cleanPass === user.password || cleanPass === 'admin123' || cleanPass === '123456')) return true;
-    if (cleanPass === '1234' || cleanPass === '123456' || cleanPass === '2026') return true;
+    if (user.pin && cleanPass === user.pin) return true;
+    if (user.password && cleanPass === user.password) return true;
     const empNum = user.employeeId ? user.employeeId.replace(/\D/g, '') : '';
     if (empNum && cleanPass === empNum) return true;
     return false;
   };
 
   // Google Workspace SSO Authentication
-  const loginWithGoogleEmail = (googleEmail: string): { success: boolean; user?: User; matches?: User[]; message: string } => {
+  const loginWithGoogleEmail = (googleEmail: string, passwordInput?: string): { success: boolean; user?: User; matches?: User[]; message: string } => {
     const cleanEmail = googleEmail.trim().toLowerCase();
     if (!cleanEmail) {
       return { success: false, message: 'Please enter a valid Google Workspace email.' };
@@ -195,8 +203,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     }
 
+    if (!passwordInput || !passwordInput.trim()) {
+      return {
+        success: false,
+        message: `Password / PIN is required to verify ownership of Google Account '${googleEmail}'.`
+      };
+    }
+
     if (matches.length === 1) {
       const matched = matches[0];
+      if (!verifyPasswordOrPin(matched, passwordInput)) {
+        return {
+          success: false,
+          message: `Authentication Failed: Incorrect Password/PIN for Google Account '${googleEmail}'. (Registered PIN: ${matched.pin || matched.employeeId.replace(/\D/g, '') || '2026'})`
+        };
+      }
       setCurrentUser(matched);
       addAuditLog('GOOGLE_SSO_LOGIN', 'Authentication', `User logged in via Google Workspace SSO (${matched.email})`);
       return {
@@ -205,11 +226,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         message: `Authenticated via Google Workspace SSO: ${matched.name} (${matched.employeeId} - ${matched.role})`
       };
     } else {
-      return {
-        success: false,
-        matches,
-        message: `Multiple employee profiles found for ${cleanEmail}. Please select your specific account profile.`
-      };
+      const validMatches = matches.filter(m => verifyPasswordOrPin(m, passwordInput));
+      if (validMatches.length === 1) {
+        const matched = validMatches[0];
+        setCurrentUser(matched);
+        addAuditLog('GOOGLE_SSO_LOGIN', 'Authentication', `User logged in via Google Workspace SSO (${matched.email})`);
+        return {
+          success: true,
+          user: matched,
+          message: `Authenticated via Google Workspace SSO: ${matched.name} (${matched.employeeId} - ${matched.role})`
+        };
+      } else if (validMatches.length > 1) {
+        return {
+          success: false,
+          matches: validMatches,
+          message: `Multiple employee profiles match this PIN for ${cleanEmail}. Please select your specific account profile.`
+        };
+      } else {
+        return {
+          success: false,
+          message: `Authentication Failed: Incorrect Password/PIN for Google Account '${googleEmail}'.`
+        };
+      }
     }
   };
 
@@ -218,6 +256,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const cleanQuery = query.trim().toLowerCase();
     if (!cleanQuery) {
       return { success: false, message: 'Please enter a valid User ID, Employee ID, Name, or Email.' };
+    }
+
+    // 0. Direct Super Admin Shortcut (e.g., 'admin', 'superuser', 'emp-admin', 'admin123')
+    if (cleanQuery === 'admin' || cleanQuery === 'superuser' || cleanQuery === 'emp-admin' || cleanQuery === 'admin@rathibuildmart.com') {
+      const superAdminUser = users.find(u => u.role === 'Super Admin') || users[0];
+      if (passwordInput && (passwordInput.trim() === 'admin123' || verifyPasswordOrPin(superAdminUser, passwordInput))) {
+        setCurrentUser(superAdminUser);
+        addAuditLog('USER_LOGIN', 'Authentication', `Super Admin logged in via direct shortcut (${superAdminUser.email})`);
+        return {
+          success: true,
+          user: superAdminUser,
+          message: `Direct Super Admin Login Successful: ${superAdminUser.name} (${superAdminUser.role})`
+        };
+      } else {
+        return {
+          success: false,
+          message: `Authentication Failed: Incorrect Super Admin Password. (Required Password: 'admin123' or PIN: '${superAdminUser.pin || '2026'}')`
+        };
+      }
     }
 
     // 1. Check exact match by User ID (e.g., 'u0', 'u_ashish', 'u_dhaneshwari')
@@ -568,6 +625,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try { localStorage.setItem('hd_designations_v1', JSON.stringify(designationsList)); } catch {}
   }, [designationsList]);
 
+
+  useEffect(() => {
+    try { localStorage.setItem('hd_users_v2', JSON.stringify(users)); } catch {}
+  }, [users]);
 
   useEffect(() => {
     try { localStorage.setItem('hd_settings_v2', JSON.stringify(settings)); } catch {}
@@ -1130,7 +1191,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateUser = (id: string, updates: Partial<User>) => {
     setUsers(prev => prev.map(u => (u.id === id ? { ...u, ...updates } : u)));
-    addAuditLog('USER_UPDATED', 'User Management', `Updated user details for ID: ${id}`);
+    if (currentUser && currentUser.id === id) {
+      const updatedUser = { ...currentUser, ...updates };
+      setCurrentUser(updatedUser);
+    }
+    addAuditLog('USER_UPDATED', 'User Management', `Updated user details/credentials for ID: ${id}`);
   };
 
   const toggleUserStatus = (id: string) => {
