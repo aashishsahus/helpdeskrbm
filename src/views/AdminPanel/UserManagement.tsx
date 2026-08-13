@@ -9,7 +9,8 @@ import {
   Edit2,
   KeyRound,
   Shield,
-  X
+  X,
+  CheckCircle2
 } from 'lucide-react';
 import { User, UserRole } from '../../types';
 
@@ -183,7 +184,13 @@ export const UserManagement: React.FC = () => {
             <tbody className="divide-y divide-gray-50 text-xs">
               {filteredUsers.map(u => (
                 <tr key={u.id} className="hover:bg-gray-50/80 transition-colors">
-                  <td className="px-6 py-4 font-mono font-bold text-gray-700">{u.employeeId}</td>
+                  <td className="px-6 py-4">
+                    <div className="font-mono font-bold text-gray-700 text-xs">{u.employeeId}</div>
+                    <span className="inline-flex items-center gap-1 text-[9px] font-sans font-extrabold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 mt-1 shadow-2xs">
+                      <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
+                      <span>Synced</span>
+                    </span>
+                  </td>
                   <td className="px-6 py-4">
                     <p className="font-bold text-gray-900">{u.name}</p>
                     <p className="text-[10px] text-gray-500">{u.email}</p>

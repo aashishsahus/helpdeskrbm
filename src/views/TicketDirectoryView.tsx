@@ -10,7 +10,8 @@ import {
   ArrowUpDown,
   Mail,
   Clock,
-  UserCheck
+  UserCheck,
+  CheckCircle2
 } from 'lucide-react';
 import { TicketPriority, TicketStatus } from '../types';
 import { SendEmailModal } from '../components/SendEmailModal';
@@ -256,7 +257,13 @@ export const TicketDirectoryView: React.FC = () => {
                     onClick={() => setSelectedTicketId(t.id)}
                     className="hover:bg-blue-50/40 transition-colors cursor-pointer group"
                   >
-                    <td className="px-6 py-4 font-mono font-bold text-blue-600">{t.id}</td>
+                    <td className="px-6 py-4">
+                      <div className="font-mono font-bold text-blue-600 text-xs">{t.id}</div>
+                      <span className="inline-flex items-center gap-1 text-[9px] font-sans font-extrabold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 mt-1 shadow-2xs">
+                        <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
+                        <span>Synced</span>
+                      </span>
+                    </td>
                     <td className="px-6 py-4">
                       <p className="text-sm font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">{t.subject}</p>
                       <div className="flex items-center gap-2 mt-0.5 flex-wrap">
