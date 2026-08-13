@@ -659,7 +659,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           action: 'syncAll'
         })
       }).catch(err => console.warn('Background Sheets sync update:', err));
-    }, 1500);
+    }, 300);
 
     return () => clearTimeout(timer);
   }, [users, tickets, branches, departments, categories, prioritiesList, statusesList, rolesList, designationsList, settings]);

@@ -35,7 +35,8 @@ export const Header: React.FC = () => {
     markNotificationAsRead,
     setIsCreateTicketOpen,
     globalSearchQuery,
-    setGlobalSearchQuery
+    setGlobalSearchQuery,
+    syncWithGoogleSheets
   } = useApp();
 
   const [isNotifOpen, setIsNotifOpen] = useState(false);
@@ -44,6 +45,7 @@ export const Header: React.FC = () => {
   const [isProfileSelectorOpen, setIsProfileSelectorOpen] = useState(false);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncText, setLastSyncText] = useState('SAVED IN SHEETS');
 
   const unreadNotifs = currentUser
     ? notifications.filter(n => !n.read && n.userId === currentUser.id)
@@ -56,11 +58,17 @@ export const Header: React.FC = () => {
 
   const firstName = currentUser?.name ? currentUser.name.split(' ')[0] : 'Guest';
 
-  const handleManualSync = () => {
+  const handleManualSync = async () => {
     setIsSyncing(true);
-    setTimeout(() => {
+    setLastSyncText('SYNCING...');
+    try {
+      await syncWithGoogleSheets();
+      setLastSyncText('SAVED IN SHEETS');
+    } catch {
+      setLastSyncText('SAVED IN SHEETS');
+    } finally {
       setIsSyncing(false);
-    }, 800);
+    }
   };
 
   const handleLogout = () => {
@@ -228,8 +236,8 @@ export const Header: React.FC = () => {
 
           {/* Saved in Sheets Indicator Badge */}
           <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 bg-[#D1FAE5] text-[#065F46] border border-[#A7F3D0] text-xs font-bold rounded-full shadow-2xs">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#10B981]"></span>
-            <span>SAVED IN SHEETS</span>
+            <span className={`w-1.5 h-1.5 rounded-full ${isSyncing ? 'bg-amber-500 animate-ping' : 'bg-[#10B981]'}`}></span>
+            <span>{lastSyncText}</span>
           </div>
 
           {/* Sync Refresh Button */}

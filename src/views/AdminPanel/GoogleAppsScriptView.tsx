@@ -93,20 +93,26 @@ function doPost(e) {
     if (action === "updateTicket") {
       var ticketSheet = ss.getSheetByName("Tickets");
       var t = contents.ticket;
+      if (!t || !ticketSheet) {
+        return ContentService.createTextOutput(JSON.stringify({ success: false, message: "Missing ticket or Tickets sheet" }))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
       var data = ticketSheet.getDataRange().getValues();
       var foundRow = -1;
 
+      var targetId = (t.id || "").toString().trim().toLowerCase();
+
       for (var r = 1; r < data.length; r++) {
-        if (data[r][0] == t.id) {
+        if (data[r][0] && data[r][0].toString().trim().toLowerCase() === targetId) {
           foundRow = r + 1;
           break;
         }
       }
 
       var rowValues = [
-        t.id, t.employeeId, t.employeeName, t.employeeEmail,
-        t.department, t.location, t.category, t.subCategory,
-        t.subject, t.description, t.priority, t.status,
+        t.id || "", t.employeeId || "", t.employeeName || "", t.employeeEmail || "",
+        t.department || "", t.location || "", t.category || "", t.subCategory || "",
+        t.subject || "", t.description || "", t.priority || "", t.status || "Open",
         t.assignedAgentName || "", t.createdDate || "",
         t.slaDueDate || "", t.closedDate || t.resolvedDate || "",
         t.rating || "", t.feedback || "", t.contactNumber || ""
@@ -222,20 +228,21 @@ function doPost(e) {
         var ticketRowMap = {};
         for (var tr = 1; tr < existingTicketsData.length; tr++) {
           if (existingTicketsData[tr][0]) {
-            ticketRowMap[existingTicketsData[tr][0].toString().trim()] = tr + 1;
+            ticketRowMap[existingTicketsData[tr][0].toString().trim().toLowerCase()] = tr + 1;
           }
         }
 
         tickets.forEach(function(t) {
           var tRow = [
-            t.id, t.employeeId, t.employeeName, t.employeeEmail,
-            t.department, t.location, t.category, t.subCategory,
-            t.subject, t.description, t.priority, t.status,
+            t.id || "", t.employeeId || "", t.employeeName || "", t.employeeEmail || "",
+            t.department || "", t.location || "", t.category || "", t.subCategory || "",
+            t.subject || "", t.description || "", t.priority || "", t.status || "Open",
             t.assignedAgentName || "", t.createdDate || "", t.slaDueDate || "",
             t.closedDate || t.resolvedDate || "",
             t.rating || "", t.feedback || "", t.contactNumber || ""
           ];
-          var targetRow = ticketRowMap[t.id];
+          var tidKey = (t.id || "").toString().trim().toLowerCase();
+          var targetRow = ticketRowMap[tidKey];
           if (targetRow) {
             tSheet.getRange(targetRow, 1, 1, tRow.length).setValues([tRow]);
           } else {
@@ -249,13 +256,18 @@ function doPost(e) {
         var userRowMap = {};
         for (var ur = 1; ur < existingUsersData.length; ur++) {
           if (existingUsersData[ur][0]) {
-            userRowMap[existingUsersData[ur][0].toString().trim()] = ur + 1;
+            userRowMap[existingUsersData[ur][0].toString().trim().toLowerCase()] = ur + 1;
+          }
+          if (existingUsersData[ur][1]) {
+            userRowMap[existingUsersData[ur][1].toString().trim().toLowerCase()] = ur + 1;
           }
         }
 
         users.forEach(function(u) {
-          var uRow = [u.id, u.employeeId, u.name, u.email, u.role, u.department, u.designation, u.location, u.status];
-          var targetURow = userRowMap[u.id];
+          var uRow = [u.id || "", u.employeeId || "", u.name || "", u.email || "", u.role || "", u.department || "", u.designation || "", u.location || "", u.status || "Active"];
+          var uidKey = (u.id || "").toString().trim().toLowerCase();
+          var empIdKey = (u.employeeId || "").toString().trim().toLowerCase();
+          var targetURow = userRowMap[uidKey] || userRowMap[empIdKey];
           if (targetURow) {
             uSheet.getRange(targetURow, 1, 1, uRow.length).setValues([uRow]);
           } else {
