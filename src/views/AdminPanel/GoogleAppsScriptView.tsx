@@ -208,9 +208,14 @@ function doPost(e) {
     if (action === "syncAll") {
       var tickets = contents.tickets || [];
       var users = contents.users || [];
+      var departments = contents.departments || [];
+      var categories = contents.categories || [];
 
       var tSheet = ss.getSheetByName("Tickets");
       var uSheet = ss.getSheetByName("Users");
+      var dSheet = ss.getSheetByName("Departments");
+      var cSheet = ss.getSheetByName("Categories");
+      var mSheet = ss.getSheetByName("MasterDropdowns");
 
       if (tickets.length > 0 && tSheet) {
         var existingTicketsData = tSheet.getDataRange().getValues();
@@ -257,6 +262,34 @@ function doPost(e) {
             uSheet.appendRow(uRow);
           }
         });
+      }
+
+      if (departments.length > 0 && dSheet) {
+        dSheet.clearContents();
+        dSheet.appendRow(["Department ID", "Department Name", "Department Head", "Support Team"]);
+        departments.forEach(function(d) {
+          dSheet.appendRow([d.id || "", d.name || "", d.headName || "", d.supportTeam || ""]);
+        });
+      }
+
+      if (categories.length > 0 && cSheet) {
+        cSheet.clearContents();
+        cSheet.appendRow(["Category ID", "Category Name", "Target Department", "Sub-Categories", "Default Priority"]);
+        categories.forEach(function(c) {
+          var subs = (c.subCategories && c.subCategories.join) ? c.subCategories.join(", ") : (c.subCategories || "");
+          cSheet.appendRow([c.id || "", c.name || "", c.department || "", subs, c.defaultPriority || ""]);
+        });
+      }
+
+      if (mSheet) {
+        mSheet.clearContents();
+        mSheet.appendRow(["Dropdown Type", "Option Value", "Updated At"]);
+        var nowStr = new Date().toISOString();
+        (contents.branches || []).forEach(function(b) { mSheet.appendRow(["Branch / Location", b, nowStr]); });
+        (contents.prioritiesList || []).forEach(function(p) { mSheet.appendRow(["Ticket Priority", p, nowStr]); });
+        (contents.statusesList || []).forEach(function(s) { mSheet.appendRow(["Ticket Status", s, nowStr]); });
+        (contents.rolesList || []).forEach(function(r) { mSheet.appendRow(["User Role", r, nowStr]); });
+        (contents.designationsList || []).forEach(function(d) { mSheet.appendRow(["Designation", d, nowStr]); });
       }
 
       return ContentService.createTextOutput(JSON.stringify({ success: true, message: "All tabs synchronized safely without erasing existing data." }))
@@ -337,7 +370,7 @@ function getOrCreateTicketsFolder() {
 /** Setup Spreadsheet Tabs */
 function setupHelpDeskSheets(ss) {
   var targetSS = ss || SpreadsheetApp.getActiveSpreadsheet();
-  var tabs = ["Users", "Tickets", "TicketComments", "TicketAttachments", "TicketHistory", "Departments", "Categories", "SLARules", "Notifications", "KnowledgeBase", "AuditLogs", "Settings"];
+  var tabs = ["Users", "Tickets", "TicketComments", "TicketAttachments", "TicketHistory", "Departments", "Categories", "MasterDropdowns", "SLARules", "Notifications", "KnowledgeBase", "AuditLogs", "Settings"];
   
   tabs.forEach(function(tabName) {
     if (!targetSS.getSheetByName(tabName)) {
@@ -350,6 +383,12 @@ function setupHelpDeskSheets(ss) {
         sheet.appendRow(["Attachment ID", "Ticket ID", "File Name", "Drive URL", "Drive File ID", "File Type", "File Size (Bytes)", "Uploaded By", "Uploaded Date"]);
       } else if (tabName === "Users") {
         sheet.appendRow(["User ID", "Emp ID", "Name", "Email", "Role", "Dept", "Designation", "Location", "Status"]);
+      } else if (tabName === "Departments") {
+        sheet.appendRow(["Department ID", "Department Name", "Department Head", "Support Team"]);
+      } else if (tabName === "Categories") {
+        sheet.appendRow(["Category ID", "Category Name", "Target Department", "Sub-Categories", "Default Priority"]);
+      } else if (tabName === "MasterDropdowns") {
+        sheet.appendRow(["Dropdown Type", "Option Value", "Updated At"]);
       } else if (tabName === "AuditLogs") {
         sheet.appendRow(["Log ID", "Action", "Module", "User", "Details", "Timestamp"]);
       }

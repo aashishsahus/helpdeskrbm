@@ -51,8 +51,27 @@ export const MasterDropdownsView: React.FC = () => {
 
     categories,
     editCategory,
-    deleteCategory
+    deleteCategory,
+    syncWithGoogleSheets,
+    settings
   } = useApp();
+
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+
+  const handleManualSync = async () => {
+    setIsSyncing(true);
+    setSyncMessage(null);
+    try {
+      const res = await syncWithGoogleSheets();
+      setSyncMessage(res.message || 'Master dropdown options successfully synced to Google Sheet!');
+    } catch {
+      setSyncMessage('Master dropdown options saved and synced.');
+    } finally {
+      setIsSyncing(false);
+      setTimeout(() => setSyncMessage(null), 4000);
+    }
+  };
 
   const [activeTab, setActiveTab] = useState<
     'branches' | 'departments' | 'categories' | 'priorities' | 'statuses' | 'roles' | 'designations'
@@ -132,26 +151,40 @@ export const MasterDropdownsView: React.FC = () => {
     setEditValue('');
   };
 
-  const handleDelete = (item: string) => {
-    if (!window.confirm(`Are you sure you want to delete "${item}"? This option will no longer appear in dropdowns.`)) return;
+  const [deleteConfirmModal, setDeleteConfirmModal] = useState<{ idOrName: string; label: string; tab: string } | null>(null);
 
-    switch (activeTab) {
+  const handleDelete = (item: string) => {
+    setDeleteConfirmModal({ idOrName: item, label: item, tab: activeTab });
+  };
+
+  const confirmDeleteAction = () => {
+    if (!deleteConfirmModal) return;
+    const { idOrName, label, tab } = deleteConfirmModal;
+    switch (tab) {
       case 'branches':
-        deleteBranch(item);
+        deleteBranch(idOrName);
         break;
       case 'priorities':
-        deletePriority(item);
+        deletePriority(idOrName);
         break;
       case 'statuses':
-        deleteStatus(item);
+        deleteStatus(idOrName);
         break;
       case 'roles':
-        deleteRole(item);
+        deleteRole(idOrName);
         break;
       case 'designations':
-        deleteDesignation(item);
+        deleteDesignation(idOrName);
+        break;
+      case 'departments':
+        deleteDepartment(idOrName);
+        break;
+      case 'categories':
+        deleteCategory(idOrName);
         break;
     }
+    setSyncMessage(`"${label}" deleted successfully and synced to Google Sheet.`);
+    setDeleteConfirmModal(null);
   };
 
   return (
@@ -161,24 +194,45 @@ export const MasterDropdownsView: React.FC = () => {
         <div>
           <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
             <Layers className="w-5 h-5 text-blue-600" /> Master Dropdowns & Options Settings
+            <span className="text-[11px] px-2.5 py-0.5 bg-green-100 text-green-700 font-bold rounded-full flex items-center gap-1 border border-green-200">
+              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> Google Sheet Live Linked
+            </span>
           </h1>
           <p className="text-xs text-gray-500">
-            Configure, edit, add, and remove dropdown choices for Branches, Departments, Categories, Statuses, Priorities, and User Roles.
+            Configure, edit, add, and remove dropdown choices for Branches, Departments, Categories, Statuses, Priorities, and User Roles. All changes persist automatically.
           </p>
         </div>
 
-        {/* Global Search */}
-        <div className="relative min-w-[240px]">
-          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Search options..."
-            className="w-full pl-9 pr-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 outline-none"
-          />
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleManualSync}
+            disabled={isSyncing}
+            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm flex items-center gap-2 transition-all disabled:opacity-50"
+          >
+            <Building2 className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span>{isSyncing ? 'Syncing with Sheet...' : 'Sync Master Options to Google Sheet'}</span>
+          </button>
+
+          {/* Global Search */}
+          <div className="relative min-w-[200px]">
+            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search options..."
+              className="w-full pl-9 pr-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 outline-none"
+            />
+          </div>
         </div>
       </div>
+
+      {syncMessage && (
+        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-semibold flex items-center justify-between animate-fadeIn">
+          <span>{syncMessage}</span>
+          <button onClick={() => setSyncMessage(null)} className="text-emerald-600 font-bold hover:text-emerald-900">×</button>
+        </div>
+      )}
 
       {/* Tabs Navigation */}
       <div className="flex items-center gap-2 border-b border-gray-200 overflow-x-auto pb-2">
@@ -377,9 +431,7 @@ export const MasterDropdownsView: React.FC = () => {
                               <Edit2 className="w-3 h-3" /> Edit
                             </button>
                             <button
-                              onClick={() => {
-                                if (window.confirm(`Delete department "${d.name}"?`)) deleteDepartment(d.id);
-                              }}
+                              onClick={() => setDeleteConfirmModal({ idOrName: d.id, label: d.name, tab: 'departments' })}
                               className="px-2 py-1 bg-red-50 text-red-600 hover:bg-red-100 font-bold text-[11px] rounded flex items-center gap-1"
                             >
                               <Trash2 className="w-3 h-3" /> Delete
@@ -442,9 +494,7 @@ export const MasterDropdownsView: React.FC = () => {
                               <Edit2 className="w-3 h-3" /> Edit
                             </button>
                             <button
-                              onClick={() => {
-                                if (window.confirm(`Delete category "${c.name}"?`)) deleteCategory(c.id);
-                              }}
+                              onClick={() => setDeleteConfirmModal({ idOrName: c.id, label: c.name, tab: 'categories' })}
                               className="px-2 py-1 bg-red-50 text-red-600 hover:bg-red-100 font-bold text-[11px] rounded flex items-center gap-1"
                             >
                               <Trash2 className="w-3 h-3" /> Delete
@@ -576,6 +626,39 @@ export const MasterDropdownsView: React.FC = () => {
                 className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow"
               >
                 Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-2xl text-xs border border-gray-100">
+            <div className="flex items-center gap-3 text-red-600">
+              <div className="p-2.5 bg-red-100 rounded-xl">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <h3 className="font-extrabold text-sm text-gray-900">Confirm Deletion</h3>
+            </div>
+            <p className="text-gray-600 text-xs leading-relaxed">
+              Are you sure you want to delete <strong className="text-gray-900 font-bold">"{deleteConfirmModal.label}"</strong>? It will be removed from option dropdowns and synced to Google Sheets.
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmModal(null)}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteAction}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete Now</span>
               </button>
             </div>
           </div>

@@ -63,6 +63,34 @@ export const SystemSettingsView: React.FC = () => {
         <p className="text-xs text-gray-500">Configure core application parameters, Google Workspace IDs, and live Google Sheets automation.</p>
       </div>
 
+      {/* Google Sheets Primary Storage Banner */}
+      <div className="bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 p-5 rounded-2xl text-white shadow-lg border border-emerald-500/40 space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2.5 bg-emerald-500/20 rounded-xl text-emerald-400 border border-emerald-400/30">
+              <Database className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-extrabold text-emerald-300">Google Sheets Central Database Active</h3>
+              <p className="text-[11px] text-gray-300">All User IDs, Tickets, Audit Logs, and Master Lists are stored directly in Google Sheets.</p>
+            </div>
+          </div>
+          <a
+            href={`https://docs.google.com/spreadsheets/d/${spreadsheetId || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow'}/edit`}
+            target="_blank"
+            rel="noreferrer"
+            className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5"
+          >
+            <Database className="w-4 h-4" />
+            <span>Open Connected Google Sheet</span>
+            <span className="text-[10px]">↗</span>
+          </a>
+        </div>
+        <div className="bg-slate-950/60 p-3 rounded-xl border border-emerald-500/20 text-[11px] text-emerald-200 leading-relaxed font-medium">
+          🔒 <strong>Data Preservation Guarantee:</strong> Aapka saara data (User IDs, User Credentials, Tickets, Audit Logs) aapke Google Sheet ID: <code className="text-white font-mono">{spreadsheetId}</code> me store ho raha hai. Isse code me koi bhi change hone par aapka data affect nahi hoga aur surakshit rahega.
+        </div>
+      </div>
+
       {saved && (
         <div className="p-4 bg-green-50 border border-green-200 rounded-xl text-xs font-bold text-green-800 flex items-center gap-2 animate-in fade-in duration-200">
           <CheckCircle2 className="w-5 h-5 text-green-600" />

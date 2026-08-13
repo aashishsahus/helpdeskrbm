@@ -112,10 +112,21 @@ app.get(['/auth/callback', '/auth/callback/'], (req, res) => {
   `);
 });
 app.post('/api/google/sync-sheets', async (req, res) => {
-  const { spreadsheetId, webAppUrl, action, tickets, users, settings } = req.body;
-  if (!spreadsheetId && !webAppUrl) {
-    return res.status(400).json({ success: false, message: 'Spreadsheet ID or Web App URL is required' });
-  }
+  const {
+    spreadsheetId,
+    webAppUrl,
+    action,
+    tickets,
+    users,
+    settings,
+    branches,
+    departments,
+    categories,
+    prioritiesList,
+    statusesList,
+    rolesList,
+    designationsList
+  } = req.body;
 
   const targetUrl = webAppUrl || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
   const targetSheetId = spreadsheetId || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
@@ -128,6 +139,13 @@ app.post('/api/google/sync-sheets', async (req, res) => {
       tickets: tickets || [],
       users: users || [],
       settings: settings || {},
+      branches: branches || [],
+      departments: departments || [],
+      categories: categories || [],
+      prioritiesList: prioritiesList || [],
+      statusesList: statusesList || [],
+      rolesList: rolesList || [],
+      designationsList: designationsList || [],
       timestamp: new Date().toISOString()
     };
 
@@ -138,13 +156,14 @@ app.post('/api/google/sync-sheets', async (req, res) => {
       redirect: 'follow'
     });
 
-    const contentType = response.headers.get('content-type') || '';
+    const rawBodyText1 = await response.text();
     let responseData: any = {};
-    if (contentType.includes('application/json')) {
-      responseData = await response.json();
-    } else {
-      const text = await response.text();
-      responseData = { message: text };
+    if (rawBodyText1 && rawBodyText1.trim()) {
+      try {
+        responseData = JSON.parse(rawBodyText1);
+      } catch {
+        responseData = { message: rawBodyText1 };
+      }
     }
 
     res.json({
@@ -195,13 +214,14 @@ app.post('/api/google/sync-ticket', async (req, res) => {
       redirect: 'follow'
     });
 
-    const contentType = response.headers.get('content-type') || '';
+    const rawBodyText2 = await response.text();
     let responseData: any = {};
-    if (contentType.includes('application/json')) {
-      responseData = await response.json();
-    } else {
-      const text = await response.text();
-      responseData = { message: text };
+    if (rawBodyText2 && rawBodyText2.trim()) {
+      try {
+        responseData = JSON.parse(rawBodyText2);
+      } catch {
+        responseData = { message: rawBodyText2 };
+      }
     }
 
     res.json({
@@ -278,13 +298,14 @@ app.post('/api/google/provision-drive-folders', async (req, res) => {
       redirect: 'follow'
     });
 
-    const contentType = response.headers.get('content-type') || '';
+    const rawBodyText3 = await response.text();
     let responseData: any = {};
-    if (contentType.includes('application/json')) {
-      responseData = await response.json();
-    } else {
-      const text = await response.text();
-      responseData = { message: text };
+    if (rawBodyText3 && rawBodyText3.trim()) {
+      try {
+        responseData = JSON.parse(rawBodyText3);
+      } catch {
+        responseData = { message: rawBodyText3 };
+      }
     }
 
     res.json({
@@ -330,13 +351,14 @@ app.post('/api/google/upload-drive-file', async (req, res) => {
           redirect: 'follow'
         });
 
-        const contentType = response.headers.get('content-type') || '';
+        const rawBodyText4 = await response.text();
         let responseData: any = {};
-        if (contentType.includes('application/json')) {
-          responseData = await response.json();
-        } else {
-          const text = await response.text();
-          responseData = { message: text };
+        if (rawBodyText4 && rawBodyText4.trim()) {
+          try {
+            responseData = JSON.parse(rawBodyText4);
+          } catch {
+            responseData = { message: rawBodyText4 };
+          }
         }
 
         if (responseData.driveUrl || responseData.fileId || responseData.folderUrl) {

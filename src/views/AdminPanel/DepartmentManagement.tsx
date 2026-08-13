@@ -10,6 +10,7 @@ export const DepartmentManagement: React.FC = () => {
   const [supportTeam, setSupportTeam] = useState('');
 
   const [editModal, setEditModal] = useState<{ id: string; name: string; headName: string; supportTeam: string } | null>(null);
+  const [deleteConfirmModal, setDeleteConfirmModal] = useState<{ id: string; name: string } | null>(null);
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
@@ -106,9 +107,7 @@ export const DepartmentManagement: React.FC = () => {
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
                         <button
-                          onClick={() => {
-                            if (window.confirm(`Delete department "${d.name}"?`)) deleteDepartment(d.id);
-                          }}
+                          onClick={() => setDeleteConfirmModal({ id: d.id, name: d.name })}
                           className="p-1.5 text-red-600 hover:bg-red-50 rounded"
                           title="Delete Department"
                         >
@@ -176,6 +175,39 @@ export const DepartmentManagement: React.FC = () => {
                 className="px-3 py-1.5 bg-blue-600 text-white font-bold rounded-lg shadow"
               >
                 Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {deleteConfirmModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-2xl text-xs">
+            <div className="flex items-center gap-3 text-red-600">
+              <div className="p-2.5 bg-red-100 rounded-xl">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <h3 className="font-extrabold text-sm text-gray-900">Delete Department</h3>
+            </div>
+            <p className="text-gray-600 text-xs">
+              Are you sure you want to delete department <strong className="text-gray-900 font-bold">"{deleteConfirmModal.name}"</strong>?
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
+              <button
+                onClick={() => setDeleteConfirmModal(null)}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  deleteDepartment(deleteConfirmModal.id);
+                  setDeleteConfirmModal(null);
+                }}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete Now</span>
               </button>
             </div>
           </div>
