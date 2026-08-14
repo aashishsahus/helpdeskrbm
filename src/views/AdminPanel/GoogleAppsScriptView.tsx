@@ -251,6 +251,100 @@ function doPost(e) {
       })).setMimeType(ContentService.MimeType.JSON);
     }
 
+    if (action === "addUser" || action === "updateUser") {
+      var uSheet = ss.getSheetByName("Users");
+      var u = contents.user;
+      if (u && uSheet) {
+        var existingUsersData = uSheet.getDataRange().getValues();
+        var foundURow = -1;
+        var uidKey = (u.id || "").toString().trim().toLowerCase();
+        var empIdKey = (u.employeeId || "").toString().trim().toLowerCase();
+        for (var ur = 1; ur < existingUsersData.length; ur++) {
+          var rowUid = existingUsersData[ur][0] ? existingUsersData[ur][0].toString().trim().toLowerCase() : "";
+          var rowEmp = existingUsersData[ur][1] ? existingUsersData[ur][1].toString().trim().toLowerCase() : "";
+          if ((uidKey && rowUid === uidKey) || (empIdKey && rowEmp === empIdKey)) {
+            foundURow = ur + 1;
+            break;
+          }
+        }
+        var uRow = [
+          u.id || "", u.employeeId || "", u.name || "", u.email || "",
+          u.role || "", u.department || "", u.designation || "", u.location || "",
+          u.status || "Active"
+        ];
+        if (foundURow > 0) {
+          uSheet.getRange(foundURow, 1, 1, uRow.length).setValues([uRow]);
+        } else {
+          uSheet.appendRow(uRow);
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({ success: true, message: "User synced to Google Sheets" }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (action === "deleteUser") {
+      var uSheet = ss.getSheetByName("Users");
+      var targetUserId = (contents.userId || "").toString().trim().toLowerCase();
+      if (targetUserId && uSheet) {
+        var existingUsersData = uSheet.getDataRange().getValues();
+        for (var ur = 1; ur < existingUsersData.length; ur++) {
+          var rowUid = existingUsersData[ur][0] ? existingUsersData[ur][0].toString().trim().toLowerCase() : "";
+          var rowEmp = existingUsersData[ur][1] ? existingUsersData[ur][1].toString().trim().toLowerCase() : "";
+          if (rowUid === targetUserId || rowEmp === targetUserId) {
+            uSheet.deleteRow(ur + 1);
+            break;
+          }
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({ success: true, message: "User deleted from Google Sheets" }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (action === "updateDepartments" || action === "addDepartment" || action === "editDepartment" || action === "deleteDepartment") {
+      var dSheet = ss.getSheetByName("Departments");
+      var depts = contents.departments || [];
+      if (dSheet) {
+        dSheet.clearContents();
+        dSheet.appendRow(["Department ID", "Department Name", "Department Head", "Support Team"]);
+        depts.forEach(function(d) {
+          dSheet.appendRow([d.id || "", d.name || "", d.headName || "", d.supportTeam || ""]);
+        });
+      }
+      return ContentService.createTextOutput(JSON.stringify({ success: true, message: "Departments synced to Google Sheets" }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (action === "updateCategories" || action === "addCategory" || action === "editCategory" || action === "deleteCategory") {
+      var cSheet = ss.getSheetByName("Categories");
+      var cats = contents.categories || [];
+      if (cSheet) {
+        cSheet.clearContents();
+        cSheet.appendRow(["Category ID", "Category Name", "Target Department", "Sub-Categories", "Default Priority"]);
+        cats.forEach(function(c) {
+          var subs = (c.subCategories && c.subCategories.join) ? c.subCategories.join(", ") : (c.subCategories || "");
+          cSheet.appendRow([c.id || "", c.name || "", c.department || "", subs, c.defaultPriority || ""]);
+        });
+      }
+      return ContentService.createTextOutput(JSON.stringify({ success: true, message: "Categories synced to Google Sheets" }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (action === "updateDropdowns" || action === "updateMasterDropdowns") {
+      var mSheet = ss.getSheetByName("MasterDropdowns");
+      if (mSheet) {
+        mSheet.clearContents();
+        mSheet.appendRow(["Dropdown Type", "Option Value", "Updated At"]);
+        var nowStr = new Date().toISOString();
+        (contents.branches || []).forEach(function(b) { mSheet.appendRow(["Branch / Location", b, nowStr]); });
+        (contents.prioritiesList || []).forEach(function(p) { mSheet.appendRow(["Ticket Priority", p, nowStr]); });
+        (contents.statusesList || []).forEach(function(s) { mSheet.appendRow(["Ticket Status", s, nowStr]); });
+        (contents.rolesList || []).forEach(function(r) { mSheet.appendRow(["User Role", r, nowStr]); });
+        (contents.designationsList || []).forEach(function(d) { mSheet.appendRow(["Designation", d, nowStr]); });
+      }
+      return ContentService.createTextOutput(JSON.stringify({ success: true, message: "Dropdown options synced to Google Sheets" }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
     if (action === "syncAll") {
       var tickets = contents.tickets || [];
       var users = contents.users || [];

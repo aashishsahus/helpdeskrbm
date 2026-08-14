@@ -664,6 +664,74 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => clearTimeout(timer);
   }, [users, tickets, branches, departments, categories, prioritiesList, statusesList, rolesList, designationsList, settings]);
 
+  // Real-time direct action dispatcher to Google Sheets
+  const syncDirectActionToSheets = (payload: {
+    action: string;
+    ticket?: any;
+    user?: any;
+    userId?: string;
+    comment?: any;
+    tickets?: Ticket[];
+    users?: User[];
+    departments?: Department[];
+    categories?: Category[];
+    branches?: string[];
+    prioritiesList?: string[];
+    statusesList?: string[];
+    rolesList?: string[];
+    designationsList?: string[];
+    settings?: SystemSettings;
+    method?: string;
+  }) => {
+    const sheetId = settings.spreadsheetId || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
+    const scriptUrl = settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
+
+    const fullPayload = {
+      spreadsheetId: sheetId,
+      webAppUrl: scriptUrl,
+      tickets: payload.tickets || tickets,
+      users: payload.users || users,
+      settings: payload.settings || settings,
+      branches: payload.branches || branches,
+      departments: payload.departments || departments,
+      categories: payload.categories || categories,
+      prioritiesList: payload.prioritiesList || prioritiesList,
+      statusesList: payload.statusesList || statusesList,
+      rolesList: payload.rolesList || rolesList,
+      designationsList: payload.designationsList || designationsList,
+      ...payload,
+      timestamp: new Date().toISOString()
+    };
+
+    // 1. Send to server backend route
+    fetch('/api/google/sync-sheets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(fullPayload)
+    }).catch(err => console.warn('Direct backend sheets sync error:', err));
+
+    // 2. If ticket / comment action, also send to sync-ticket
+    if (payload.ticket || payload.comment || payload.action.includes('Ticket')) {
+      fetch('/api/google/sync-ticket', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fullPayload)
+      }).catch(err => console.warn('Direct ticket sync error:', err));
+    }
+
+    // 3. Direct browser client-side POST (with mode: 'no-cors' fallback) to ensure it reaches Google Script even if the hosting container has network delay
+    if (scriptUrl && scriptUrl.startsWith('http')) {
+      try {
+        fetch(scriptUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(fullPayload),
+          mode: 'no-cors'
+        }).catch(() => {});
+      } catch {}
+    }
+  };
+
   const [activeView, setActiveView] = useState<string>('dashboard');
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [isCreateTicketOpen, setIsCreateTicketOpen] = useState<boolean>(false);
@@ -832,7 +900,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     addAuditLog('TICKET_CREATED', 'Tickets', `Ticket ${newTicketId} submitted by ${currentUser?.name || 'Guest User'}`);
 
-    // Trigger immediate push to Google Sheet via Apps Script Endpoint with appendRow method & write acknowledgment
+    // Trigger immediate direct real-time push to Google Sheet
+    syncDirectActionToSheets({
+      action: 'createTicket',
+      ticket: newTicket,
+      tickets: [newTicket, ...tickets],
+      method: 'appendRow'
+    });
+
     try {
       const scriptUrl = settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
       const sheetId = settings.spreadsheetId || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
@@ -912,6 +987,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Trigger immediate real-time batchUpdate to Google Sheet
     if (updatedTicket) {
       const targetTicket = updatedTicket;
+      syncDirectActionToSheets({
+        action: 'updateTicket',
+        ticket: targetTicket,
+        method: 'batchUpdate'
+      });
       const scriptUrl = settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
       const sheetId = settings.spreadsheetId || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
 
@@ -964,6 +1044,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (updatedTicket) {
       const targetTicket = updatedTicket;
+      syncDirectActionToSheets({
+        action: 'updateTicket',
+        ticket: targetTicket,
+        method: 'batchUpdate'
+      });
       const scriptUrl = settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
       const sheetId = settings.spreadsheetId || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
       fetch('/api/google/sync-ticket', {
@@ -1022,6 +1107,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Trigger real-time sync to Google Sheet via Apps Script Endpoint
     if (updatedTicket) {
       const targetTicket = updatedTicket;
+      syncDirectActionToSheets({
+        action: 'updateTicket',
+        ticket: targetTicket,
+        method: 'batchUpdate'
+      });
       const scriptUrl = settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
       const sheetId = settings.spreadsheetId || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
       fetch('/api/google/sync-ticket', {
@@ -1146,6 +1236,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
 
     // Sync Comment & Ticket update to Google Sheets using appendRow method
+    syncDirectActionToSheets({
+      action: 'addComment',
+      comment: newComment,
+      ticket: updatedTicket,
+      method: 'appendRow'
+    });
     const scriptUrl = settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
     const sheetId = settings.spreadsheetId || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
     fetch('/api/google/sync-ticket', {
@@ -1191,6 +1287,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (updatedTicket) {
       const targetTicket = updatedTicket;
+      syncDirectActionToSheets({
+        action: 'updateTicket',
+        ticket: targetTicket,
+        method: 'batchUpdate'
+      });
       const scriptUrl = settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
       const sheetId = settings.spreadsheetId || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
       fetch('/api/google/sync-ticket', {
@@ -1215,23 +1316,57 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...userData,
       id: `u_${Date.now()}`
     };
-    setUsers(prev => [...prev, newUser]);
+    const updatedUsers = [...users, newUser];
+    setUsers(updatedUsers);
+    syncDirectActionToSheets({
+      action: 'addUser',
+      user: newUser,
+      users: updatedUsers
+    });
     addAuditLog('USER_CREATED', 'User Management', `Created user ${userData.name} (${userData.role})`);
   };
 
   const updateUser = (id: string, updates: Partial<User>) => {
-    setUsers(prev => prev.map(u => (u.id === id ? { ...u, ...updates } : u)));
+    let modifiedUser: User | undefined;
+    const updatedUsers = users.map(u => {
+      if (u.id === id) {
+        modifiedUser = { ...u, ...updates };
+        return modifiedUser;
+      }
+      return u;
+    });
+    setUsers(updatedUsers);
     if (currentUser && currentUser.id === id) {
       const updatedUser = { ...currentUser, ...updates };
       setCurrentUser(updatedUser);
+    }
+    if (modifiedUser) {
+      syncDirectActionToSheets({
+        action: 'updateUser',
+        user: modifiedUser,
+        users: updatedUsers
+      });
     }
     addAuditLog('USER_UPDATED', 'User Management', `Updated user details/credentials for ID: ${id}`);
   };
 
   const toggleUserStatus = (id: string) => {
-    setUsers(prev =>
-      prev.map(u => (u.id === id ? { ...u, status: u.status === 'Active' ? 'Disabled' : 'Active' } : u))
-    );
+    let modifiedUser: User | undefined;
+    const updatedUsers = users.map(u => {
+      if (u.id === id) {
+        modifiedUser = { ...u, status: u.status === 'Active' ? 'Disabled' : 'Active' } as User;
+        return modifiedUser;
+      }
+      return u;
+    });
+    setUsers(updatedUsers);
+    if (modifiedUser) {
+      syncDirectActionToSheets({
+        action: 'updateUser',
+        user: modifiedUser,
+        users: updatedUsers
+      });
+    }
   };
 
   // Department CRUD
@@ -1240,17 +1375,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...deptData,
       id: `d_${Date.now()}`
     };
-    setDepartments(prev => [...prev, newDept]);
+    const updatedDepts = [...departments, newDept];
+    setDepartments(updatedDepts);
+    syncDirectActionToSheets({
+      action: 'updateDepartments',
+      departments: updatedDepts
+    });
     addAuditLog('DEPARTMENT_CREATED', 'Departments', `Added department ${deptData.name}`);
   };
 
   const editDepartment = (id: string, updates: Partial<Department>) => {
-    setDepartments(prev => prev.map(d => (d.id === id ? { ...d, ...updates } : d)));
+    const updatedDepts = departments.map(d => (d.id === id ? { ...d, ...updates } : d));
+    setDepartments(updatedDepts);
+    syncDirectActionToSheets({
+      action: 'updateDepartments',
+      departments: updatedDepts
+    });
     addAuditLog('DEPARTMENT_UPDATED', 'Departments', `Updated department ${id}`);
   };
 
   const deleteDepartment = (id: string) => {
-    setDepartments(prev => prev.filter(d => d.id !== id));
+    const updatedDepts = departments.filter(d => d.id !== id);
+    setDepartments(updatedDepts);
+    syncDirectActionToSheets({
+      action: 'updateDepartments',
+      departments: updatedDepts
+    });
     addAuditLog('DEPARTMENT_DELETED', 'Departments', `Deleted department ID ${id}`);
   };
 
@@ -1260,103 +1410,193 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...catData,
       id: `c_${Date.now()}`
     };
-    setCategories(prev => [...prev, newCat]);
+    const updatedCats = [...categories, newCat];
+    setCategories(updatedCats);
+    syncDirectActionToSheets({
+      action: 'updateCategories',
+      categories: updatedCats
+    });
     addAuditLog('CATEGORY_CREATED', 'Categories', `Added category ${catData.name}`);
   };
 
   const editCategory = (id: string, updates: Partial<Category>) => {
-    setCategories(prev => prev.map(c => (c.id === id ? { ...c, ...updates } : c)));
+    const updatedCats = categories.map(c => (c.id === id ? { ...c, ...updates } : c));
+    setCategories(updatedCats);
+    syncDirectActionToSheets({
+      action: 'updateCategories',
+      categories: updatedCats
+    });
     addAuditLog('CATEGORY_UPDATED', 'Categories', `Updated category ${id}`);
   };
 
   const deleteCategory = (id: string) => {
-    setCategories(prev => prev.filter(c => c.id !== id));
+    const updatedCats = categories.filter(c => c.id !== id);
+    setCategories(updatedCats);
+    syncDirectActionToSheets({
+      action: 'updateCategories',
+      categories: updatedCats
+    });
     addAuditLog('CATEGORY_DELETED', 'Categories', `Deleted category ID ${id}`);
   };
 
   // Master Dropdown CRUD Methods
   const addBranch = (branch: string) => {
     if (!branch.trim() || branches.includes(branch.trim())) return;
-    setBranches(prev => [...prev, branch.trim()]);
+    const updatedBranches = [...branches, branch.trim()];
+    setBranches(updatedBranches);
+    syncDirectActionToSheets({
+      action: 'updateDropdowns',
+      branches: updatedBranches
+    });
     addAuditLog('BRANCH_ADDED', 'Master Settings', `Added branch/location: ${branch}`);
   };
 
   const editBranch = (oldBranch: string, newBranch: string) => {
     if (!newBranch.trim()) return;
-    setBranches(prev => prev.map(b => (b === oldBranch ? newBranch.trim() : b)));
+    const updatedBranches = branches.map(b => (b === oldBranch ? newBranch.trim() : b));
+    setBranches(updatedBranches);
+    syncDirectActionToSheets({
+      action: 'updateDropdowns',
+      branches: updatedBranches
+    });
     addAuditLog('BRANCH_EDITED', 'Master Settings', `Renamed branch ${oldBranch} to ${newBranch}`);
   };
 
   const deleteBranch = (branch: string) => {
-    setBranches(prev => prev.filter(b => b !== branch));
+    const updatedBranches = branches.filter(b => b !== branch);
+    setBranches(updatedBranches);
+    syncDirectActionToSheets({
+      action: 'updateDropdowns',
+      branches: updatedBranches
+    });
     addAuditLog('BRANCH_DELETED', 'Master Settings', `Deleted branch ${branch}`);
   };
 
   const addPriority = (priority: string) => {
     if (!priority.trim() || prioritiesList.includes(priority.trim())) return;
-    setPrioritiesList(prev => [...prev, priority.trim()]);
+    const updatedPriorities = [...prioritiesList, priority.trim()];
+    setPrioritiesList(updatedPriorities);
+    syncDirectActionToSheets({
+      action: 'updateDropdowns',
+      prioritiesList: updatedPriorities
+    });
     addAuditLog('PRIORITY_ADDED', 'Master Settings', `Added priority option: ${priority}`);
   };
 
   const editPriority = (oldPriority: string, newPriority: string) => {
     if (!newPriority.trim()) return;
-    setPrioritiesList(prev => prev.map(p => (p === oldPriority ? newPriority.trim() : p)));
+    const updatedPriorities = prioritiesList.map(p => (p === oldPriority ? newPriority.trim() : p));
+    setPrioritiesList(updatedPriorities);
+    syncDirectActionToSheets({
+      action: 'updateDropdowns',
+      prioritiesList: updatedPriorities
+    });
     addAuditLog('PRIORITY_EDITED', 'Master Settings', `Renamed priority ${oldPriority} to ${newPriority}`);
   };
 
   const deletePriority = (priority: string) => {
-    setPrioritiesList(prev => prev.filter(p => p !== priority));
+    const updatedPriorities = prioritiesList.filter(p => p !== priority);
+    setPrioritiesList(updatedPriorities);
+    syncDirectActionToSheets({
+      action: 'updateDropdowns',
+      prioritiesList: updatedPriorities
+    });
     addAuditLog('PRIORITY_DELETED', 'Master Settings', `Deleted priority ${priority}`);
   };
 
   const addStatus = (status: string) => {
     if (!status.trim() || statusesList.includes(status.trim())) return;
-    setStatusesList(prev => [...prev, status.trim()]);
+    const updatedStatuses = [...statusesList, status.trim()];
+    setStatusesList(updatedStatuses);
+    syncDirectActionToSheets({
+      action: 'updateDropdowns',
+      statusesList: updatedStatuses
+    });
     addAuditLog('STATUS_ADDED', 'Master Settings', `Added ticket status option: ${status}`);
   };
 
   const editStatus = (oldStatus: string, newStatus: string) => {
     if (!newStatus.trim()) return;
-    setStatusesList(prev => prev.map(s => (s === oldStatus ? newStatus.trim() : s)));
+    const updatedStatuses = statusesList.map(s => (s === oldStatus ? newStatus.trim() : s));
+    setStatusesList(updatedStatuses);
+    syncDirectActionToSheets({
+      action: 'updateDropdowns',
+      statusesList: updatedStatuses
+    });
     addAuditLog('STATUS_EDITED', 'Master Settings', `Renamed ticket status ${oldStatus} to ${newStatus}`);
   };
 
   const deleteStatus = (status: string) => {
-    setStatusesList(prev => prev.filter(s => s !== status));
+    const updatedStatuses = statusesList.filter(s => s !== status);
+    setStatusesList(updatedStatuses);
+    syncDirectActionToSheets({
+      action: 'updateDropdowns',
+      statusesList: updatedStatuses
+    });
     addAuditLog('STATUS_DELETED', 'Master Settings', `Deleted ticket status ${status}`);
   };
 
   const addRole = (role: string) => {
     if (!role.trim() || rolesList.includes(role.trim())) return;
-    setRolesList(prev => [...prev, role.trim()]);
+    const updatedRoles = [...rolesList, role.trim()];
+    setRolesList(updatedRoles);
+    syncDirectActionToSheets({
+      action: 'updateDropdowns',
+      rolesList: updatedRoles
+    });
     addAuditLog('ROLE_ADDED', 'Master Settings', `Added user role: ${role}`);
   };
 
   const editRole = (oldRole: string, newRole: string) => {
     if (!newRole.trim()) return;
-    setRolesList(prev => prev.map(r => (r === oldRole ? newRole.trim() : r)));
+    const updatedRoles = rolesList.map(r => (r === oldRole ? newRole.trim() : r));
+    setRolesList(updatedRoles);
+    syncDirectActionToSheets({
+      action: 'updateDropdowns',
+      rolesList: updatedRoles
+    });
     addAuditLog('ROLE_EDITED', 'Master Settings', `Renamed role ${oldRole} to ${newRole}`);
   };
 
   const deleteRole = (role: string) => {
-    setRolesList(prev => prev.filter(r => r !== role));
+    const updatedRoles = rolesList.filter(r => r !== role);
+    setRolesList(updatedRoles);
+    syncDirectActionToSheets({
+      action: 'updateDropdowns',
+      rolesList: updatedRoles
+    });
     addAuditLog('ROLE_DELETED', 'Master Settings', `Deleted role ${role}`);
   };
 
   const addDesignation = (designation: string) => {
     if (!designation.trim() || designationsList.includes(designation.trim())) return;
-    setDesignationsList(prev => [...prev, designation.trim()]);
+    const updatedDesigs = [...designationsList, designation.trim()];
+    setDesignationsList(updatedDesigs);
+    syncDirectActionToSheets({
+      action: 'updateDropdowns',
+      designationsList: updatedDesigs
+    });
     addAuditLog('DESIGNATION_ADDED', 'Master Settings', `Added designation: ${designation}`);
   };
 
   const editDesignation = (oldDesig: string, newDesig: string) => {
     if (!newDesig.trim()) return;
-    setDesignationsList(prev => prev.map(d => (d === oldDesig ? newDesig.trim() : d)));
+    const updatedDesigs = designationsList.map(d => (d === oldDesig ? newDesig.trim() : d));
+    setDesignationsList(updatedDesigs);
+    syncDirectActionToSheets({
+      action: 'updateDropdowns',
+      designationsList: updatedDesigs
+    });
     addAuditLog('DESIGNATION_EDITED', 'Master Settings', `Renamed designation ${oldDesig} to ${newDesig}`);
   };
 
   const deleteDesignation = (designation: string) => {
-    setDesignationsList(prev => prev.filter(d => d !== designation));
+    const updatedDesigs = designationsList.filter(d => d !== designation);
+    setDesignationsList(updatedDesigs);
+    syncDirectActionToSheets({
+      action: 'updateDropdowns',
+      designationsList: updatedDesigs
+    });
     addAuditLog('DESIGNATION_DELETED', 'Master Settings', `Deleted designation ${designation}`);
   };
 
@@ -1367,7 +1607,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Settings
   const updateSettings = (newSettings: Partial<SystemSettings>) => {
-    setSettings(prev => ({ ...prev, ...newSettings }));
+    const updated = { ...settings, ...newSettings };
+    setSettings(updated);
+    syncDirectActionToSheets({
+      action: 'syncAll',
+      settings: updated
+    });
   };
 
   // Sync Google Sheets

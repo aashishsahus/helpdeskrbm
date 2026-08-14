@@ -118,6 +118,10 @@ app.post('/api/google/sync-sheets', async (req, res) => {
     action,
     tickets,
     users,
+    user,
+    userId,
+    ticket,
+    comment,
     settings,
     branches,
     departments,
@@ -128,14 +132,18 @@ app.post('/api/google/sync-sheets', async (req, res) => {
     designationsList
   } = req.body;
 
-  const targetUrl = webAppUrl || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
-  const targetSheetId = spreadsheetId || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
+  const targetUrl = webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
+  const targetSheetId = spreadsheetId || process.env.SPREADSHEET_ID || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
 
   try {
     const payload = {
       action: action || 'syncAll',
       method: 'batchUpdate',
       spreadsheetId: targetSheetId,
+      ticket: ticket || undefined,
+      user: user || undefined,
+      userId: userId || undefined,
+      comment: comment || undefined,
       tickets: tickets || [],
       users: users || [],
       settings: settings || {},
@@ -193,8 +201,8 @@ app.post('/api/google/sync-sheets', async (req, res) => {
 
 app.post('/api/google/sync-ticket', async (req, res) => {
   const { webAppUrl, ticket, comment, action, method, spreadsheetId } = req.body;
-  const targetUrl = webAppUrl || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
-  const targetSheetId = spreadsheetId || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
+  const targetUrl = webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
+  const targetSheetId = spreadsheetId || process.env.SPREADSHEET_ID || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
 
   // Explicitly assign method: 'appendRow' for creation/comments, 'batchUpdate' for updates
   const resolvedMethod = method || (action === 'createTicket' || action === 'addComment' ? 'appendRow' : 'batchUpdate');
