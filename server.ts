@@ -134,19 +134,28 @@ app.post('/api/google/diagnose-connection', async (req, res) => {
       diagnostics.statusCode = getRes.status;
       const getText = await getRes.text();
 
-      if (getText.includes('accounts.google.com') || getText.includes('Sign in - Google Accounts')) {
+      const isGetAuth = getText.includes('accounts.google.com') || getText.includes('Sign in - Google Accounts') || getText.includes('ServiceLogin');
+      const isGet404 = getText.includes('找不到網頁') || getText.includes('無法開啟這個檔案') || getText.includes('Unable to open') || getText.includes('Page not found');
+
+      if (isGetAuth) {
         diagnostics.issueDetected = 'AUTH_RESTRICTED';
-        diagnostics.fixInstructions.push('Google Apps Script "Who has access" is currently restricted.');
-        diagnostics.fixInstructions.push('Fix: Open Apps Script -> Deploy -> Manage Deployments -> Edit -> set "Who has access" to "Anyone" -> Deploy.');
+        diagnostics.fixInstructions.push('Google Apps Script "Who has access" is restricted by Google Login.');
+        diagnostics.fixInstructions.push('Fix: Apps Script -> Deploy -> Manage Deployments -> Edit -> set "Who has access" to "Anyone" -> Deploy.');
+      } else if (isGet404) {
+        diagnostics.issueDetected = 'URL_EXPIRED_OR_INVALID';
+        diagnostics.fixInstructions.push('This Web App URL is not active in Google Drive (Google returned 404 / Unable to open file).');
+        diagnostics.fixInstructions.push('Fix: Open Google Apps Script -> Deploy -> Manage Deployments -> Copy active Web App URL -> Paste in HelpDesk Settings.');
       } else {
-        diagnostics.getSuccess = true;
         try {
           const json = JSON.parse(getText);
-          if (json.status === 'OK' || json.service) {
+          if (json.status === 'OK' || json.service || json.success) {
+            diagnostics.getSuccess = true;
             diagnostics.response = json;
           }
         } catch {
-          // HTML or text response is also valid if not login redirect
+          if (getRes.ok && !getText.includes('<!DOCTYPE')) {
+            diagnostics.getSuccess = true;
+          }
         }
       }
     } catch (e: any) {
@@ -167,16 +176,26 @@ app.post('/api/google/diagnose-connection', async (req, res) => {
       });
 
       const postText = await postRes.text();
-      if (postText.includes('accounts.google.com')) {
+      const isPostAuth = postText.includes('accounts.google.com') || postText.includes('ServiceLogin') || postText.includes('Sign in - Google Accounts');
+      const isPost404 = postText.includes('找不到網頁') || postText.includes('無法開啟這個檔案') || postText.includes('Unable to open');
+
+      if (isPostAuth) {
         diagnostics.issueDetected = 'AUTH_RESTRICTED';
         if (diagnostics.fixInstructions.length === 0) {
           diagnostics.fixInstructions.push('Google Apps Script requires "Anyone" permission without login.');
         }
+      } else if (isPost404) {
+        diagnostics.issueDetected = 'URL_EXPIRED_OR_INVALID';
+        if (diagnostics.fixInstructions.length === 0) {
+          diagnostics.fixInstructions.push('Web App URL is invalid or expired. Copy the active URL from Deploy > Manage deployments.');
+        }
       } else {
-        diagnostics.postSuccess = true;
         try {
           const postJson = JSON.parse(postText);
-          diagnostics.response = postJson;
+          if (postJson.success || postJson.status === 'OK' || postJson.result === 'success') {
+            diagnostics.postSuccess = true;
+            diagnostics.response = postJson;
+          }
         } catch {
           diagnostics.rawResponse = postText.slice(0, 300);
         }
@@ -186,11 +205,21 @@ app.post('/api/google/diagnose-connection', async (req, res) => {
     }
 
     const isSuccess = diagnostics.getSuccess || diagnostics.postSuccess;
+    let message = 'Google Apps Script connection verified successfully! Live sync is active and operational.';
+    if (!isSuccess) {
+      if (diagnostics.issueDetected === 'URL_EXPIRED_OR_INVALID') {
+        message = 'Google Error: Web App URL is invalid or expired (Unable to open file). Please copy active Web App URL from Apps Script -> Deploy -> Manage Deployments.';
+      } else if (diagnostics.issueDetected === 'AUTH_RESTRICTED') {
+        message = 'Google Login blocked access. In Apps Script, set "Who has access" to "Anyone" and deploy.';
+      } else {
+        message = 'Could not connect to Google Apps Script. Please verify Web App URL and permissions.';
+      }
+    }
+
     res.json({
       success: isSuccess,
-      message: isSuccess
-        ? 'Google Apps Script connection verified successfully! Live sync is active and operational.'
-        : 'Could not connect to Google Apps Script. Please verify access.',
+      issueDetected: diagnostics.issueDetected || null,
+      message,
       diagnostics
     });
   } catch (err: any) {
@@ -199,6 +228,8 @@ app.post('/api/google/diagnose-connection', async (req, res) => {
     diagnostics.fixInstructions.push(`Failed to reach ${targetUrl}. Please verify the URL.`);
     res.json({
       success: false,
+      issueDetected: 'NETWORK_OR_URL_ERROR',
+      message: `Failed to reach Web App URL: ${err.message}`,
       diagnostics
     });
   }
@@ -429,13 +460,20 @@ app.post('/api/google/sync-sheets', async (req, res) => {
     const rawBodyText1 = await response.text();
     let responseData: any = {};
     let isAuthError = false;
+    let is404Error = false;
     let isSuccess = false;
 
     if (rawBodyText1 && (rawBodyText1.includes('accounts.google.com') || rawBodyText1.includes('Sign in - Google Accounts') || rawBodyText1.includes('ServiceLogin'))) {
       isAuthError = true;
       responseData = {
         error: 'AUTH_REQUIRED',
-        message: 'Google Apps Script requires "Anyone" permission without Google Login. Please Deploy > Manage Deployments > Edit > Who has access: Anyone.'
+        message: 'Google Apps Script blocked access with a Google Login prompt. Fix: Deploy -> Manage Deployments -> Edit -> Who has access: Anyone.'
+      };
+    } else if (rawBodyText1 && (rawBodyText1.includes('找不到網頁') || rawBodyText1.includes('無法開啟這個檔案') || rawBodyText1.includes('Unable to open') || rawBodyText1.includes('Page not found'))) {
+      is404Error = true;
+      responseData = {
+        error: 'URL_NOT_FOUND',
+        message: 'Web App URL is invalid or expired in Google Drive. Copy the new Web App URL from Apps Script Deploy and paste in Settings.'
       };
     } else if (rawBodyText1 && rawBodyText1.trim()) {
       try {
@@ -448,37 +486,38 @@ app.post('/api/google/sync-sheets', async (req, res) => {
           responseData.ticketId ||
           responseData.updatedRow ||
           responseData.rowsUpdated ||
-          responseData.count !== undefined ||
-          response.ok
+          responseData.count !== undefined
         ) {
-          isSuccess = true;
-        } else if (response.ok && !isAuthError) {
           isSuccess = true;
         }
       } catch {
         responseData = { message: rawBodyText1.slice(0, 300) };
-        if (response.ok || response.status === 200) isSuccess = true;
+        if (response.ok && !rawBodyText1.includes('<!DOCTYPE')) {
+          isSuccess = true;
+        }
       }
-    } else {
-      if (response.ok || response.status === 200) isSuccess = true;
     }
 
-    // If HTTP status is 200/302 and not an auth login redirect, it's successful
-    if ((response.ok || response.status === 200 || response.status === 302) && !isAuthError) {
-      isSuccess = true;
+    const finalSuccess = isSuccess && !isAuthError && !is404Error;
+    let finalMessage = `Synced successfully to Google Sheet (${targetSheetId}).`;
+    if (isAuthError) {
+      finalMessage = 'Google Apps Script blocked access. Set "Who has access" to "Anyone" in Deploy settings.';
+    } else if (is404Error) {
+      finalMessage = 'Google Error: Web App URL is invalid or expired. Please update with your new Web App URL.';
+    } else if (!finalSuccess) {
+      finalMessage = `Sync failed: Apps Script did not confirm receipt. Verify URL in Settings.`;
     }
 
     res.json({
-      success: isSuccess && !isAuthError,
+      success: finalSuccess,
       isAuthError,
+      is404Error,
       acknowledged: true,
       statusCode: response.status,
       writeMethod: 'batchUpdate',
       writtenAt: new Date().toISOString(),
       spreadsheetId: targetSheetId,
-      message: isAuthError 
-        ? 'Google Apps Script blocked access. Set "Who has access" to "Anyone" in Deploy settings.'
-        : `Synced successfully to Google Sheet (${targetSheetId}).`,
+      message: finalMessage,
       appsScriptResponse: responseData,
       spreadsheetUrl: `https://docs.google.com/spreadsheets/d/${targetSheetId}/edit`
     });
@@ -523,6 +562,7 @@ app.post('/api/google/sync-ticket', async (req, res) => {
     const rawBodyText2 = await response.text();
     let responseData: any = {};
     let isAuthError = false;
+    let is404Error = false;
     let isSuccess = false;
 
     if (rawBodyText2 && (rawBodyText2.includes('accounts.google.com') || rawBodyText2.includes('Sign in - Google Accounts') || rawBodyText2.includes('ServiceLogin'))) {
@@ -531,30 +571,41 @@ app.post('/api/google/sync-ticket', async (req, res) => {
         error: 'AUTH_REQUIRED',
         message: 'Google Apps Script requires "Anyone" permission without Google Login.'
       };
+    } else if (rawBodyText2 && (rawBodyText2.includes('找不到網頁') || rawBodyText2.includes('無法開啟這個檔案') || rawBodyText2.includes('Unable to open') || rawBodyText2.includes('Page not found'))) {
+      is404Error = true;
+      responseData = {
+        error: 'URL_NOT_FOUND',
+        message: 'Web App URL is invalid or expired in Google Drive.'
+      };
     } else if (rawBodyText2 && rawBodyText2.trim()) {
       try {
         responseData = JSON.parse(rawBodyText2);
         const statusStr = String(responseData.status || responseData.result || '').toLowerCase();
-        if (statusStr === 'ok' || statusStr === 'success' || responseData.success === true || responseData.ticketId || response.ok) {
-          isSuccess = true;
-        } else if (response.ok && !isAuthError) {
+        if (statusStr === 'ok' || statusStr === 'success' || responseData.success === true || responseData.ticketId) {
           isSuccess = true;
         }
       } catch {
         responseData = { message: rawBodyText2.slice(0, 300) };
-        if (response.ok || response.status === 200) isSuccess = true;
+        if (response.ok && !rawBodyText2.includes('<!DOCTYPE')) {
+          isSuccess = true;
+        }
       }
-    } else {
-      if (response.ok || response.status === 200) isSuccess = true;
     }
 
-    if ((response.ok || response.status === 200 || response.status === 302) && !isAuthError) {
-      isSuccess = true;
+    const finalSuccess = isSuccess && !isAuthError && !is404Error;
+    let finalMessage = `Ticket ${ticket?.id || ''} synced to Google Sheets.`;
+    if (isAuthError) {
+      finalMessage = 'Google Apps Script permission blocked. Ensure "Who has access" is "Anyone".';
+    } else if (is404Error) {
+      finalMessage = 'Web App URL expired or not found. Please update Web App URL in settings.';
+    } else if (!finalSuccess) {
+      finalMessage = `Ticket ${ticket?.id || ''} saved locally; Google Sheet sync pending URL update.`;
     }
 
     res.json({
-      success: isSuccess && !isAuthError,
+      success: finalSuccess,
       isAuthError,
+      is404Error,
       acknowledged: true,
       writeMethod: resolvedMethod,
       writtenAt: new Date().toISOString(),
@@ -562,9 +613,7 @@ app.post('/api/google/sync-ticket', async (req, res) => {
       ticketId: ticket?.id,
       action: action || 'createTicket',
       response: responseData,
-      message: isAuthError
-        ? 'Google Apps Script permission blocked. Ensure "Who has access" is "Anyone".'
-        : `Ticket ${ticket?.id || ''} synced to Google Sheets.`
+      message: finalMessage
     });
   } catch (err: any) {
     console.warn('Google Apps Script proxy error:', err);

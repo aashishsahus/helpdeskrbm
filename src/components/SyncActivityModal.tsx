@@ -202,46 +202,48 @@ export const SyncActivityModal: React.FC = () => {
             </div>
 
             {/* Web App URL Box */}
-            <div className="pt-2 border-t border-gray-200/80 space-y-1.5">
+            <div className="pt-2 border-t border-gray-200/80 space-y-2">
               <div className="flex items-center justify-between text-xs">
-                <span className="font-bold text-gray-700 flex items-center gap-1.5">
-                  <Code className="w-3.5 h-3.5 text-emerald-700" />
-                  Google Apps Script Web App URL
+                <span className="font-bold text-gray-800 flex items-center gap-1.5">
+                  <Code className="w-4 h-4 text-emerald-700" />
+                  <span>Google Apps Script Web App URL (Live Endpoint)</span>
                 </span>
-                <button
-                  onClick={() => setShowUrlEdit(!showUrlEdit)}
-                  className="text-emerald-700 hover:text-emerald-900 font-bold text-[11px] underline"
-                >
-                  {showUrlEdit ? 'Hide Field' : 'Update / Change URL'}
-                </button>
+                <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200">
+                  Target: /exec
+                </span>
               </div>
 
-              {showUrlEdit ? (
-                <div className="flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <div className="relative flex-1">
                   <input
                     type="url"
                     value={customWebAppUrl}
                     onChange={(e) => setCustomWebAppUrl(e.target.value)}
                     placeholder="https://script.google.com/macros/s/AKfycb.../exec"
-                    className="flex-1 px-3 py-1.5 text-xs font-mono border border-emerald-300 rounded-lg bg-white focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-3 py-2 text-xs font-mono border-2 border-emerald-300 rounded-xl bg-white focus:outline-hidden focus:ring-2 focus:ring-emerald-500 shadow-inner"
                   />
+                </div>
+                <div className="flex items-center gap-2">
                   <button
                     onClick={handleSaveWebAppUrl}
-                    className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg font-bold text-xs shrink-0 transition-colors"
+                    className="px-4 py-2 bg-[#063B2C] hover:bg-[#084D3A] text-white rounded-xl font-extrabold text-xs shrink-0 transition-colors shadow-xs flex items-center gap-1.5"
                   >
-                    {isUrlSaved ? 'Saved!' : 'Save URL'}
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>{isUrlSaved ? 'Saved!' : 'Save URL'}</span>
+                  </button>
+                  <button
+                    onClick={handleTestConnection}
+                    disabled={isPushing}
+                    className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl font-bold text-xs shrink-0 transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isPushing ? 'animate-spin text-emerald-700' : ''}`} />
+                    <span>Test Connection</span>
                   </button>
                 </div>
-              ) : (
-                <div className="flex items-center justify-between bg-white px-2.5 py-1 rounded-lg border border-gray-200 text-xs">
-                  <span className="font-mono text-[11px] text-gray-700 truncate max-w-lg">
-                    {webAppUrl || 'Default fallback URL configured'}
-                  </span>
-                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 shrink-0 ml-2">
-                    Anyone Access
-                  </span>
-                </div>
-              )}
+              </div>
+              <p className="text-[11px] text-gray-500 leading-relaxed">
+                👉 Google Apps Script editor me <b>Deploy ➔ Manage Deployments</b> se apna active <b>Web app URL</b> copy karke yahan paste karein aur <b>Save URL</b> click karein.
+              </p>
             </div>
 
             {/* Apps Script Status & Live Sync Actions */}

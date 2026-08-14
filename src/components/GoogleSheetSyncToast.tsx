@@ -85,9 +85,13 @@ export const GoogleSheetSyncToast: React.FC = () => {
                   dismissSyncToast();
                   setIsSyncModalOpen(true);
                 }}
-                className="font-bold text-emerald-300 hover:text-emerald-200 flex items-center gap-1 transition-colors"
+                className={`font-bold flex items-center gap-1 transition-colors ${
+                  activeSyncToast.status === 'error'
+                    ? 'text-amber-300 hover:text-amber-200 underline'
+                    : 'text-emerald-300 hover:text-emerald-200'
+                }`}
               >
-                <span>View Sync Activity Log</span>
+                <span>{activeSyncToast.status === 'error' ? 'Fix & Update Web App URL' : 'View Sync Activity Log'}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
 

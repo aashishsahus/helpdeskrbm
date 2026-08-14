@@ -122,8 +122,18 @@ function doGet(e) {
 
 function doPost(e) {
   try {
-    var contents = JSON.parse(e.postData.contents);
-    var action = contents.action;
+    var contents = {};
+    if (e && e.postData && e.postData.contents) {
+      try {
+        contents = JSON.parse(e.postData.contents);
+      } catch (parseErr) {
+        contents = e.parameter || {};
+      }
+    } else if (e && e.parameter) {
+      contents = e.parameter;
+    }
+
+    var action = contents.action || "createTicket";
     var targetSpreadsheetId = contents.spreadsheetId || DEFAULT_SPREADSHEET_ID;
     var ss;
     if (targetSpreadsheetId) {
@@ -132,10 +142,7 @@ function doPost(e) {
       } catch (err) {
         ss = SpreadsheetApp.getActiveSpreadsheet();
       }
-    } else {
-      ss = SpreadsheetApp.getActiveSpreadsheet();
     }
-
     if (!ss) {
       ss = SpreadsheetApp.getActiveSpreadsheet();
     }
