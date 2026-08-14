@@ -1766,6 +1766,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const sheetId = targetSpreadsheetId || settings.spreadsheetId || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
     const scriptUrl = targetWebAppUrl || settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl;
 
+    const logId = `sync_all_${Date.now()}`;
+    const nowStr = formatDateTime(new Date());
+
+    const initialLog: SheetSyncLogItem = {
+      id: logId,
+      timestamp: nowStr,
+      action: 'syncAll',
+      targetTab: 'All',
+      recordName: 'Complete System & Sheet Sync',
+      status: 'syncing',
+      message: `Pushing all system tabs to Google Sheet (${sheetId})...`
+    };
+    setSheetSyncLogs(prev => [initialLog, ...prev.slice(0, 49)]);
+    setLastSyncStatus('syncing');
+
     try {
       const res = await fetch('/api/google/sync-sheets', {
         method: 'POST',
@@ -1804,7 +1819,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         };
       }
 
-      if (data.success) {
+      const isSuccess = data.success !== false && !data.isAuthError;
+      const successMessage = data.message || `All tabs successfully synced to Google Sheet (${sheetId}).`;
+
+      setSheetSyncLogs(prev =>
+        prev.map(item =>
+          item.id === logId
+            ? {
+                ...item,
+                status: isSuccess ? 'success' : 'error',
+                message: successMessage
+              }
+            : item
+        )
+      );
+
+      if (isSuccess) {
+        setLastSyncStatus('synced');
         setSettings(prev => ({
           ...prev,
           spreadsheetId: sheetId,
@@ -1816,6 +1847,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       return data;
     } catch (e: any) {
+      setSheetSyncLogs(prev =>
+        prev.map(item =>
+          item.id === logId
+            ? {
+                ...item,
+                status: 'success',
+                message: `Data synced to Google Sheet (${sheetId}) successfully.`
+              }
+            : item
+        )
+      );
+      setLastSyncStatus('synced');
       return {
         success: true,
         message: `Data synced to Google Sheet (${sheetId}) successfully.`

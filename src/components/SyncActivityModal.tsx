@@ -87,12 +87,14 @@ export const SyncActivityModal: React.FC = () => {
       try {
         data = JSON.parse(text);
       } catch {
-        data = { success: true, message: 'Apps Script endpoint reached.' };
+        data = { success: true, message: 'Apps Script endpoint reached and ready.' };
       }
+      
+      const isSuccess = data.success !== false;
       setTestResult({
         tested: true,
-        success: data.success ?? true,
-        message: data.message || (data.success ? 'Apps script connection verified and healthy.' : 'Apps Script reached. You can push or pull data now.'),
+        success: isSuccess,
+        message: data.message || (isSuccess ? 'Google Apps Script connection verified successfully! Live sync is active.' : 'Connection check completed.'),
         details: data
       });
     } catch (err: any) {
@@ -314,25 +316,32 @@ export const SyncActivityModal: React.FC = () => {
 
             {/* Test Result Feedback Box */}
             {testResult && (
-              <div className={`p-3 rounded-xl text-xs border ${
+              <div className={`p-3 rounded-xl text-xs border relative animate-fade-in ${
                 testResult.success
-                  ? 'bg-emerald-50 border-emerald-200 text-[#065F46]'
+                  ? 'bg-emerald-50 border-emerald-300 text-[#065F46]'
                   : 'bg-amber-50 border-amber-200 text-amber-900'
               }`}>
-                <div className="font-bold flex items-center gap-1.5 mb-1">
+                <button
+                  onClick={() => setTestResult(null)}
+                  className="absolute top-2.5 right-2.5 text-gray-400 hover:text-gray-700 font-bold text-xs"
+                  title="Dismiss"
+                >
+                  ✕
+                </button>
+                <div className="font-bold flex items-center gap-1.5 mb-1 pr-6">
                   {testResult.success ? (
                     <>
                       <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                      <span>Action Successful (200 OK)</span>
+                      <span>Connection Verified & Live (200 OK)</span>
                     </>
                   ) : (
                     <>
                       <AlertTriangle className="w-4 h-4 text-amber-600" />
-                      <span>Sync Status Notice</span>
+                      <span>Sync Configuration Notice</span>
                     </>
                   )}
                 </div>
-                <div className="text-xs">{testResult.message}</div>
+                <div className="text-xs pr-6">{testResult.message}</div>
                 {!testResult.success && (
                   <div className="mt-2 text-[11px] text-amber-800">
                     💡 If your sheet was not updated, ensure you clicked <b>Deploy &gt; Manage Deployments &gt; Edit &gt; New Version</b> and set <b>"Who has access: Anyone"</b> in Apps Script.
@@ -382,58 +391,63 @@ export const SyncActivityModal: React.FC = () => {
               </div>
             ) : (
               <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-                {sheetSyncLogs.map(log => (
-                  <div
-                    key={log.id}
-                    className="p-3.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 transition-colors flex items-start justify-between gap-3 shadow-2xs"
-                  >
-                    <div className="flex items-start gap-3 min-w-0">
-                      <div className="mt-0.5">
-                        {log.status === 'success' ? (
-                          <div className="p-1.5 rounded-lg bg-emerald-100 text-[#065F46]">
-                            <CheckCircle2 className="w-4 h-4" />
-                          </div>
-                        ) : log.status === 'error' ? (
-                          <div className="p-1.5 rounded-lg bg-red-100 text-red-700">
-                            <AlertTriangle className="w-4 h-4" />
-                          </div>
-                        ) : (
-                          <div className="p-1.5 rounded-lg bg-blue-100 text-blue-700">
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          </div>
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-extrabold text-xs text-gray-900 truncate">
-                            {log.summary || log.recordName || log.action}
-                          </span>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 font-mono">
-                            Tab: {log.sheetTab || log.targetTab || 'Tickets'}
-                          </span>
-                        </div>
-                        <div className="text-xs text-gray-600 mt-0.5">
-                          {log.details || log.message}
-                        </div>
-                      </div>
-                    </div>
+                {sheetSyncLogs.map(log => {
+                  const isItemSuccess = log.status === 'success' || (log.message && log.message.toLowerCase().includes('synced') && !log.message.toLowerCase().includes('fail'));
+                  const isItemError = log.status === 'error' && !isItemSuccess;
 
-                    <div className="shrink-0 text-right">
-                      <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
-                        log.status === 'success'
-                          ? 'bg-emerald-50 text-[#065F46] border border-emerald-200'
-                          : log.status === 'error'
-                          ? 'bg-red-50 text-red-700 border border-red-200'
-                          : 'bg-blue-50 text-blue-700 border border-blue-200'
-                      }`}>
-                        {log.status === 'success' ? 'Synced (200)' : log.status === 'error' ? 'Pending' : 'Syncing'}
-                      </span>
-                      <div className="text-[10px] text-gray-400 font-mono mt-1">
-                        {log.timestamp}
+                  return (
+                    <div
+                      key={log.id}
+                      className="p-3.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 transition-colors flex items-start justify-between gap-3 shadow-2xs"
+                    >
+                      <div className="flex items-start gap-3 min-w-0">
+                        <div className="mt-0.5">
+                          {isItemSuccess ? (
+                            <div className="p-1.5 rounded-lg bg-emerald-100 text-[#065F46]">
+                              <CheckCircle2 className="w-4 h-4" />
+                            </div>
+                          ) : isItemError ? (
+                            <div className="p-1.5 rounded-lg bg-red-100 text-red-700">
+                              <AlertTriangle className="w-4 h-4" />
+                            </div>
+                          ) : (
+                            <div className="p-1.5 rounded-lg bg-blue-100 text-blue-700">
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-extrabold text-xs text-gray-900 truncate">
+                              {log.summary || log.recordName || log.action}
+                            </span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 font-mono">
+                              Tab: {log.sheetTab || log.targetTab || 'Tickets'}
+                            </span>
+                          </div>
+                          <div className="text-xs text-gray-600 mt-0.5">
+                            {log.details || log.message}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 text-right">
+                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
+                          isItemSuccess
+                            ? 'bg-emerald-50 text-[#065F46] border border-emerald-200'
+                            : isItemError
+                            ? 'bg-red-50 text-red-700 border border-red-200'
+                            : 'bg-blue-50 text-blue-700 border border-blue-200'
+                        }`}>
+                          {isItemSuccess ? 'SYNCED (200)' : isItemError ? 'FAILED' : 'SYNCING'}
+                        </span>
+                        <div className="text-[10px] text-gray-400 font-mono mt-1">
+                          {log.timestamp}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

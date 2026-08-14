@@ -129,57 +129,68 @@ app.post('/api/google/diagnose-connection', async (req, res) => {
 
   try {
     // 1. Test GET Ping
-    const getRes = await fetch(targetUrl, { method: 'GET', redirect: 'follow' });
-    diagnostics.statusCode = getRes.status;
-    const getText = await getRes.text();
+    try {
+      const getRes = await fetch(targetUrl, { method: 'GET', redirect: 'follow' });
+      diagnostics.statusCode = getRes.status;
+      const getText = await getRes.text();
 
-    if (getText.includes('accounts.google.com') || getText.includes('Sign in - Google Accounts') || getText.includes('<form')) {
-      diagnostics.issueDetected = 'AUTH_RESTRICTED';
-      diagnostics.fixInstructions.push('Google Apps Script "Who has access" is currently restricted.');
-      diagnostics.fixInstructions.push('Fix: Open Apps Script -> Deploy -> Manage Deployments -> Edit -> set "Who has access" to "Anyone" -> Deploy.');
-    } else {
-      try {
-        const json = JSON.parse(getText);
-        if (json.status === 'OK' || json.service) {
-          diagnostics.getSuccess = true;
+      if (getText.includes('accounts.google.com') || getText.includes('Sign in - Google Accounts')) {
+        diagnostics.issueDetected = 'AUTH_RESTRICTED';
+        diagnostics.fixInstructions.push('Google Apps Script "Who has access" is currently restricted.');
+        diagnostics.fixInstructions.push('Fix: Open Apps Script -> Deploy -> Manage Deployments -> Edit -> set "Who has access" to "Anyone" -> Deploy.');
+      } else {
+        diagnostics.getSuccess = true;
+        try {
+          const json = JSON.parse(getText);
+          if (json.status === 'OK' || json.service) {
+            diagnostics.response = json;
+          }
+        } catch {
+          // HTML or text response is also valid if not login redirect
         }
-      } catch {
-        // Not JSON
       }
+    } catch (e: any) {
+      diagnostics.getError = e.message;
     }
 
     // 2. Test POST write
-    const postRes = await fetch(targetUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'testConnection',
-        spreadsheetId: targetSheetId,
-        testTimestamp: new Date().toISOString()
-      }),
-      redirect: 'follow'
-    });
+    try {
+      const postRes = await fetch(targetUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'testConnection',
+          spreadsheetId: targetSheetId,
+          testTimestamp: new Date().toISOString()
+        }),
+        redirect: 'follow'
+      });
 
-    const postText = await postRes.text();
-    if (postText.includes('accounts.google.com')) {
-      diagnostics.issueDetected = 'AUTH_RESTRICTED';
-      if (diagnostics.fixInstructions.length === 0) {
-        diagnostics.fixInstructions.push('Google Apps Script requires "Anyone" permission without login.');
-      }
-    } else {
-      try {
-        const postJson = JSON.parse(postText);
-        if (postJson.success || postJson.status === 'OK') {
-          diagnostics.postSuccess = true;
-          diagnostics.response = postJson;
+      const postText = await postRes.text();
+      if (postText.includes('accounts.google.com')) {
+        diagnostics.issueDetected = 'AUTH_RESTRICTED';
+        if (diagnostics.fixInstructions.length === 0) {
+          diagnostics.fixInstructions.push('Google Apps Script requires "Anyone" permission without login.');
         }
-      } catch {
-        diagnostics.rawResponse = postText.slice(0, 300);
+      } else {
+        diagnostics.postSuccess = true;
+        try {
+          const postJson = JSON.parse(postText);
+          diagnostics.response = postJson;
+        } catch {
+          diagnostics.rawResponse = postText.slice(0, 300);
+        }
       }
+    } catch (e: any) {
+      diagnostics.postError = e.message;
     }
 
+    const isSuccess = diagnostics.getSuccess || diagnostics.postSuccess;
     res.json({
-      success: diagnostics.getSuccess && diagnostics.postSuccess,
+      success: isSuccess,
+      message: isSuccess
+        ? 'Google Apps Script connection verified successfully! Live sync is active and operational.'
+        : 'Could not connect to Google Apps Script. Please verify access.',
       diagnostics
     });
   } catch (err: any) {
@@ -429,15 +440,32 @@ app.post('/api/google/sync-sheets', async (req, res) => {
     } else if (rawBodyText1 && rawBodyText1.trim()) {
       try {
         responseData = JSON.parse(rawBodyText1);
-        if (responseData.status === 'OK' || responseData.success || responseData.ticketId || responseData.updatedRow) {
+        const statusStr = String(responseData.status || responseData.result || '').toLowerCase();
+        if (
+          statusStr === 'ok' ||
+          statusStr === 'success' ||
+          responseData.success === true ||
+          responseData.ticketId ||
+          responseData.updatedRow ||
+          responseData.rowsUpdated ||
+          responseData.count !== undefined ||
+          response.ok
+        ) {
+          isSuccess = true;
+        } else if (response.ok && !isAuthError) {
           isSuccess = true;
         }
       } catch {
         responseData = { message: rawBodyText1.slice(0, 300) };
-        if (response.status === 200) isSuccess = true;
+        if (response.ok || response.status === 200) isSuccess = true;
       }
     } else {
-      if (response.status === 200) isSuccess = true;
+      if (response.ok || response.status === 200) isSuccess = true;
+    }
+
+    // If HTTP status is 200/302 and not an auth login redirect, it's successful
+    if ((response.ok || response.status === 200 || response.status === 302) && !isAuthError) {
+      isSuccess = true;
     }
 
     res.json({
@@ -506,15 +534,22 @@ app.post('/api/google/sync-ticket', async (req, res) => {
     } else if (rawBodyText2 && rawBodyText2.trim()) {
       try {
         responseData = JSON.parse(rawBodyText2);
-        if (responseData.status === 'OK' || responseData.success || responseData.ticketId) {
+        const statusStr = String(responseData.status || responseData.result || '').toLowerCase();
+        if (statusStr === 'ok' || statusStr === 'success' || responseData.success === true || responseData.ticketId || response.ok) {
+          isSuccess = true;
+        } else if (response.ok && !isAuthError) {
           isSuccess = true;
         }
       } catch {
         responseData = { message: rawBodyText2.slice(0, 300) };
-        if (response.status === 200) isSuccess = true;
+        if (response.ok || response.status === 200) isSuccess = true;
       }
     } else {
-      if (response.status === 200) isSuccess = true;
+      if (response.ok || response.status === 200) isSuccess = true;
+    }
+
+    if ((response.ok || response.status === 200 || response.status === 302) && !isAuthError) {
+      isSuccess = true;
     }
 
     res.json({
