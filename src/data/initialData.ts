@@ -325,6 +325,7 @@ export const initialTickets: Ticket[] = [
     slaDueDate: '2026-08-11T13:30:00Z',
     slaStatus: 'Safe',
     contactNumber: '+1 (555) 019-2834',
+    isDemoTicket: true,
     attachments: [
       {
         id: 'att1',
@@ -358,7 +359,8 @@ export const initialTickets: Ticket[] = [
     updatedDate: '2026-08-11T03:10:00Z',
     slaDueDate: '2026-08-11T05:10:00Z',
     slaStatus: 'Breached',
-    contactNumber: '+1 (555) 016-7788'
+    contactNumber: '+1 (555) 016-7788',
+    isDemoTicket: true
   },
   {
     id: 'HD-000003',
@@ -383,7 +385,8 @@ export const initialTickets: Ticket[] = [
     resolvedDate: '2026-08-10T15:05:00Z',
     resolutionTimeMinutes: 45,
     rating: 5,
-    feedback: 'Alex resolved it in 45 minutes! Excellent service.'
+    feedback: 'Alex resolved it in 45 minutes! Excellent service.',
+    isDemoTicket: true
   },
   {
     id: 'HD-000004',
@@ -403,7 +406,8 @@ export const initialTickets: Ticket[] = [
     updatedDate: '2026-08-09T09:20:00Z',
     slaDueDate: '2026-08-09T11:00:00Z',
     slaStatus: 'Breached',
-    contactNumber: '+1 (555) 014-4412'
+    contactNumber: '+1 (555) 014-4412',
+    isDemoTicket: true
   },
   {
     id: 'HD-000005',
@@ -424,7 +428,8 @@ export const initialTickets: Ticket[] = [
     updatedDate: '2026-08-11T01:00:00Z',
     slaDueDate: '2026-08-12T01:00:00Z',
     slaStatus: 'Safe',
-    contactNumber: '+1 (555) 012-3390'
+    contactNumber: '+1 (555) 012-3390',
+    isDemoTicket: true
   },
   {
     id: 'HD-000006',
@@ -450,7 +455,8 @@ export const initialTickets: Ticket[] = [
     closedDate: '2026-08-06T12:00:00Z',
     resolutionTimeMinutes: 120,
     rating: 4,
-    feedback: 'Priya resolved the VPN configuration promptly. Good support experience.'
+    feedback: 'Priya resolved the VPN configuration promptly. Good support experience.',
+    isDemoTicket: true
   },
   {
     id: 'HD-000007',
@@ -470,7 +476,8 @@ export const initialTickets: Ticket[] = [
     updatedDate: '2026-08-11T02:00:00Z',
     slaDueDate: '2026-08-11T16:00:00Z',
     slaStatus: 'Due Soon',
-    contactNumber: '+1 (555) 018-9921'
+    contactNumber: '+1 (555) 018-9921',
+    isDemoTicket: true
   },
   {
     id: 'HD-000008',
@@ -491,7 +498,8 @@ export const initialTickets: Ticket[] = [
     updatedDate: '2026-08-11T04:30:00Z',
     slaDueDate: '2026-08-11T06:00:00Z',
     slaStatus: 'Due Soon',
-    contactNumber: '+1 (555) 016-7788'
+    contactNumber: '+1 (555) 016-7788',
+    isDemoTicket: true
   },
   {
     id: 'HD-000009',
@@ -512,7 +520,8 @@ export const initialTickets: Ticket[] = [
     updatedDate: '2026-08-12T00:30:00Z',
     slaDueDate: '2026-08-12T08:30:00Z',
     slaStatus: 'Safe',
-    contactNumber: '+1 (555) 019-2026'
+    contactNumber: '+1 (555) 019-2026',
+    isRealTicket: true
   },
   {
     id: 'HD-000010',
@@ -536,7 +545,8 @@ export const initialTickets: Ticket[] = [
     slaStatus: 'Safe',
     contactNumber: '+1 (555) 019-2026',
     rating: 5,
-    feedback: 'Prompt resolution on laptop ticket! Marcus Brody provided great service.'
+    feedback: 'Prompt resolution on laptop ticket! Marcus Brody provided great service.',
+    isRealTicket: true
   }
 ];
 

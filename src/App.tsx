@@ -4,6 +4,8 @@ import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { CreateTicketModal } from './components/CreateTicketModal';
 import { TicketDetailsModal } from './components/TicketDetailsModal';
+import { GoogleSheetSyncToast } from './components/GoogleSheetSyncToast';
+import { SyncActivityModal } from './components/SyncActivityModal';
 
 import { EmployeeDashboardView } from './views/EmployeeDashboardView';
 import { SupportDashboardView } from './views/SupportDashboardView';
@@ -133,9 +135,11 @@ const MainLayout: React.FC = () => {
         </main>
       </div>
 
-      {/* Modals */}
+      {/* Modals & Overlays */}
       <CreateTicketModal />
       <TicketDetailsModal />
+      <SyncActivityModal />
+      <GoogleSheetSyncToast />
       <LoginModal isOpen={isLoginModalOpen} onClose={() => setIsLoginModalOpen(false)} />
     </div>
   );

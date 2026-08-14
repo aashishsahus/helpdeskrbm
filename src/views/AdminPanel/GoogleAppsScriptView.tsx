@@ -30,11 +30,23 @@ export const GoogleAppsScriptView: React.FC = () => {
     rolesList,
     designationsList,
     settings,
+    updateSettings,
     syncWithGoogleSheets
   } = useApp();
   const [copied, setCopied] = useState(false);
   const [isForceSyncing, setIsForceSyncing] = useState(false);
   const [syncStatusMsg, setSyncStatusMsg] = useState('');
+  const [webAppUrlInput, setWebAppUrlInput] = useState(settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || '');
+  const [isSavedUrl, setIsSavedUrl] = useState(false);
+
+  const handleSaveUrl = () => {
+    updateSettings({
+      googleAppsScriptWebAppUrl: webAppUrlInput.trim(),
+      appsScriptUrl: webAppUrlInput.trim()
+    });
+    setIsSavedUrl(true);
+    setTimeout(() => setIsSavedUrl(false), 2500);
+  };
   
   // Diagnostic Tool State
   const [isDiagnosing, setIsDiagnosing] = useState(false);
@@ -137,6 +149,75 @@ function doPost(e) {
         status: "OK",
         message: "Google Apps Script successfully communicated with Spreadsheet!",
         sheetName: ss ? ss.getName() : "Spreadsheet",
+        timestamp: new Date().toISOString()
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (action === "getAllData" || action === "getTickets") {
+      var tSheet = ss.getSheetByName("Tickets");
+      var uSheet = ss.getSheetByName("Users");
+      var dSheet = ss.getSheetByName("Departments");
+      var cSheet = ss.getSheetByName("Categories");
+      var comSheet = ss.getSheetByName("TicketComments");
+
+      var resultTickets = [];
+      if (tSheet) {
+        var tData = tSheet.getDataRange().getValues();
+        for (var tr = 1; tr < tData.length; tr++) {
+          var row = tData[tr];
+          if (!row[0]) continue;
+          resultTickets.push({
+            id: row[0].toString(),
+            employeeId: row[1] ? row[1].toString() : "",
+            employeeName: row[2] ? row[2].toString() : "",
+            employeeEmail: row[3] ? row[3].toString() : "",
+            department: row[4] ? row[4].toString() : "",
+            location: row[5] ? row[5].toString() : "",
+            category: row[6] ? row[6].toString() : "",
+            subCategory: row[7] ? row[7].toString() : "",
+            subject: row[8] ? row[8].toString() : "",
+            description: row[9] ? row[9].toString() : "",
+            priority: row[10] ? row[10].toString() : "Medium",
+            status: row[11] ? row[11].toString() : "Open",
+            assignedAgentName: row[12] ? row[12].toString() : "",
+            createdDate: row[13] ? row[13].toString() : new Date().toISOString(),
+            slaDueDate: row[14] ? row[14].toString() : "",
+            closedDate: row[15] ? row[15].toString() : "",
+            resolvedDate: row[15] ? row[15].toString() : "",
+            rating: row[16] ? Number(row[16]) : undefined,
+            feedback: row[17] ? row[17].toString() : "",
+            contactNumber: row[18] ? row[18].toString() : "",
+            slaStatus: "Within SLA",
+            isRealTicket: true
+          });
+        }
+      }
+
+      var resultUsers = [];
+      if (uSheet) {
+        var uData = uSheet.getDataRange().getValues();
+        for (var ur = 1; ur < uData.length; ur++) {
+          var uRow = uData[ur];
+          if (!uRow[0]) continue;
+          resultUsers.push({
+            id: uRow[0].toString(),
+            employeeId: uRow[1] ? uRow[1].toString() : "",
+            name: uRow[2] ? uRow[2].toString() : "",
+            email: uRow[3] ? uRow[3].toString() : "",
+            role: uRow[4] ? uRow[4].toString() : "Employee",
+            department: uRow[5] ? uRow[5].toString() : "",
+            designation: uRow[6] ? uRow[6].toString() : "",
+            location: uRow[7] ? uRow[7].toString() : "",
+            status: uRow[8] ? uRow[8].toString() : "Active"
+          });
+        }
+      }
+
+      return ContentService.createTextOutput(JSON.stringify({
+        success: true,
+        tickets: resultTickets,
+        users: resultUsers,
+        totalTickets: resultTickets.length,
         timestamp: new Date().toISOString()
       })).setMimeType(ContentService.MimeType.JSON);
     }
@@ -676,7 +757,33 @@ function setupHelpDeskSheets(ss) {
           </div>
         </div>
 
-        {/* Diagnostic Results Box */}
+        {/* Quick Web App URL Input & Connection Check */}
+        <div className="p-3.5 bg-gray-50 border border-gray-200 rounded-xl flex items-center justify-between flex-wrap gap-3">
+          <div className="flex-1 min-w-[280px]">
+            <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
+              Google Apps Script Web App Deployment URL
+            </label>
+            <input
+              type="text"
+              value={webAppUrlInput}
+              onChange={(e) => setWebAppUrlInput(e.target.value)}
+              placeholder="https://script.google.com/macros/s/AKfy.../exec"
+              className="w-full text-xs font-mono px-3 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+            />
+          </div>
+          <div className="flex items-center gap-2 pt-4 sm:pt-0">
+            <button
+              onClick={handleSaveUrl}
+              className={`px-4 py-2 font-bold text-xs rounded-lg transition-all ${
+                isSavedUrl
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-gray-900 hover:bg-gray-800 text-white'
+              }`}
+            >
+              {isSavedUrl ? '✓ URL Saved!' : 'Save URL'}
+            </button>
+          </div>
+        </div>
         {diagnosticResult && (
           <div className={`p-4 rounded-xl border ${diagnosticResult.success ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-amber-50 border-amber-300 text-amber-950'} space-y-2`}>
             <div className="flex items-center justify-between">

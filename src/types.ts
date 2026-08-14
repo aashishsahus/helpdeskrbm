@@ -50,6 +50,8 @@ export interface Ticket {
   rating?: number;
   feedback?: string;
   attachments?: TicketAttachment[];
+  isDemoTicket?: boolean;
+  isRealTicket?: boolean;
 }
 
 export interface TicketAttachment {
@@ -145,6 +147,19 @@ export interface AuditLogItem {
   details: string;
   timestamp: string;
   ip?: string;
+}
+
+export interface SheetSyncLogItem {
+  id: string;
+  timestamp: string;
+  action: string;
+  targetTab?: 'Tickets' | 'Users' | 'Departments' | 'Categories' | 'MasterDropdowns' | 'TicketComments' | 'SystemSettings' | 'All' | string;
+  sheetTab?: string;
+  recordName?: string;
+  summary?: string;
+  details?: string;
+  status: 'syncing' | 'success' | 'error' | 'info';
+  message?: string;
 }
 
 export interface SystemSettings {

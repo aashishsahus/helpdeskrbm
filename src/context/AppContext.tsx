@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import {
   User,
   Ticket,
@@ -11,6 +11,7 @@ import {
   SLARule,
   KnowledgeBaseArticle,
   AuditLogItem,
+  SheetSyncLogItem,
   SystemSettings,
   TicketPriority,
   TicketStatus,
@@ -118,7 +119,19 @@ interface AppContextType {
   
   // System & Google Workspace Sync
   updateSettings: (newSettings: Partial<SystemSettings>) => void;
-  syncWithGoogleSheets: (spreadsheetId: string) => Promise<{ success: boolean; message: string }>;
+  syncWithGoogleSheets: (spreadsheetId?: string, webAppUrl?: string) => Promise<{ success: boolean; message: string }>;
+  pullDataFromGoogleSheets: (spreadsheetId?: string, webAppUrl?: string, isSilent?: boolean) => Promise<{ success: boolean; count: number; message: string }>;
+  clearMockupTickets: () => void;
+  restoreDemoTickets: () => void;
+  isDemoDataActive: boolean;
+  realTicketsCount: number;
+  demoTicketsCount: number;
+  sheetSyncLogs: SheetSyncLogItem[];
+  activeSyncToast: SheetSyncLogItem | null;
+  dismissSyncToast: () => void;
+  isSyncModalOpen: boolean;
+  setIsSyncModalOpen: (open: boolean) => void;
+  lastSyncStatus: 'synced' | 'syncing' | 'error';
   
   // Notifications & Audit
   markNotificationAsRead: (id: string) => void;
@@ -464,12 +477,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [tickets, setTickets] = useState<Ticket[]>(() => {
     try {
+      const isDemoCleared = localStorage.getItem('hd_demo_cleared') === 'true';
       const saved = localStorage.getItem('hd_tickets_v2');
       if (saved) {
         const parsed: Ticket[] = JSON.parse(saved);
+        if (isDemoCleared) {
+          return parsed.filter(t => !t.isDemoTicket && !['HD-000001', 'HD-000002', 'HD-000003', 'HD-000004', 'HD-000005', 'HD-000006', 'HD-000007', 'HD-000008'].includes(t.id));
+        }
         const existingIds = new Set(parsed.map(t => t.id));
         const missing = initialTickets.filter(t => !existingIds.has(t.id));
         return missing.length > 0 ? [...parsed, ...missing] : parsed;
+      }
+      if (isDemoCleared) {
+        return initialTickets.filter(t => !t.isDemoTicket);
       }
       return initialTickets;
     } catch {
@@ -580,6 +600,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   });
 
+  const [sheetSyncLogs, setSheetSyncLogs] = useState<SheetSyncLogItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('hd_sync_logs_v1');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [activeSyncToast, setActiveSyncToast] = useState<SheetSyncLogItem | null>(null);
+  const [isSyncModalOpen, setIsSyncModalOpen] = useState<boolean>(false);
+  const [lastSyncStatus, setLastSyncStatus] = useState<'synced' | 'syncing' | 'error'>('synced');
+
+  const dismissSyncToast = () => {
+    setActiveSyncToast(null);
+  };
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('hd_sync_logs_v1', JSON.stringify(sheetSyncLogs.slice(0, 50)));
+    } catch {}
+  }, [sheetSyncLogs]);
+
   // Save to localStorage on change
   useEffect(() => {
     try { localStorage.setItem('hd_tickets_v2', JSON.stringify(tickets)); } catch {}
@@ -686,6 +729,58 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const sheetId = settings.spreadsheetId || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
     const scriptUrl = settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
 
+    let targetTab: 'Tickets' | 'Users' | 'Departments' | 'Categories' | 'MasterDropdowns' | 'TicketComments' | 'SystemSettings' | 'All' = 'Tickets';
+    let recordName = 'Support Ticket Record';
+
+    if (payload.action === 'createTicket') {
+      targetTab = 'Tickets';
+      recordName = `Ticket ${payload.ticket?.id || ''} ("${payload.ticket?.subject || ''}")`;
+    } else if (payload.action === 'updateTicket') {
+      targetTab = 'Tickets';
+      recordName = `Ticket ${payload.ticket?.id || ''} (Status: ${payload.ticket?.status || 'Updated'})`;
+    } else if (payload.action === 'addUser') {
+      targetTab = 'Users';
+      recordName = `New User: ${payload.user?.name || ''} (${payload.user?.role || ''})`;
+    } else if (payload.action === 'updateUser') {
+      targetTab = 'Users';
+      recordName = `User Updated: ${payload.user?.name || payload.userId || ''} (${payload.user?.employeeId || ''})`;
+    } else if (payload.action === 'deleteUser') {
+      targetTab = 'Users';
+      recordName = `User Deleted (ID: ${payload.userId || ''})`;
+    } else if (payload.action === 'addComment') {
+      targetTab = 'TicketComments';
+      recordName = `Comment on Ticket ${payload.ticket?.id || ''}`;
+    } else if (payload.action.includes('Department')) {
+      targetTab = 'Departments';
+      recordName = `Department Master Data`;
+    } else if (payload.action.includes('Category')) {
+      targetTab = 'Categories';
+      recordName = `Category Master Data`;
+    } else if (payload.action === 'updateDropdowns') {
+      targetTab = 'MasterDropdowns';
+      recordName = `Master Dropdowns & Values`;
+    } else if (payload.action === 'syncAll') {
+      targetTab = 'All';
+      recordName = `Complete System & Sheet Sync`;
+    }
+
+    const logId = `sync_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const nowStr = formatDateTime(new Date());
+
+    const newLogItem: SheetSyncLogItem = {
+      id: logId,
+      timestamp: nowStr,
+      action: payload.action,
+      targetTab,
+      recordName,
+      status: 'syncing',
+      message: `Sending update to Google Sheet (Tab: ${targetTab})...`
+    };
+
+    setSheetSyncLogs(prev => [newLogItem, ...prev.slice(0, 49)]);
+    setActiveSyncToast(newLogItem);
+    setLastSyncStatus('syncing');
+
     const fullPayload = {
       spreadsheetId: sheetId,
       webAppUrl: scriptUrl,
@@ -708,7 +803,58 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(fullPayload)
-    }).catch(err => console.warn('Direct backend sheets sync error:', err));
+    })
+    .then(res => res.json())
+    .then(data => {
+      const isOk = data.success && !data.isAuthError;
+      const resolvedMsg = data.isAuthError
+        ? 'Google permission required: Set "Who has access" to "Anyone" in Apps Script.'
+        : data.message || `Updated Google Sheet tab "${targetTab}" successfully.`;
+
+      setSheetSyncLogs(prev =>
+        prev.map(item =>
+          item.id === logId
+            ? {
+                ...item,
+                status: isOk ? 'success' : 'error',
+                message: resolvedMsg
+              }
+            : item
+        )
+      );
+
+      setActiveSyncToast({
+        id: logId,
+        timestamp: nowStr,
+        action: payload.action,
+        targetTab,
+        recordName,
+        status: isOk ? 'success' : 'error',
+        message: resolvedMsg
+      });
+
+      setLastSyncStatus(isOk ? 'synced' : 'error');
+
+      if (isOk) {
+        setTimeout(() => {
+          setActiveSyncToast(current => (current?.id === logId ? null : current));
+        }, 4500);
+      }
+    })
+    .catch(err => {
+      setSheetSyncLogs(prev =>
+        prev.map(item =>
+          item.id === logId
+            ? {
+                ...item,
+                status: 'error',
+                message: `Network request dispatched (${err.message || 'Connecting'}).`
+              }
+            : item
+        )
+      );
+      setLastSyncStatus('error');
+    });
 
     // 2. If ticket / comment action, also send to sync-ticket
     if (payload.ticket || payload.comment || payload.action.includes('Ticket')) {
@@ -1677,6 +1823,168 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  // Pull real data from Google Sheets API / CSV
+  const pullDataFromGoogleSheets = async (targetSpreadsheetId?: string, targetWebAppUrl?: string, isSilent = false): Promise<{ success: boolean; count: number; message: string }> => {
+    const sheetId = targetSpreadsheetId || settings.spreadsheetId || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
+    const scriptUrl = targetWebAppUrl || settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl;
+
+    try {
+      const res = await fetch('/api/google/pull-sheet-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          spreadsheetId: sheetId,
+          webAppUrl: scriptUrl
+        })
+      });
+
+      const data = await res.json();
+      if (data.success && Array.isArray(data.tickets) && data.tickets.length > 0) {
+        const sheetTickets: Ticket[] = data.tickets.map((t: any) => ({
+          ...t,
+          isRealTicket: true,
+          isDemoTicket: false,
+          slaStatus: t.slaStatus || 'Safe',
+          priority: t.priority || 'Medium',
+          status: t.status || 'Open',
+          createdDate: t.createdDate || new Date().toISOString(),
+          updatedDate: t.updatedDate || t.createdDate || new Date().toISOString(),
+          contactNumber: t.contactNumber || ''
+        }));
+
+        setTickets(prev => {
+          const map = new Map<string, Ticket>();
+          // Keep real tickets created locally
+          prev.filter(p => !p.isDemoTicket && !['HD-000001', 'HD-000002', 'HD-000003', 'HD-000004', 'HD-000005', 'HD-000006', 'HD-000007', 'HD-000008'].includes(p.id))
+            .forEach(t => map.set(t.id, t));
+          // Overlay tickets from Google Sheet
+          sheetTickets.forEach(t => map.set(t.id, t));
+          const updated = Array.from(map.values());
+          try {
+            localStorage.setItem('hd_tickets_v2', JSON.stringify(updated));
+          } catch (e) {}
+          return updated;
+        });
+
+        if (Array.isArray(data.users) && data.users.length > 0) {
+          setUsers(prev => {
+            const uMap = new Map<string, User>();
+            prev.forEach(u => uMap.set(u.id, u));
+            data.users.forEach((u: User) => uMap.set(u.id || u.employeeId, u));
+            const updatedUsers = Array.from(uMap.values());
+            try {
+              localStorage.setItem('hd_users_v2', JSON.stringify(updatedUsers));
+            } catch (e) {}
+            return updatedUsers;
+          });
+        }
+
+        const logItem: SheetSyncLogItem = {
+          id: `pull_${Date.now()}`,
+          timestamp: new Date().toLocaleTimeString(),
+          action: 'PULL_TICKETS',
+          summary: `Retrieved ${sheetTickets.length} real tickets from Google Sheet`,
+          details: `Connected to Google Sheet: ${sheetTickets.length} rows loaded. (Latest: ${sheetTickets[sheetTickets.length - 1]?.id || 'N/A'})`,
+          status: 'success',
+          sheetTab: 'Tickets'
+        };
+        setSheetSyncLogs(prev => [logItem, ...prev.slice(0, 49)]);
+        if (!isSilent) {
+          setActiveSyncToast(logItem);
+        }
+        setLastSyncStatus('synced');
+        addAuditLog('SHEET_DATA_PULLED', 'Google Workspace', `Loaded ${sheetTickets.length} real tickets from Google Sheet`);
+        return { success: true, count: sheetTickets.length, message: `Loaded ${sheetTickets.length} real tickets from Google Sheet!` };
+      } else {
+        if (!isSilent) {
+          const logItem: SheetSyncLogItem = {
+            id: `pull_info_${Date.now()}`,
+            timestamp: new Date().toLocaleTimeString(),
+            action: 'PULL_TICKETS',
+            summary: 'Google Sheet Sync: 0 external rows found',
+            details: data.message || 'No new rows found on the Tickets sheet tab.',
+            status: 'info',
+            sheetTab: 'Tickets'
+          };
+          setSheetSyncLogs(prev => [logItem, ...prev.slice(0, 49)]);
+          setActiveSyncToast(logItem);
+        }
+        return { success: false, count: 0, message: data.message || 'No tickets found in sheet.' };
+      }
+    } catch (err: any) {
+      console.warn('Pull sheet data error:', err);
+      return { success: false, count: 0, message: err.message || 'Failed to fetch tickets from Google Sheet.' };
+    }
+  };
+
+  // Clear demo / mockup tickets
+  const clearMockupTickets = () => {
+    const realOnly = tickets.filter(t => !t.isDemoTicket && !['HD-000001', 'HD-000002', 'HD-000003', 'HD-000004', 'HD-000005', 'HD-000006', 'HD-000007', 'HD-000008'].includes(t.id));
+    setTickets(realOnly);
+    try {
+      localStorage.setItem('hd_tickets_v2', JSON.stringify(realOnly));
+      localStorage.setItem('hd_demo_cleared', 'true');
+    } catch (e) {}
+
+    const logItem: SheetSyncLogItem = {
+      id: `clear_demo_${Date.now()}`,
+      timestamp: new Date().toLocaleTimeString(),
+      action: 'PURGE_MOCKUP',
+      summary: 'Cleared demo mockup tickets from view',
+      details: `Removed sample mockup tickets. Displaying only ${realOnly.length} real/synced tickets.`,
+      status: 'success',
+      sheetTab: 'Tickets'
+    };
+    setSheetSyncLogs(prev => [logItem, ...prev.slice(0, 49)]);
+    setActiveSyncToast(logItem);
+    addAuditLog('MOCKUP_CLEARED', 'Ticket Directory', 'Purged demo mockup tickets from display');
+  };
+
+  // Restore demo tickets for testing
+  const restoreDemoTickets = () => {
+    try {
+      localStorage.removeItem('hd_demo_cleared');
+    } catch (e) {}
+    const existingIds = new Set(tickets.map(t => t.id));
+    const missingDemo = initialTickets.filter(t => !existingIds.has(t.id));
+    const merged = [...tickets, ...missingDemo];
+    setTickets(merged);
+    try {
+      localStorage.setItem('hd_tickets_v2', JSON.stringify(merged));
+    } catch (e) {}
+
+    const logItem: SheetSyncLogItem = {
+      id: `restore_demo_${Date.now()}`,
+      timestamp: new Date().toLocaleTimeString(),
+      action: 'RESTORE_DEMO',
+      summary: 'Restored demo mockup tickets for preview',
+      details: 'Sample tickets restored alongside existing tickets.',
+      status: 'info',
+      sheetTab: 'Tickets'
+    };
+    setSheetSyncLogs(prev => [logItem, ...prev.slice(0, 49)]);
+    setActiveSyncToast(logItem);
+  };
+
+  // Ticket counts
+  const demoTicketsCount = useMemo(() => {
+    return tickets.filter(t => t.isDemoTicket || ['HD-000001', 'HD-000002', 'HD-000003', 'HD-000004', 'HD-000005', 'HD-000006', 'HD-000007', 'HD-000008'].includes(t.id)).length;
+  }, [tickets]);
+
+  const realTicketsCount = useMemo(() => {
+    return tickets.length - demoTicketsCount;
+  }, [tickets, demoTicketsCount]);
+
+  const isDemoDataActive = demoTicketsCount > 0;
+
+  // Auto pull real sheet data silently on app load
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      pullDataFromGoogleSheets(undefined, undefined, true);
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, []);
+
   // Notifications
   const markNotificationAsRead = (id: string) => {
     setNotifications(prev => prev.map(n => (n.id === id ? { ...n, read: true } : n)));
@@ -1759,6 +2067,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         updateSettings,
         syncWithGoogleSheets,
+        pullDataFromGoogleSheets,
+        clearMockupTickets,
+        restoreDemoTickets,
+        isDemoDataActive,
+        realTicketsCount,
+        demoTicketsCount,
+        sheetSyncLogs,
+        activeSyncToast,
+        dismissSyncToast,
+        isSyncModalOpen,
+        setIsSyncModalOpen,
+        lastSyncStatus,
 
         markNotificationAsRead,
         addAuditLog,

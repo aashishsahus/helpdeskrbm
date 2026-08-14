@@ -36,7 +36,10 @@ export const Header: React.FC = () => {
     setIsCreateTicketOpen,
     globalSearchQuery,
     setGlobalSearchQuery,
-    syncWithGoogleSheets
+    syncWithGoogleSheets,
+    setIsSyncModalOpen,
+    lastSyncStatus,
+    sheetSyncLogs
   } = useApp();
 
   const [isNotifOpen, setIsNotifOpen] = useState(false);
@@ -234,11 +237,32 @@ export const Header: React.FC = () => {
           </div>
           )}
 
-          {/* Saved in Sheets Indicator Badge */}
-          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 bg-[#D1FAE5] text-[#065F46] border border-[#A7F3D0] text-xs font-bold rounded-full shadow-2xs">
-            <span className={`w-1.5 h-1.5 rounded-full ${isSyncing ? 'bg-amber-500 animate-ping' : 'bg-[#10B981]'}`}></span>
-            <span>{lastSyncText}</span>
-          </div>
+          {/* Saved in Sheets Indicator Badge - Interactive */}
+          <button
+            onClick={() => setIsSyncModalOpen(true)}
+            className={`hidden sm:flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-full shadow-2xs transition-all hover:scale-105 cursor-pointer ${
+              lastSyncStatus === 'error'
+                ? 'bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200'
+                : isSyncing || lastSyncStatus === 'syncing'
+                ? 'bg-blue-100 text-blue-900 border border-blue-300'
+                : 'bg-[#D1FAE5] text-[#065F46] border border-[#A7F3D0] hover:bg-[#A7F3D0]/60'
+            }`}
+            title="Click to view real-time Google Sheets sync activity & diagnostics"
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${
+              lastSyncStatus === 'error'
+                ? 'bg-amber-500'
+                : isSyncing || lastSyncStatus === 'syncing'
+                ? 'bg-blue-500 animate-ping'
+                : 'bg-[#10B981]'
+            }`}></span>
+            <span>{isSyncing ? 'SYNCING...' : lastSyncStatus === 'error' ? 'SYNC STATUS' : 'SAVED IN SHEETS'}</span>
+            {sheetSyncLogs.length > 0 && (
+              <span className="text-[10px] bg-black/10 px-1.5 py-0.2 rounded-full ml-0.5">
+                {sheetSyncLogs.length}
+              </span>
+            )}
+          </button>
 
           {/* Sync Refresh Button */}
           <button
@@ -246,7 +270,7 @@ export const Header: React.FC = () => {
             className={`p-1.5 text-gray-600 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-full transition-all ${
               isSyncing ? 'animate-spin text-emerald-600' : ''
             }`}
-            title="Refresh & Sync Data with Google Sheets"
+            title="Refresh & Force Sync Data with Google Sheets"
           >
             <RotateCw className="w-4 h-4" />
           </button>

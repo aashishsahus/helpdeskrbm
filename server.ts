@@ -193,6 +193,175 @@ app.post('/api/google/diagnose-connection', async (req, res) => {
   }
 });
 
+// Helper for parsing CSV strings
+function parseCSV(text: string): string[][] {
+  const rows: string[][] = [];
+  let currentRow: string[] = [];
+  let currentField = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    const nextChar = text[i + 1];
+
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        currentField += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      currentRow.push(currentField.trim());
+      currentField = '';
+    } else if ((char === '\r' || char === '\n') && !inQuotes) {
+      if (char === '\r' && nextChar === '\n') {
+        i++;
+      }
+      currentRow.push(currentField.trim());
+      if (currentRow.some(field => field.length > 0)) {
+        rows.push(currentRow);
+      }
+      currentRow = [];
+      currentField = '';
+    } else {
+      currentField += char;
+    }
+  }
+
+  if (currentField.length > 0 || currentRow.length > 0) {
+    currentRow.push(currentField.trim());
+    if (currentRow.some(field => field.length > 0)) {
+      rows.push(currentRow);
+    }
+  }
+
+  return rows;
+}
+
+// Pull real data directly from Google Sheets / Apps Script
+app.post('/api/google/pull-sheet-data', async (req, res) => {
+  const { spreadsheetId, webAppUrl } = req.body;
+  const targetSheetId = spreadsheetId || process.env.SPREADSHEET_ID || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
+  const targetUrl = webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
+
+  let pulledTickets: any[] = [];
+  let pulledUsers: any[] = [];
+  let pulledDepartments: any[] = [];
+  let pulledCategories: any[] = [];
+  let pulledComments: any[] = [];
+  let source = 'unknown';
+  let isSuccess = false;
+  let fetchError = null;
+
+  // 1. Try pulling via Google Apps Script POST getAllData
+  try {
+    const appsScriptRes = await fetch(targetUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'getAllData',
+        spreadsheetId: targetSheetId,
+        timestamp: new Date().toISOString()
+      }),
+      redirect: 'follow'
+    });
+
+    const rawText = await appsScriptRes.text();
+    if (rawText && !rawText.includes('accounts.google.com') && !rawText.includes('ServiceLogin')) {
+      try {
+        const data = JSON.parse(rawText);
+        if (data.tickets && Array.isArray(data.tickets) && data.tickets.length > 0) {
+          pulledTickets = data.tickets;
+          pulledUsers = data.users || [];
+          pulledDepartments = data.departments || [];
+          pulledCategories = data.categories || [];
+          pulledComments = data.comments || [];
+          source = 'Google Apps Script API';
+          isSuccess = true;
+        }
+      } catch {
+        // Not JSON, continue to CSV fallback
+      }
+    }
+  } catch (err: any) {
+    fetchError = err.message;
+  }
+
+  // 2. Fallback: Directly pull CSV from Google Sheets tab
+  if (!isSuccess && targetSheetId) {
+    try {
+      const ticketsCsvUrl = `https://docs.google.com/spreadsheets/d/${targetSheetId}/gviz/tq?tqx=out:csv&sheet=Tickets`;
+      const csvRes = await fetch(ticketsCsvUrl, { redirect: 'follow' });
+      if (csvRes.ok) {
+        const csvText = await csvRes.text();
+        if (csvText && !csvText.includes('<!DOCTYPE') && !csvText.includes('accounts.google.com')) {
+          const rows = parseCSV(csvText);
+          if (rows.length > 1) {
+            // Header is row 0
+            const parsedTickets = [];
+            for (let i = 1; i < rows.length; i++) {
+              const r = rows[i];
+              if (!r || !r[0]) continue;
+              const ticketId = r[0].trim();
+              if (!ticketId || ticketId.toLowerCase() === 'ticket id') continue;
+
+              parsedTickets.push({
+                id: ticketId,
+                employeeId: r[1] || 'EMP-001',
+                employeeName: r[2] || 'User',
+                employeeEmail: r[3] || '',
+                department: r[4] || 'General',
+                location: r[5] || 'Headquarters',
+                category: r[6] || 'Support',
+                subCategory: r[7] || '',
+                subject: r[8] || 'Ticket ' + ticketId,
+                description: r[9] || '',
+                priority: r[10] || 'Medium',
+                status: r[11] || 'Open',
+                assignedAgentName: r[12] || '',
+                assignedAgentId: '',
+                createdDate: r[13] || new Date().toISOString(),
+                slaDueDate: r[14] || '',
+                closedDate: r[15] || '',
+                resolvedDate: r[15] || '',
+                rating: r[16] ? Number(r[16]) : undefined,
+                feedback: r[17] || '',
+                contactNumber: r[18] || '',
+                slaStatus: 'Within SLA',
+                isRealTicket: true
+              });
+            }
+
+            if (parsedTickets.length > 0) {
+              pulledTickets = parsedTickets;
+              source = 'Google Sheets CSV Direct Feed';
+              isSuccess = true;
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      if (!fetchError) fetchError = err.message;
+    }
+  }
+
+  res.json({
+    success: isSuccess,
+    count: pulledTickets.length,
+    tickets: pulledTickets,
+    users: pulledUsers,
+    departments: pulledDepartments,
+    categories: pulledCategories,
+    comments: pulledComments,
+    source,
+    spreadsheetId: targetSheetId,
+    message: isSuccess
+      ? `Successfully pulled ${pulledTickets.length} real tickets from ${source} (${targetSheetId}).`
+      : `No external tickets could be fetched from Google Sheets. ${fetchError ? `(${fetchError})` : 'Verify sheet permissions.'}`
+  });
+});
+
 app.post('/api/google/sync-sheets', async (req, res) => {
   const {
     spreadsheetId,
@@ -248,33 +417,52 @@ app.post('/api/google/sync-sheets', async (req, res) => {
 
     const rawBodyText1 = await response.text();
     let responseData: any = {};
-    if (rawBodyText1 && rawBodyText1.trim()) {
+    let isAuthError = false;
+    let isSuccess = false;
+
+    if (rawBodyText1 && (rawBodyText1.includes('accounts.google.com') || rawBodyText1.includes('Sign in - Google Accounts') || rawBodyText1.includes('ServiceLogin'))) {
+      isAuthError = true;
+      responseData = {
+        error: 'AUTH_REQUIRED',
+        message: 'Google Apps Script requires "Anyone" permission without Google Login. Please Deploy > Manage Deployments > Edit > Who has access: Anyone.'
+      };
+    } else if (rawBodyText1 && rawBodyText1.trim()) {
       try {
         responseData = JSON.parse(rawBodyText1);
+        if (responseData.status === 'OK' || responseData.success || responseData.ticketId || responseData.updatedRow) {
+          isSuccess = true;
+        }
       } catch {
-        responseData = { message: rawBodyText1 };
+        responseData = { message: rawBodyText1.slice(0, 300) };
+        if (response.status === 200) isSuccess = true;
       }
+    } else {
+      if (response.status === 200) isSuccess = true;
     }
 
     res.json({
-      success: true,
+      success: isSuccess && !isAuthError,
+      isAuthError,
       acknowledged: true,
+      statusCode: response.status,
       writeMethod: 'batchUpdate',
       writtenAt: new Date().toISOString(),
       spreadsheetId: targetSheetId,
-      message: `Full sheet batch update acknowledged for Google Sheet (${targetSheetId}).`,
+      message: isAuthError 
+        ? 'Google Apps Script blocked access. Set "Who has access" to "Anyone" in Deploy settings.'
+        : `Synced successfully to Google Sheet (${targetSheetId}).`,
       appsScriptResponse: responseData,
       spreadsheetUrl: `https://docs.google.com/spreadsheets/d/${targetSheetId}/edit`
     });
   } catch (err: any) {
     console.error('Error forwarding sync payload to Google Apps Script:', err);
     res.json({
-      success: true,
+      success: false,
       acknowledged: true,
       writeMethod: 'batchUpdate',
       writtenAt: new Date().toISOString(),
       spreadsheetId: targetSheetId,
-      message: `Configured Google Sheet ID: ${targetSheetId}. (Payload dispatched to ${targetUrl})`,
+      message: `Failed to connect to Google Apps Script URL: ${err.message}`,
       errorDetail: err.message,
       spreadsheetUrl: `https://docs.google.com/spreadsheets/d/${targetSheetId}/edit`
     });
@@ -306,35 +494,54 @@ app.post('/api/google/sync-ticket', async (req, res) => {
 
     const rawBodyText2 = await response.text();
     let responseData: any = {};
-    if (rawBodyText2 && rawBodyText2.trim()) {
+    let isAuthError = false;
+    let isSuccess = false;
+
+    if (rawBodyText2 && (rawBodyText2.includes('accounts.google.com') || rawBodyText2.includes('Sign in - Google Accounts') || rawBodyText2.includes('ServiceLogin'))) {
+      isAuthError = true;
+      responseData = {
+        error: 'AUTH_REQUIRED',
+        message: 'Google Apps Script requires "Anyone" permission without Google Login.'
+      };
+    } else if (rawBodyText2 && rawBodyText2.trim()) {
       try {
         responseData = JSON.parse(rawBodyText2);
+        if (responseData.status === 'OK' || responseData.success || responseData.ticketId) {
+          isSuccess = true;
+        }
       } catch {
-        responseData = { message: rawBodyText2 };
+        responseData = { message: rawBodyText2.slice(0, 300) };
+        if (response.status === 200) isSuccess = true;
       }
+    } else {
+      if (response.status === 200) isSuccess = true;
     }
 
     res.json({
-      success: true,
+      success: isSuccess && !isAuthError,
+      isAuthError,
       acknowledged: true,
       writeMethod: resolvedMethod,
       writtenAt: new Date().toISOString(),
       spreadsheetId: targetSheetId,
       ticketId: ticket?.id,
       action: action || 'createTicket',
-      response: responseData
+      response: responseData,
+      message: isAuthError
+        ? 'Google Apps Script permission blocked. Ensure "Who has access" is "Anyone".'
+        : `Ticket ${ticket?.id || ''} synced to Google Sheets.`
     });
   } catch (err: any) {
     console.warn('Google Apps Script proxy error:', err);
     res.json({
-      success: true,
+      success: false,
       acknowledged: true,
       writeMethod: resolvedMethod,
       writtenAt: new Date().toISOString(),
       spreadsheetId: targetSheetId,
       ticketId: ticket?.id,
       action: action || 'createTicket',
-      message: 'Ticket operation acknowledged locally and synced with Google Sheets.'
+      message: `Failed to sync ticket to Google Sheets: ${err.message}`
     });
   }
 });
