@@ -12,7 +12,10 @@ import {
   RefreshCw,
   ShieldCheck,
   Database,
-  Info
+  Info,
+  AlertTriangle,
+  PlayCircle,
+  HelpCircle
 } from 'lucide-react';
 
 export const GoogleAppsScriptView: React.FC = () => {
@@ -32,6 +35,38 @@ export const GoogleAppsScriptView: React.FC = () => {
   const [copied, setCopied] = useState(false);
   const [isForceSyncing, setIsForceSyncing] = useState(false);
   const [syncStatusMsg, setSyncStatusMsg] = useState('');
+  
+  // Diagnostic Tool State
+  const [isDiagnosing, setIsDiagnosing] = useState(false);
+  const [diagnosticResult, setDiagnosticResult] = useState<any>(null);
+
+  const handleTestConnection = async () => {
+    setIsDiagnosing(true);
+    setDiagnosticResult(null);
+    try {
+      const res = await fetch('/api/google/diagnose-connection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          webAppUrl: settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl,
+          spreadsheetId: settings.spreadsheetId
+        })
+      });
+      const data = await res.json();
+      setDiagnosticResult(data);
+    } catch (err: any) {
+      setDiagnosticResult({
+        success: false,
+        diagnostics: {
+          error: err.message,
+          issueDetected: 'NETWORK_ERROR',
+          fixInstructions: ['Unable to reach server to test Google Apps Script. Check network connection.']
+        }
+      });
+    } finally {
+      setIsDiagnosing(false);
+    }
+  };
 
   const handleManualForceSync = async () => {
     setIsForceSyncing(true);
@@ -52,9 +87,24 @@ export const GoogleAppsScriptView: React.FC = () => {
  */
 
 var DRIVE_ROOT_FOLDER_ID = "${settings.driveFolderId || '1e9Nu2qsZgOVn36VAnZts18LINrjR_1bR'}";
+var DEFAULT_SPREADSHEET_ID = "${settings.spreadsheetId || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow'}";
+
+/** 
+ * TEST FUNCTION: Click "Run" on this function inside Apps Script editor to authorize sheet permissions! 
+ */
+function testSync() {
+  var ss;
+  try {
+    ss = SpreadsheetApp.openById(DEFAULT_SPREADSHEET_ID);
+  } catch (e) {
+    ss = SpreadsheetApp.getActiveSpreadsheet();
+  }
+  setupHelpDeskSheets(ss);
+  Logger.log("✅ Google Sheet connected successfully! Sheet Title: " + (ss ? ss.getName() : "Unknown"));
+}
 
 function doGet(e) {
-  return ContentService.createTextOutput(JSON.stringify({ status: "OK", service: "Internal Help Desk API" }))
+  return ContentService.createTextOutput(JSON.stringify({ status: "OK", service: "Apex Help Desk API", timestamp: new Date().toISOString() }))
     .setMimeType(ContentService.MimeType.JSON);
 }
 
@@ -62,7 +112,7 @@ function doPost(e) {
   try {
     var contents = JSON.parse(e.postData.contents);
     var action = contents.action;
-    var targetSpreadsheetId = contents.spreadsheetId || "${settings.spreadsheetId || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow'}";
+    var targetSpreadsheetId = contents.spreadsheetId || DEFAULT_SPREADSHEET_ID;
     var ss;
     if (targetSpreadsheetId) {
       try {
@@ -74,8 +124,22 @@ function doPost(e) {
       ss = SpreadsheetApp.getActiveSpreadsheet();
     }
 
+    if (!ss) {
+      ss = SpreadsheetApp.getActiveSpreadsheet();
+    }
+
     // Ensure all database tabs exist
     setupHelpDeskSheets(ss);
+
+    if (action === "testConnection") {
+      return ContentService.createTextOutput(JSON.stringify({
+        success: true,
+        status: "OK",
+        message: "Google Apps Script successfully communicated with Spreadsheet!",
+        sheetName: ss ? ss.getName() : "Spreadsheet",
+        timestamp: new Date().toISOString()
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
 
     if (action === "createTicket") {
       var ticketSheet = ss.getSheetByName("Tickets");
@@ -584,6 +648,14 @@ function setupHelpDeskSheets(ss) {
 
           <div className="flex items-center gap-2">
             <button
+              onClick={handleTestConnection}
+              disabled={isDiagnosing}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl flex items-center gap-2 shadow-sm transition-all disabled:opacity-50"
+            >
+              <PlayCircle className={`w-3.5 h-3.5 ${isDiagnosing ? 'animate-spin' : ''}`} />
+              <span>{isDiagnosing ? 'Testing Connection...' : 'Test Connection / Diagnose'}</span>
+            </button>
+            <button
               onClick={handleManualForceSync}
               disabled={isForceSyncing}
               className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl flex items-center gap-2 shadow-sm transition-all disabled:opacity-50"
@@ -603,6 +675,45 @@ function setupHelpDeskSheets(ss) {
             </a>
           </div>
         </div>
+
+        {/* Diagnostic Results Box */}
+        {diagnosticResult && (
+          <div className={`p-4 rounded-xl border ${diagnosticResult.success ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-amber-50 border-amber-300 text-amber-950'} space-y-2`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 font-bold text-sm">
+                {diagnosticResult.success ? (
+                  <>
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                    <span>Connection Successful! Google Apps Script is actively writing to Google Sheets.</span>
+                  </>
+                ) : (
+                  <>
+                    <AlertTriangle className="w-5 h-5 text-amber-600" />
+                    <span>Connection Issue Detected with Google Apps Script Web App!</span>
+                  </>
+                )}
+              </div>
+              <span className="text-xs font-mono px-2 py-0.5 bg-white/80 rounded border">
+                Status: {diagnosticResult.diagnostics?.statusCode || (diagnosticResult.success ? '200 OK' : 'Error')}
+              </span>
+            </div>
+
+            {!diagnosticResult.success && (
+              <div className="text-xs space-y-1.5 pt-1 border-t border-amber-200">
+                <p className="font-semibold text-amber-900">Kyun update nahi ho raha hai aur isko kaise theek karein:</p>
+                <ol className="list-decimal list-inside space-y-1 text-amber-800">
+                  {diagnosticResult.diagnostics?.fixInstructions?.map((inst: string, idx: number) => (
+                    <li key={idx} className="font-medium">{inst}</li>
+                  ))}
+                  <li>Google Sheet open karein → <strong>Extensions → Apps Script</strong>.</li>
+                  <li>Niche diye gaye <strong>Code.gs</strong> ko pura Copy karein aur Apps Script me paste karke Save karein.</li>
+                  <li>Apps Script me <strong>testSync</strong> function select karke <strong>▶ Run</strong> karein (Google account se permission Allow karein).</li>
+                  <li>Top right me <strong>Deploy → Manage Deployments → Pencil Icon (Edit) → Version: "New Version" → Deploy</strong> karein!</li>
+                </ol>
+              </div>
+            )}
+          </div>
+        )}
 
         {syncStatusMsg && (
           <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold rounded-xl flex items-center gap-2">
@@ -669,16 +780,28 @@ function setupHelpDeskSheets(ss) {
           </div>
         </div>
 
-        {/* Verification Info Box */}
-        <div className="p-3.5 bg-emerald-50/70 border border-emerald-200/80 rounded-xl text-xs text-emerald-900 flex items-start gap-2.5">
-          <Info className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
-          <div className="space-y-1">
-            <p className="font-bold">Aapko kaise pata chalega ki konsa data sync ho gaya hai?</p>
-            <ul className="list-disc list-inside space-y-0.5 text-[11px] text-emerald-800">
-              <li><strong>Top Header Status Badge:</strong> Header me Hamesha <span className="bg-emerald-200 text-emerald-900 px-1 rounded font-bold">SAVED IN SHEETS</span> green badge dikhta hai, job update chal raha ho tab <span className="bg-amber-200 text-amber-900 px-1 rounded font-bold">SYNCING...</span> hota hai.</li>
-              <li><strong>Table Badges:</strong> Ticket Directory & User Management tables me har ticket aur user ke niche green <span className="bg-emerald-200 text-emerald-900 px-1 rounded font-bold">✓ Synced</span> badge laga rehta hai.</li>
-              <li><strong>Live Google Sheet Verification:</strong> Upper <strong>"Open Google Sheet"</strong> button par click karke aap direct apni Google Sheet me target tabs (Tickets, Users, Departments, Categories, MasterDropdowns) dekh sakte hain.</li>
-            </ul>
+        {/* 3 Steps To Fix Sheet Sync */}
+        <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-950 space-y-2">
+          <div className="flex items-center gap-2 font-bold text-amber-900 text-sm">
+            <HelpCircle className="w-4 h-4 text-amber-700 shrink-0" />
+            <span>Agar Google Sheet me kuch bhi change nahi ho raha hai, toh ye 3 step karein:</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+            <div className="bg-white p-3 rounded-lg border border-amber-200 space-y-1">
+              <span className="px-2 py-0.5 bg-amber-100 text-amber-900 font-extrabold rounded text-[10px]">STEP 1</span>
+              <p className="font-bold text-gray-900">Apps Script Me Permission Allow Karein</p>
+              <p className="text-[11px] text-gray-600">Google Sheet me <strong>Extensions → Apps Script</strong> kholein. Code paste karein. Dropdown me <strong>testSync</strong> select karke <strong>▶ Run</strong> karein aur <em>Review Permissions → Advanced → Allow</em> karein.</p>
+            </div>
+            <div className="bg-white p-3 rounded-lg border border-amber-200 space-y-1">
+              <span className="px-2 py-0.5 bg-amber-100 text-amber-900 font-extrabold rounded text-[10px]">STEP 2</span>
+              <p className="font-bold text-gray-900">"New Version" Deploy Karein (Most Important)</p>
+              <p className="text-[11px] text-gray-600">Apps Script me top right <strong>Deploy → Manage Deployments</strong> me jaakar <strong>Pencil (Edit)</strong> icon dabayein. Version me <strong>New version</strong> select karein.</p>
+            </div>
+            <div className="bg-white p-3 rounded-lg border border-amber-200 space-y-1">
+              <span className="px-2 py-0.5 bg-amber-100 text-amber-900 font-extrabold rounded text-[10px]">STEP 3</span>
+              <p className="font-bold text-gray-900">"Who has access" = Anyone</p>
+              <p className="text-[11px] text-gray-600">Deployment settings me <strong>Execute as: Me</strong> aur <strong>Who has access: Anyone</strong> set karke <strong>Deploy</strong> karein. Web App URL ko Settings me paste karein.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -701,18 +824,6 @@ function setupHelpDeskSheets(ss) {
         <pre className="p-4 bg-gray-950 text-emerald-400 font-mono text-xs rounded-xl overflow-x-auto leading-relaxed border border-gray-800 max-h-96">
           {appsScriptCode}
         </pre>
-
-        {/* Step-by-step Setup Guide */}
-        <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-2 text-xs text-blue-900">
-          <h4 className="font-bold text-sm text-blue-950">Deployment Instructions:</h4>
-          <ol className="list-decimal list-inside space-y-1 leading-relaxed">
-            <li>Open your Google Sheet or go to <strong>script.google.com</strong>.</li>
-            <li>Paste the above code into the <strong>Code.gs</strong> editor.</li>
-            <li>Click <strong>Deploy → New deployment</strong> and select type <strong>Web App</strong>.</li>
-            <li>Set "Execute as" to <strong>Me</strong> and "Who has access" to <strong>Anyone</strong>.</li>
-            <li>Copy the generated Web App URL and paste it into System Settings.</li>
-          </ol>
-        </div>
       </div>
     </div>
   );

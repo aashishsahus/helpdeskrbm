@@ -111,6 +111,88 @@ app.get(['/auth/callback', '/auth/callback/'], (req, res) => {
     </html>
   `);
 });
+app.post('/api/google/diagnose-connection', async (req, res) => {
+  const { webAppUrl, spreadsheetId } = req.body;
+  const targetUrl = webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
+  const targetSheetId = spreadsheetId || process.env.SPREADSHEET_ID || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
+
+  const diagnostics: any = {
+    testedAt: new Date().toISOString(),
+    targetUrl,
+    targetSheetId,
+    getSuccess: false,
+    postSuccess: false,
+    statusCode: null,
+    issueDetected: null,
+    fixInstructions: []
+  };
+
+  try {
+    // 1. Test GET Ping
+    const getRes = await fetch(targetUrl, { method: 'GET', redirect: 'follow' });
+    diagnostics.statusCode = getRes.status;
+    const getText = await getRes.text();
+
+    if (getText.includes('accounts.google.com') || getText.includes('Sign in - Google Accounts') || getText.includes('<form')) {
+      diagnostics.issueDetected = 'AUTH_RESTRICTED';
+      diagnostics.fixInstructions.push('Google Apps Script "Who has access" is currently restricted.');
+      diagnostics.fixInstructions.push('Fix: Open Apps Script -> Deploy -> Manage Deployments -> Edit -> set "Who has access" to "Anyone" -> Deploy.');
+    } else {
+      try {
+        const json = JSON.parse(getText);
+        if (json.status === 'OK' || json.service) {
+          diagnostics.getSuccess = true;
+        }
+      } catch {
+        // Not JSON
+      }
+    }
+
+    // 2. Test POST write
+    const postRes = await fetch(targetUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'testConnection',
+        spreadsheetId: targetSheetId,
+        testTimestamp: new Date().toISOString()
+      }),
+      redirect: 'follow'
+    });
+
+    const postText = await postRes.text();
+    if (postText.includes('accounts.google.com')) {
+      diagnostics.issueDetected = 'AUTH_RESTRICTED';
+      if (diagnostics.fixInstructions.length === 0) {
+        diagnostics.fixInstructions.push('Google Apps Script requires "Anyone" permission without login.');
+      }
+    } else {
+      try {
+        const postJson = JSON.parse(postText);
+        if (postJson.success || postJson.status === 'OK') {
+          diagnostics.postSuccess = true;
+          diagnostics.response = postJson;
+        }
+      } catch {
+        diagnostics.rawResponse = postText.slice(0, 300);
+      }
+    }
+
+    res.json({
+      success: diagnostics.getSuccess && diagnostics.postSuccess,
+      diagnostics
+    });
+  } catch (err: any) {
+    diagnostics.error = err.message;
+    diagnostics.issueDetected = 'NETWORK_OR_URL_ERROR';
+    diagnostics.fixInstructions.push(`Failed to reach ${targetUrl}. Please verify the URL.`);
+    res.json({
+      success: false,
+      diagnostics
+    });
+  }
+});
+
 app.post('/api/google/sync-sheets', async (req, res) => {
   const {
     spreadsheetId,
