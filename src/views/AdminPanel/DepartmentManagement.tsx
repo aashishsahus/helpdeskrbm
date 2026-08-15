@@ -85,6 +85,7 @@ export const DepartmentManagement: React.FC = () => {
             <table className="w-full text-left text-xs">
               <thead className="bg-gray-50 border-b font-bold text-gray-500 uppercase text-[10px]">
                 <tr>
+                  <th className="p-3 w-28">Dept ID</th>
                   <th className="p-3">Department</th>
                   <th className="p-3">Department Head</th>
                   <th className="p-3">Support Team</th>
@@ -94,6 +95,11 @@ export const DepartmentManagement: React.FC = () => {
               <tbody className="divide-y divide-gray-100">
                 {departments.map(d => (
                   <tr key={d.id} className="hover:bg-gray-50">
+                    <td className="p-3">
+                      <span className="font-mono font-bold text-[11px] px-2 py-0.5 bg-blue-50 text-blue-700 rounded border border-blue-200">
+                        {d.id}
+                      </span>
+                    </td>
                     <td className="p-3 font-bold text-gray-900">{d.name}</td>
                     <td className="p-3 text-gray-700">{d.headName}</td>
                     <td className="p-3 text-blue-700 font-semibold">{d.supportTeam}</td>

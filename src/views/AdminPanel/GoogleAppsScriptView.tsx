@@ -552,18 +552,36 @@ function doPost(e) {
     }
 
     if (action === "updateDropdowns" || action === "updateMasterDropdowns") {
-      var mSheet = ss.getSheetByName("MasterDropdowns");
+      var mSheet = ss.getSheetByName("MasterDropdowns") || ss.getSheetByName("DropdownOptions");
       if (mSheet) {
         mSheet.clearContents();
-        mSheet.appendRow(["Dropdown Type", "Option Value", "Updated At"]);
+        mSheet.appendRow(["Option ID", "Dropdown Type", "Option Code", "Option Value", "Status", "Updated At"]);
         var nowStr = new Date().toISOString();
-        (contents.branches || []).forEach(function(b) { mSheet.appendRow(["Branch / Location", b, nowStr]); });
-        (contents.prioritiesList || []).forEach(function(p) { mSheet.appendRow(["Ticket Priority", p, nowStr]); });
-        (contents.statusesList || []).forEach(function(s) { mSheet.appendRow(["Ticket Status", s, nowStr]); });
-        (contents.rolesList || []).forEach(function(r) { mSheet.appendRow(["User Role", r, nowStr]); });
-        (contents.designationsList || []).forEach(function(d) { mSheet.appendRow(["Designation", d, nowStr]); });
+        var formatOptionId = function(prefix, idx) {
+          var num = idx + 1;
+          return prefix + "-" + (num < 10 ? "00" + num : (num < 100 ? "0" + num : num));
+        };
+        var formatOptionCode = function(val) {
+          return (val || "").toString().toUpperCase().replace(/[^A-Z0-9]/g, "_").replace(/__+/g, "_").slice(0, 20);
+        };
+
+        (contents.branches || []).forEach(function(b, idx) {
+          mSheet.appendRow([formatOptionId("LOC", idx), "Branch / Location", formatOptionCode(b), b, "Active", nowStr]);
+        });
+        (contents.prioritiesList || []).forEach(function(p, idx) {
+          mSheet.appendRow([formatOptionId("PRI", idx), "Ticket Priority", formatOptionCode(p), p, "Active", nowStr]);
+        });
+        (contents.statusesList || []).forEach(function(s, idx) {
+          mSheet.appendRow([formatOptionId("STS", idx), "Ticket Status", formatOptionCode(s), s, "Active", nowStr]);
+        });
+        (contents.rolesList || []).forEach(function(r, idx) {
+          mSheet.appendRow([formatOptionId("ROL", idx), "User Role", formatOptionCode(r), r, "Active", nowStr]);
+        });
+        (contents.designationsList || []).forEach(function(d, idx) {
+          mSheet.appendRow([formatOptionId("DSG", idx), "Designation", formatOptionCode(d), d, "Active", nowStr]);
+        });
       }
-      return ContentService.createTextOutput(JSON.stringify({ success: true, message: "Dropdown options synced to Google Sheets" }))
+      return ContentService.createTextOutput(JSON.stringify({ success: true, message: "Dropdown options synced with unique Option IDs to Google Sheets" }))
         .setMimeType(ContentService.MimeType.JSON);
     }
 
@@ -663,13 +681,31 @@ function doPost(e) {
 
       if (mSheet) {
         mSheet.clearContents();
-        mSheet.appendRow(["Dropdown Type", "Option Value", "Updated At"]);
+        mSheet.appendRow(["Option ID", "Dropdown Type", "Option Code", "Option Value", "Status", "Updated At"]);
         var nowStr = new Date().toISOString();
-        (contents.branches || []).forEach(function(b) { mSheet.appendRow(["Branch / Location", b, nowStr]); });
-        (contents.prioritiesList || []).forEach(function(p) { mSheet.appendRow(["Ticket Priority", p, nowStr]); });
-        (contents.statusesList || []).forEach(function(s) { mSheet.appendRow(["Ticket Status", s, nowStr]); });
-        (contents.rolesList || []).forEach(function(r) { mSheet.appendRow(["User Role", r, nowStr]); });
-        (contents.designationsList || []).forEach(function(d) { mSheet.appendRow(["Designation", d, nowStr]); });
+        var formatOptionId = function(prefix, idx) {
+          var num = idx + 1;
+          return prefix + "-" + (num < 10 ? "00" + num : (num < 100 ? "0" + num : num));
+        };
+        var formatOptionCode = function(val) {
+          return (val || "").toString().toUpperCase().replace(/[^A-Z0-9]/g, "_").replace(/__+/g, "_").slice(0, 20);
+        };
+
+        (contents.branches || []).forEach(function(b, idx) {
+          mSheet.appendRow([formatOptionId("LOC", idx), "Branch / Location", formatOptionCode(b), b, "Active", nowStr]);
+        });
+        (contents.prioritiesList || []).forEach(function(p, idx) {
+          mSheet.appendRow([formatOptionId("PRI", idx), "Ticket Priority", formatOptionCode(p), p, "Active", nowStr]);
+        });
+        (contents.statusesList || []).forEach(function(s, idx) {
+          mSheet.appendRow([formatOptionId("STS", idx), "Ticket Status", formatOptionCode(s), s, "Active", nowStr]);
+        });
+        (contents.rolesList || []).forEach(function(r, idx) {
+          mSheet.appendRow([formatOptionId("ROL", idx), "User Role", formatOptionCode(r), r, "Active", nowStr]);
+        });
+        (contents.designationsList || []).forEach(function(d, idx) {
+          mSheet.appendRow([formatOptionId("DSG", idx), "Designation", formatOptionCode(d), d, "Active", nowStr]);
+        });
       }
 
       return ContentService.createTextOutput(JSON.stringify({ success: true, message: "All tabs synchronized safely without erasing existing data." }))
@@ -771,8 +807,8 @@ function setupHelpDeskSheets(ss) {
         sheet.appendRow(["Department ID", "Department Name", "Department Head", "Support Team"]);
       } else if (tabName === "Categories") {
         sheet.appendRow(["Category ID", "Category Name", "Target Department", "Sub-Categories", "Default Priority"]);
-      } else if (tabName === "MasterDropdowns") {
-        sheet.appendRow(["Dropdown Type", "Option Value", "Updated At"]);
+      } else if (tabName === "MasterDropdowns" || tabName === "DropdownOptions") {
+        sheet.appendRow(["Option ID", "Dropdown Type", "Option Code", "Option Value", "Status", "Updated At"]);
       } else if (tabName === "AuditLogs") {
         sheet.appendRow(["Log ID", "Action", "Module", "User", "Details", "Timestamp"]);
       }

@@ -305,7 +305,8 @@ export const MasterDropdownsView: React.FC = () => {
                 <table className="w-full text-left text-xs">
                   <thead className="bg-gray-50 border-b font-bold text-gray-500 uppercase text-[10px]">
                     <tr>
-                      <th className="p-3">#</th>
+                      <th className="p-3 w-10">#</th>
+                      <th className="p-3 w-28">Option ID</th>
                       <th className="p-3">Option Name</th>
                       <th className="p-3 text-right">Actions</th>
                     </tr>
@@ -313,11 +314,12 @@ export const MasterDropdownsView: React.FC = () => {
                   <tbody className="divide-y divide-gray-100">
                     {(() => {
                       let currentList: string[] = [];
-                      if (activeTab === 'branches') currentList = branches;
-                      if (activeTab === 'priorities') currentList = prioritiesList;
-                      if (activeTab === 'statuses') currentList = statusesList;
-                      if (activeTab === 'roles') currentList = rolesList;
-                      if (activeTab === 'designations') currentList = designationsList;
+                      let idPrefix = 'OPT';
+                      if (activeTab === 'branches') { currentList = branches; idPrefix = 'LOC'; }
+                      if (activeTab === 'priorities') { currentList = prioritiesList; idPrefix = 'PRI'; }
+                      if (activeTab === 'statuses') { currentList = statusesList; idPrefix = 'STS'; }
+                      if (activeTab === 'roles') { currentList = rolesList; idPrefix = 'ROL'; }
+                      if (activeTab === 'designations') { currentList = designationsList; idPrefix = 'DSG'; }
 
                       const filtered = currentList.filter(item =>
                         item.toLowerCase().includes(searchQuery.toLowerCase())
@@ -326,73 +328,82 @@ export const MasterDropdownsView: React.FC = () => {
                       if (filtered.length === 0) {
                         return (
                           <tr>
-                            <td colSpan={3} className="p-8 text-center text-gray-400">
+                            <td colSpan={4} className="p-8 text-center text-gray-400">
                               No dropdown options found matching "{searchQuery}".
                             </td>
                           </tr>
                         );
                       }
 
-                      return filtered.map((item, idx) => (
-                        <tr key={item} className="hover:bg-gray-50 transition-colors">
-                          <td className="p-3 text-gray-400 font-mono text-[11px] w-12">{idx + 1}</td>
-                          <td className="p-3 font-semibold text-gray-900">
-                            {editingItemKey === item ? (
-                              <div className="flex items-center gap-2">
-                                <input
-                                  type="text"
-                                  value={editValue}
-                                  onChange={e => setEditValue(e.target.value)}
-                                  className="px-2 py-1 border border-blue-500 rounded focus:outline-none text-xs w-full"
-                                  autoFocus
-                                />
-                              </div>
-                            ) : (
-                              <span>{item}</span>
-                            )}
-                          </td>
-                          <td className="p-3 text-right">
-                            {editingItemKey === item ? (
-                              <div className="flex items-center justify-end gap-1">
-                                <button
-                                  onClick={() => handleSaveEdit(item)}
-                                  className="p-1 text-green-600 hover:bg-green-50 rounded"
-                                  title="Save Changes"
-                                >
-                                  <Check className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => setEditingItemKey(null)}
-                                  className="p-1 text-gray-400 hover:bg-gray-100 rounded"
-                                  title="Cancel"
-                                >
-                                  <X className="w-4 h-4" />
-                                </button>
-                              </div>
-                            ) : (
-                              <div className="flex items-center justify-end gap-1">
-                                <button
-                                  onClick={() => {
-                                    setEditingItemKey(item);
-                                    setEditValue(item);
-                                  }}
-                                  className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                  title="Edit Name"
-                                >
-                                  <Edit2 className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  onClick={() => handleDelete(item)}
-                                  className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                  title="Delete Option"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      ));
+                      return filtered.map((item, idx) => {
+                        const optionNum = idx + 1;
+                        const optionId = `${idPrefix}-${optionNum < 10 ? '00' + optionNum : (optionNum < 100 ? '0' + optionNum : optionNum)}`;
+                        return (
+                          <tr key={item} className="hover:bg-gray-50 transition-colors">
+                            <td className="p-3 text-gray-400 font-mono text-[11px] w-10">{idx + 1}</td>
+                            <td className="p-3">
+                              <span className="font-mono font-bold text-[11px] px-2 py-0.5 bg-blue-50 text-blue-700 rounded border border-blue-200">
+                                {optionId}
+                              </span>
+                            </td>
+                            <td className="p-3 font-semibold text-gray-900">
+                              {editingItemKey === item ? (
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="text"
+                                    value={editValue}
+                                    onChange={e => setEditValue(e.target.value)}
+                                    className="px-2 py-1 border border-blue-500 rounded focus:outline-none text-xs w-full"
+                                    autoFocus
+                                  />
+                                </div>
+                              ) : (
+                                <span>{item}</span>
+                              )}
+                            </td>
+                            <td className="p-3 text-right">
+                              {editingItemKey === item ? (
+                                <div className="flex items-center justify-end gap-1">
+                                  <button
+                                    onClick={() => handleSaveEdit(item)}
+                                    className="p-1 text-green-600 hover:bg-green-50 rounded"
+                                    title="Save Changes"
+                                  >
+                                    <Check className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => setEditingItemKey(null)}
+                                    className="p-1 text-gray-400 hover:bg-gray-100 rounded"
+                                    title="Cancel"
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center justify-end gap-1">
+                                  <button
+                                    onClick={() => {
+                                      setEditingItemKey(item);
+                                      setEditValue(item);
+                                    }}
+                                    className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                    title="Edit Name"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDelete(item)}
+                                    className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                    title="Delete Option"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      });
                     })()}
                   </tbody>
                 </table>
@@ -408,6 +419,7 @@ export const MasterDropdownsView: React.FC = () => {
               <table className="w-full text-left text-xs">
                 <thead className="bg-gray-50 border-b font-bold text-gray-500 uppercase text-[10px]">
                   <tr>
+                    <th className="p-3 w-28">Dept ID</th>
                     <th className="p-3">Department Name</th>
                     <th className="p-3">Department Head</th>
                     <th className="p-3">Support Team</th>
@@ -419,6 +431,11 @@ export const MasterDropdownsView: React.FC = () => {
                     .filter(d => d.name.toLowerCase().includes(searchQuery.toLowerCase()))
                     .map(d => (
                       <tr key={d.id} className="hover:bg-gray-50">
+                        <td className="p-3">
+                          <span className="font-mono font-bold text-[11px] px-2 py-0.5 bg-blue-50 text-blue-700 rounded border border-blue-200">
+                            {d.id}
+                          </span>
+                        </td>
                         <td className="p-3 font-bold text-gray-900">{d.name}</td>
                         <td className="p-3 text-gray-700">{d.headName}</td>
                         <td className="p-3 text-blue-700 font-semibold">{d.supportTeam}</td>
@@ -453,6 +470,7 @@ export const MasterDropdownsView: React.FC = () => {
               <table className="w-full text-left text-xs">
                 <thead className="bg-gray-50 border-b font-bold text-gray-500 uppercase text-[10px]">
                   <tr>
+                    <th className="p-3 w-28">Category ID</th>
                     <th className="p-3">Category Name</th>
                     <th className="p-3">Target Department</th>
                     <th className="p-3">Sub Categories</th>
@@ -465,6 +483,11 @@ export const MasterDropdownsView: React.FC = () => {
                     .filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
                     .map(c => (
                       <tr key={c.id} className="hover:bg-gray-50">
+                        <td className="p-3">
+                          <span className="font-mono font-bold text-[11px] px-2 py-0.5 bg-blue-50 text-blue-700 rounded border border-blue-200">
+                            {c.id}
+                          </span>
+                        </td>
                         <td className="p-3 font-bold text-gray-900">{c.name}</td>
                         <td className="p-3 text-gray-700">{c.department}</td>
                         <td className="p-3">
