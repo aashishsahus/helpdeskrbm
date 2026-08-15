@@ -14,6 +14,7 @@ import {
   Inbox
 } from 'lucide-react';
 import { TicketPriority, TicketStatus } from '../types';
+import { isTicketRaisedByUser } from '../utils/ticketSecurity';
 
 export const EmployeeDashboardView: React.FC = () => {
   const {
@@ -27,11 +28,9 @@ export const EmployeeDashboardView: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [priorityFilter, setPriorityFilter] = useState<string>('All');
 
-  // Filter user's own tickets
+  // Filter user's own tickets with comprehensive security matching
   const myTickets = currentUser
-    ? tickets.filter(
-        t => t.employeeId === currentUser.employeeId || t.employeeEmail === currentUser.email
-      )
+    ? tickets.filter(t => isTicketRaisedByUser(t, currentUser))
     : [];
 
   const openCount = myTickets.filter(t => t.status === 'Open').length;

@@ -21,6 +21,7 @@ import {
   Briefcase,
   Star
 } from 'lucide-react';
+import { isTicketRaisedByUser, isTicketAssignedToAgent } from '../utils/ticketSecurity';
 
 export const Sidebar: React.FC = () => {
   const { currentUser, activeView, setActiveView, tickets, notifications } = useApp();
@@ -30,7 +31,15 @@ export const Sidebar: React.FC = () => {
   const isAgent = currentUser ? (currentUser.role === 'Support Agent' || currentUser.role === 'Support Manager') : false;
   const isAdmin = currentUser ? (currentUser.role === 'Admin' || currentUser.role === 'Super Admin') : false;
 
-  const openTicketsCount = tickets.filter(t => t.status === 'Open' || t.status === 'In Progress').length;
+  const userTickets = currentUser
+    ? isEmployee
+      ? tickets.filter(t => isTicketRaisedByUser(t, currentUser))
+      : isAgent
+      ? tickets.filter(t => isTicketAssignedToAgent(t, currentUser) || t.department?.toLowerCase() === currentUser.department?.toLowerCase())
+      : tickets
+    : [];
+
+  const openTicketsCount = userTickets.filter(t => t.status === 'Open' || t.status === 'In Progress' || t.status === 'Pending').length;
   const unreadNotifCount = currentUser ? notifications.filter(n => !n.read && n.userId === currentUser.id).length : 0;
 
   const navItems = [
@@ -42,14 +51,14 @@ export const Sidebar: React.FC = () => {
     },
     {
       id: 'tickets',
-      label: 'Ticket Directory',
+      label: isEmployee ? 'My Tickets' : isAgent ? 'Support Queue' : 'Ticket Directory',
       icon: Ticket,
       badge: openTicketsCount > 0 ? openTicketsCount : undefined,
       visible: true
     },
     {
       id: 'feedback',
-      label: 'Feedback & Ratings',
+      label: isEmployee ? 'My Feedback' : 'Feedback & Ratings',
       icon: Star,
       visible: true
     },

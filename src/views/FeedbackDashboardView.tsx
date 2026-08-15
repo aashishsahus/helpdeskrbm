@@ -21,9 +21,12 @@ import {
 } from 'lucide-react';
 import { Ticket } from '../types';
 import { SendEmailModal } from '../components/SendEmailModal';
+import { isTicketRaisedByUser } from '../utils/ticketSecurity';
 
 export const FeedbackDashboardView: React.FC = () => {
-  const { tickets, users, setSelectedTicketId, addAuditLog } = useApp();
+  const { currentUser, tickets, users, setSelectedTicketId, addAuditLog } = useApp();
+
+  const isEmployee = currentUser?.role === 'Employee';
 
   // Filters
   const [timeframe, setTimeframe] = useState<'daily' | 'weekly' | 'monthly' | 'all'>('all');
@@ -39,10 +42,18 @@ export const FeedbackDashboardView: React.FC = () => {
     ticketSubject?: string;
   }>({ email: '', name: '' });
 
+  // Base tickets scoped for role
+  const scopedBaseTickets = useMemo(() => {
+    if (isEmployee && currentUser) {
+      return tickets.filter(t => isTicketRaisedByUser(t, currentUser));
+    }
+    return tickets;
+  }, [tickets, isEmployee, currentUser]);
+
   // Filter tickets by timeframe
   const timeframeFilteredTickets = useMemo(() => {
     const now = new Date();
-    return tickets.filter(t => {
+    return scopedBaseTickets.filter(t => {
       // Must have resolved or closed date or updatedDate
       const dateStr = t.resolvedDate || t.updatedDate || t.createdDate;
       if (!dateStr) return true;
@@ -70,7 +81,7 @@ export const FeedbackDashboardView: React.FC = () => {
 
       return true; // All time
     });
-  }, [tickets, timeframe]);
+  }, [scopedBaseTickets, timeframe]);
 
   // Rated tickets within timeframe
   const ratedTickets = useMemo(() => {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import {
   Search,
@@ -17,13 +17,18 @@ import {
   Sparkles,
   Layers,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  User,
+  ShieldCheck,
+  Building
 } from 'lucide-react';
 import { TicketPriority, TicketStatus } from '../types';
 import { SendEmailModal } from '../components/SendEmailModal';
+import { isTicketRaisedByUser, isTicketAssignedToAgent } from '../utils/ticketSecurity';
 
 export const TicketDirectoryView: React.FC = () => {
   const {
+    currentUser,
     tickets,
     setSelectedTicketId,
     setIsCreateTicketOpen,
@@ -41,6 +46,13 @@ export const TicketDirectoryView: React.FC = () => {
     demoTicketsCount,
     realTicketsCount
   } = useApp();
+
+  const isEmployee = currentUser ? currentUser.role === 'Employee' : true;
+  const isAgent = currentUser ? (currentUser.role === 'Support Agent' || currentUser.role === 'Support Manager') : false;
+  const isAdmin = currentUser ? (currentUser.role === 'Admin' || currentUser.role === 'Super Admin') : false;
+
+  // For agents/admins: quick scope toggle
+  const [agentScope, setAgentScope] = useState<'all' | 'assigned' | 'dept'>('all');
 
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [priorityFilter, setPriorityFilter] = useState<string>('All');
@@ -60,6 +72,30 @@ export const TicketDirectoryView: React.FC = () => {
     subject: ''
   });
 
+  // Base tickets filtered strictly by role authorization
+  const scopedTickets = useMemo(() => {
+    if (!currentUser) return [];
+
+    // CRITICAL: Standard Employees MUST ONLY see tickets raised by their own ID/email/name
+    if (isEmployee) {
+      return tickets.filter(t => isTicketRaisedByUser(t, currentUser));
+    }
+
+    // Support Agents / Managers can view according to their chosen queue tab
+    if (isAgent) {
+      if (agentScope === 'assigned') {
+        return tickets.filter(t => isTicketAssignedToAgent(t, currentUser));
+      }
+      if (agentScope === 'dept' && currentUser.department) {
+        return tickets.filter(t => (t.department || '').toLowerCase() === currentUser.department.toLowerCase());
+      }
+      return tickets;
+    }
+
+    // Admins have access to the master organizational directory
+    return tickets;
+  }, [tickets, currentUser, isEmployee, isAgent, agentScope]);
+
   const handlePullData = async () => {
     setIsPulling(true);
     setPullMessage(null);
@@ -74,44 +110,52 @@ export const TicketDirectoryView: React.FC = () => {
     }
   };
 
-  const filteredTickets = tickets.filter(t => {
-    const matchesSearch =
-      !globalSearchQuery ||
-      t.id.toLowerCase().includes(globalSearchQuery.toLowerCase()) ||
-      t.subject.toLowerCase().includes(globalSearchQuery.toLowerCase()) ||
-      t.employeeName.toLowerCase().includes(globalSearchQuery.toLowerCase()) ||
-      t.category.toLowerCase().includes(globalSearchQuery.toLowerCase()) ||
-      t.department.toLowerCase().includes(globalSearchQuery.toLowerCase()) ||
-      t.location.toLowerCase().includes(globalSearchQuery.toLowerCase());
+  const filteredTickets = useMemo(() => {
+    return scopedTickets.filter(t => {
+      const matchesSearch =
+        !globalSearchQuery ||
+        t.id.toLowerCase().includes(globalSearchQuery.toLowerCase()) ||
+        t.subject.toLowerCase().includes(globalSearchQuery.toLowerCase()) ||
+        t.employeeName.toLowerCase().includes(globalSearchQuery.toLowerCase()) ||
+        (t.employeeEmail && t.employeeEmail.toLowerCase().includes(globalSearchQuery.toLowerCase())) ||
+        (t.employeeId && t.employeeId.toLowerCase().includes(globalSearchQuery.toLowerCase())) ||
+        t.category.toLowerCase().includes(globalSearchQuery.toLowerCase()) ||
+        t.department.toLowerCase().includes(globalSearchQuery.toLowerCase()) ||
+        t.location.toLowerCase().includes(globalSearchQuery.toLowerCase());
 
-    const matchesStatus = statusFilter === 'All' || t.status === statusFilter;
-    const matchesPriority = priorityFilter === 'All' || t.priority === priorityFilter;
-    const matchesCategory = categoryFilter === 'All' || t.category === categoryFilter;
-    const matchesDepartment = departmentFilter === 'All' || t.department === departmentFilter;
-    const matchesBranch = branchFilter === 'All' || t.location === branchFilter;
-    const matchesSla = slaFilter === 'All' || t.slaStatus === slaFilter;
+      const matchesStatus = statusFilter === 'All' || t.status === statusFilter;
+      const matchesPriority = priorityFilter === 'All' || t.priority === priorityFilter;
+      const matchesCategory = categoryFilter === 'All' || t.category === categoryFilter;
+      const matchesDepartment = departmentFilter === 'All' || t.department === departmentFilter;
+      const matchesBranch = branchFilter === 'All' || t.location === branchFilter;
+      const matchesSla = slaFilter === 'All' || t.slaStatus === slaFilter;
 
-    return (
-      matchesSearch &&
-      matchesStatus &&
-      matchesPriority &&
-      matchesCategory &&
-      matchesDepartment &&
-      matchesBranch &&
-      matchesSla
-    );
-  });
+      return (
+        matchesSearch &&
+        matchesStatus &&
+        matchesPriority &&
+        matchesCategory &&
+        matchesDepartment &&
+        matchesBranch &&
+        matchesSla
+      );
+    });
+  }, [scopedTickets, globalSearchQuery, statusFilter, priorityFilter, categoryFilter, departmentFilter, branchFilter, slaFilter]);
 
-  const uniqueCategories = Array.from(new Set([...categories.map(c => c.name), ...tickets.map(t => t.category)]));
-  const uniqueDepartments = Array.from(new Set([...departments.map(d => d.name), ...tickets.map(t => t.department)]));
-  const uniqueBranches = Array.from(new Set([...branches, ...tickets.map(t => t.location)]));
+  const uniqueCategories = Array.from(new Set([...categories.map(c => c.name), ...scopedTickets.map(t => t.category)]));
+  const uniqueDepartments = Array.from(new Set([...departments.map(d => d.name), ...scopedTickets.map(t => t.department)]));
+  const uniqueBranches = Array.from(new Set([...branches, ...scopedTickets.map(t => t.location)]));
+
+  const scopedRealCount = scopedTickets.filter(t => !t.isDemoTicket && !['HD-000001', 'HD-000002', 'HD-000003', 'HD-000004', 'HD-000005', 'HD-000006', 'HD-000007', 'HD-000008'].includes(t.id)).length;
+  const scopedDemoCount = scopedTickets.length - scopedRealCount;
 
   const handleExportCSV = () => {
-    const headers = ['Ticket ID', 'Subject', 'Employee', 'Department', 'Category', 'Priority', 'Status', 'Assigned Agent', 'Created Date', 'SLA Status'];
+    const headers = ['Ticket ID', 'Subject', 'Employee', 'Email', 'Department', 'Category', 'Priority', 'Status', 'Assigned Agent', 'Created Date', 'SLA Status'];
     const rows = filteredTickets.map(t => [
       t.id,
       `"${t.subject.replace(/"/g, '""')}"`,
       `"${t.employeeName}"`,
+      `"${t.employeeEmail || ''}"`,
       `"${t.department}"`,
       `"${t.category}"`,
       t.priority,
@@ -126,7 +170,7 @@ export const TicketDirectoryView: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `HelpDesk_Tickets_Export_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `HelpDesk_Tickets_${currentUser?.name?.replace(/\s+/g, '_') || 'Export'}_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -138,17 +182,47 @@ export const TicketDirectoryView: React.FC = () => {
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-xl font-bold text-gray-900">Master Ticket Directory</h1>
+            <h1 className="text-xl font-bold text-gray-900">
+              {isEmployee ? 'My Support Tickets' : isAgent ? 'Support Ticket Queue' : 'Master Ticket Directory'}
+            </h1>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800">
-              {realTicketsCount} Real • {demoTicketsCount} Demo
+              {isEmployee
+                ? `${scopedTickets.length} Your Tickets`
+                : `${scopedRealCount} Real • ${scopedDemoCount} Demo`}
             </span>
           </div>
           <p className="text-xs text-gray-500 mt-0.5">
-            Search, filter, and audit all enterprise support tickets registered across departments and synced to Google Sheets.
+            {isEmployee
+              ? `All tickets registered under your employee ID (${currentUser?.employeeId || 'N/A'}) and email (${currentUser?.email || 'N/A'}).`
+              : 'Search, filter, and audit all enterprise support tickets registered across departments and synced to Google Sheets.'}
           </p>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Agent Scope Switcher */}
+          {isAgent && (
+            <div className="flex items-center bg-gray-200/80 p-0.5 rounded-xl text-xs font-bold mr-2">
+              <button
+                onClick={() => setAgentScope('all')}
+                className={`px-3 py-1.5 rounded-lg transition-all ${agentScope === 'all' ? 'bg-white text-gray-900 shadow-2xs' : 'text-gray-600 hover:text-gray-900'}`}
+              >
+                All Queue
+              </button>
+              <button
+                onClick={() => setAgentScope('assigned')}
+                className={`px-3 py-1.5 rounded-lg transition-all ${agentScope === 'assigned' ? 'bg-white text-emerald-800 shadow-2xs' : 'text-gray-600 hover:text-gray-900'}`}
+              >
+                Assigned to Me
+              </button>
+              <button
+                onClick={() => setAgentScope('dept')}
+                className={`px-3 py-1.5 rounded-lg transition-all ${agentScope === 'dept' ? 'bg-white text-blue-800 shadow-2xs' : 'text-gray-600 hover:text-gray-900'}`}
+              >
+                My Dept ({currentUser?.department || 'IT'})
+              </button>
+            </div>
+          )}
+
           {/* Pull from Google Sheets Button */}
           <button
             onClick={handlePullData}
@@ -160,25 +234,27 @@ export const TicketDirectoryView: React.FC = () => {
             <span>{isPulling ? 'Fetching Sheet...' : 'Pull from Google Sheet'}</span>
           </button>
 
-          {/* Purge / Restore Demo Tickets */}
-          {isDemoDataActive ? (
-            <button
-              onClick={clearMockupTickets}
-              className="px-3.5 py-2 bg-white border border-amber-300 hover:bg-amber-50 text-amber-800 font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-2xs transition-colors"
-              title="Remove sample mockup tickets and display only real tickets"
-            >
-              <Trash2 className="w-3.5 h-3.5 text-amber-600" />
-              <span>Clear Mockup ({demoTicketsCount})</span>
-            </button>
-          ) : (
-            <button
-              onClick={restoreDemoTickets}
-              className="px-3.5 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-2xs transition-colors"
-              title="Restore demo tickets for testing"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-gray-500" />
-              <span>Restore Demo</span>
-            </button>
+          {/* Purge / Restore Demo Tickets (Visible to Admins / Agents) */}
+          {!isEmployee && (
+            isDemoDataActive ? (
+              <button
+                onClick={clearMockupTickets}
+                className="px-3.5 py-2 bg-white border border-amber-300 hover:bg-amber-50 text-amber-800 font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-2xs transition-colors"
+                title="Remove sample mockup tickets and display only real tickets"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-amber-600" />
+                <span>Clear Mockup ({demoTicketsCount})</span>
+              </button>
+            ) : (
+              <button
+                onClick={restoreDemoTickets}
+                className="px-3.5 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-2xs transition-colors"
+                title="Restore demo tickets for testing"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-gray-500" />
+                <span>Restore Demo</span>
+              </button>
+            )
           )}
 
           <button
@@ -326,7 +402,9 @@ export const TicketDirectoryView: React.FC = () => {
       <div className="bg-white rounded-xl border border-gray-200 shadow-2xs overflow-hidden">
         <div className="px-6 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
           <span className="text-xs font-bold text-gray-600">
-            Showing {filteredTickets.length} of {tickets.length} total tickets ({realTicketsCount} real, {demoTicketsCount} demo)
+            {isEmployee
+              ? `Showing ${filteredTickets.length} of ${scopedTickets.length} tickets registered for ${currentUser?.name || 'you'}`
+              : `Showing ${filteredTickets.length} of ${scopedTickets.length} total tickets (${scopedRealCount} real, ${scopedDemoCount} demo)`}
           </span>
         </div>
 
@@ -349,7 +427,22 @@ export const TicketDirectoryView: React.FC = () => {
                 <tr>
                   <td colSpan={8} className="text-center py-12 text-gray-400">
                     <Inbox className="w-8 h-8 mx-auto mb-2 text-gray-300" />
-                    No tickets found matching current query and filter parameters.
+                    {scopedTickets.length === 0 ? (
+                      <div>
+                        <p className="font-bold text-gray-700 text-sm">No tickets found for your account</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          You haven't raised any support tickets yet under {currentUser?.email || currentUser?.name}.
+                        </p>
+                        <button
+                          onClick={() => setIsCreateTicketOpen(true)}
+                          className="mt-3 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs inline-flex items-center gap-1.5"
+                        >
+                          + Raise Your First Ticket
+                        </button>
+                      </div>
+                    ) : (
+                      <p>No tickets found matching current query and filter parameters.</p>
+                    )}
                   </td>
                 </tr>
               ) : (
