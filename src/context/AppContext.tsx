@@ -108,6 +108,7 @@ interface AppContextType {
   addUser: (user: Omit<User, 'id'>) => void;
   updateUser: (id: string, updates: Partial<User>) => void;
   toggleUserStatus: (id: string) => void;
+  restoreDefaultUsers: () => void;
   detectAndLoginSystemUser: () => Promise<User | null>;
   loginByIdOrQuery: (query: string, passwordInput?: string) => { success: boolean; user?: User; matches?: User[]; message: string };
   loginWithGoogleEmail: (googleEmail: string, passwordInput?: string) => { success: boolean; user?: User; matches?: User[]; message: string };
@@ -150,7 +151,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const saved = localStorage.getItem('hd_users_v2');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Merge initialUsers with parsed users so all predefined company employees & newly added users are both preserved!
+          const uMap = new Map<string, User>();
+          initialUsers.forEach(u => uMap.set(u.id || u.employeeId, u));
+          parsed.forEach((u: User) => {
+            const key = u.id || u.employeeId;
+            if (key) {
+              const existing = uMap.get(key) || {};
+              uMap.set(key, { ...existing, ...u });
+            }
+          });
+          return Array.from(uMap.values());
+        }
       }
     } catch {}
     return initialUsers;
@@ -1377,6 +1390,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const restoreDefaultUsers = () => {
+    const uMap = new Map<string, User>();
+    initialUsers.forEach(u => uMap.set(u.id || u.employeeId, u));
+    users.forEach(u => {
+      const key = u.id || u.employeeId;
+      if (key) {
+        const existing = uMap.get(key) || {};
+        uMap.set(key, { ...existing, ...u });
+      }
+    });
+    const mergedUsers = Array.from(uMap.values());
+    setUsers(mergedUsers);
+    try {
+      localStorage.setItem('hd_users_v2', JSON.stringify(mergedUsers));
+    } catch (e) {}
+    addAuditLog('USERS_RESTORED', 'User Management', `Restored default company staff roster (${mergedUsers.length} total users).`);
+  };
+
   // Department CRUD
   const addDepartment = (deptData: Omit<Department, 'id'>) => {
     const newDept: Department = {
@@ -1744,6 +1775,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
 
       const data = await res.json();
+      let ticketsCount = 0;
+
       if (data.success && Array.isArray(data.tickets) && data.tickets.length > 0) {
         const sheetTickets: Ticket[] = data.tickets.map((t: any) => ({
           ...t,
@@ -1756,6 +1789,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           updatedDate: t.updatedDate || t.createdDate || new Date().toISOString(),
           contactNumber: t.contactNumber || ''
         }));
+        ticketsCount = sheetTickets.length;
 
         setTickets(prev => {
           const map = new Map<string, Ticket>();
@@ -1770,26 +1804,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           } catch (e) {}
           return updated;
         });
+      }
 
-        if (Array.isArray(data.users) && data.users.length > 0) {
-          setUsers(prev => {
-            const uMap = new Map<string, User>();
-            prev.forEach(u => uMap.set(u.id, u));
-            data.users.forEach((u: User) => uMap.set(u.id || u.employeeId, u));
-            const updatedUsers = Array.from(uMap.values());
-            try {
-              localStorage.setItem('hd_users_v2', JSON.stringify(updatedUsers));
-            } catch (e) {}
-            return updatedUsers;
+      if (data.success && Array.isArray(data.users) && data.users.length > 0) {
+        setUsers(prev => {
+          const uMap = new Map<string, User>();
+          initialUsers.forEach(u => uMap.set(u.id || u.employeeId, u));
+          prev.forEach(u => uMap.set(u.id || u.employeeId, u));
+          data.users.forEach((u: User) => {
+            const key = u.id || u.employeeId;
+            if (key) {
+              const existing = uMap.get(key) || {};
+              uMap.set(key, { ...existing, ...u });
+            }
           });
-        }
+          const updatedUsers = Array.from(uMap.values());
+          try {
+            localStorage.setItem('hd_users_v2', JSON.stringify(updatedUsers));
+          } catch (e) {}
+          return updatedUsers;
+        });
+      }
 
+      if (data.success && (ticketsCount > 0 || (Array.isArray(data.users) && data.users.length > 0))) {
         const logItem: SheetSyncLogItem = {
           id: `pull_${Date.now()}`,
           timestamp: new Date().toLocaleTimeString(),
           action: 'PULL_TICKETS',
-          summary: `Retrieved ${sheetTickets.length} real tickets from Google Sheet`,
-          details: `Connected to Google Sheet: ${sheetTickets.length} rows loaded. (Latest: ${sheetTickets[sheetTickets.length - 1]?.id || 'N/A'})`,
+          summary: `Retrieved data from Google Sheet (${ticketsCount} tickets, ${data.users?.length || 0} users)`,
+          details: `Connected to Google Sheet: ${ticketsCount} tickets and ${data.users?.length || 0} users synced successfully.`,
           status: 'success',
           sheetTab: 'Tickets'
         };
@@ -1798,8 +1841,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setActiveSyncToast(logItem);
         }
         setLastSyncStatus('synced');
-        addAuditLog('SHEET_DATA_PULLED', 'Google Workspace', `Loaded ${sheetTickets.length} real tickets from Google Sheet`);
-        return { success: true, count: sheetTickets.length, message: `Loaded ${sheetTickets.length} real tickets from Google Sheet!` };
+        addAuditLog('SHEET_DATA_PULLED', 'Google Workspace', `Loaded ${ticketsCount} tickets and ${data.users?.length || 0} users from Google Sheet`);
+        return { success: true, count: ticketsCount, message: `Loaded ${ticketsCount} real tickets & ${data.users?.length || 0} users from Google Sheet!` };
       } else {
         if (!isSilent) {
           const logItem: SheetSyncLogItem = {
@@ -1962,6 +2005,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addUser,
         updateUser,
         toggleUserStatus,
+        restoreDefaultUsers,
         detectAndLoginSystemUser,
         loginByIdOrQuery,
         loginWithGoogleEmail,

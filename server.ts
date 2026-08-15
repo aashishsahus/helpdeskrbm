@@ -313,8 +313,8 @@ app.post('/api/google/pull-sheet-data', async (req, res) => {
     if (rawText && !rawText.includes('accounts.google.com') && !rawText.includes('ServiceLogin')) {
       try {
         const data = JSON.parse(rawText);
-        if (data.tickets && Array.isArray(data.tickets) && data.tickets.length > 0) {
-          pulledTickets = data.tickets;
+        if ((data.tickets && Array.isArray(data.tickets) && data.tickets.length > 0) || (data.users && Array.isArray(data.users) && data.users.length > 0)) {
+          pulledTickets = data.tickets || [];
           pulledUsers = data.users || [];
           pulledDepartments = data.departments || [];
           pulledCategories = data.categories || [];
@@ -330,61 +330,102 @@ app.post('/api/google/pull-sheet-data', async (req, res) => {
     fetchError = err.message;
   }
 
-  // 2. Fallback: Directly pull CSV from Google Sheets tab
-  if (!isSuccess && targetSheetId) {
-    try {
-      const ticketsCsvUrl = `https://docs.google.com/spreadsheets/d/${targetSheetId}/gviz/tq?tqx=out:csv&sheet=Tickets`;
-      const csvRes = await fetch(ticketsCsvUrl, { redirect: 'follow' });
-      if (csvRes.ok) {
-        const csvText = await csvRes.text();
-        if (csvText && !csvText.includes('<!DOCTYPE') && !csvText.includes('accounts.google.com')) {
-          const rows = parseCSV(csvText);
-          if (rows.length > 1) {
-            // Header is row 0
-            const parsedTickets = [];
-            for (let i = 1; i < rows.length; i++) {
-              const r = rows[i];
-              if (!r || !r[0]) continue;
-              const ticketId = r[0].trim();
-              if (!ticketId || ticketId.toLowerCase() === 'ticket id') continue;
+  // 2. Fallback: Directly pull CSV from Google Sheets tabs (Tickets & Users)
+  if (targetSheetId) {
+    if (pulledTickets.length === 0) {
+      try {
+        const ticketsCsvUrl = `https://docs.google.com/spreadsheets/d/${targetSheetId}/gviz/tq?tqx=out:csv&sheet=Tickets`;
+        const csvRes = await fetch(ticketsCsvUrl, { redirect: 'follow' });
+        if (csvRes.ok) {
+          const csvText = await csvRes.text();
+          if (csvText && !csvText.includes('<!DOCTYPE') && !csvText.includes('accounts.google.com')) {
+            const rows = parseCSV(csvText);
+            if (rows.length > 1) {
+              // Header is row 0
+              const parsedTickets = [];
+              for (let i = 1; i < rows.length; i++) {
+                const r = rows[i];
+                if (!r || !r[0]) continue;
+                const ticketId = r[0].trim();
+                if (!ticketId || ticketId.toLowerCase() === 'ticket id') continue;
 
-              parsedTickets.push({
-                id: ticketId,
-                employeeId: r[1] || 'EMP-001',
-                employeeName: r[2] || 'User',
-                employeeEmail: r[3] || '',
-                department: r[4] || 'General',
-                location: r[5] || 'Headquarters',
-                category: r[6] || 'Support',
-                subCategory: r[7] || '',
-                subject: r[8] || 'Ticket ' + ticketId,
-                description: r[9] || '',
-                priority: r[10] || 'Medium',
-                status: r[11] || 'Open',
-                assignedAgentName: r[12] || '',
-                assignedAgentId: '',
-                createdDate: r[13] || new Date().toISOString(),
-                slaDueDate: r[14] || '',
-                closedDate: r[15] || '',
-                resolvedDate: r[15] || '',
-                rating: r[16] ? Number(r[16]) : undefined,
-                feedback: r[17] || '',
-                contactNumber: r[18] || '',
-                slaStatus: 'Within SLA',
-                isRealTicket: true
-              });
-            }
+                parsedTickets.push({
+                  id: ticketId,
+                  employeeId: r[1] || 'EMP-001',
+                  employeeName: r[2] || 'User',
+                  employeeEmail: r[3] || '',
+                  department: r[4] || 'General',
+                  location: r[5] || 'Headquarters',
+                  category: r[6] || 'Support',
+                  subCategory: r[7] || '',
+                  subject: r[8] || 'Ticket ' + ticketId,
+                  description: r[9] || '',
+                  priority: r[10] || 'Medium',
+                  status: r[11] || 'Open',
+                  assignedAgentName: r[12] || '',
+                  assignedAgentId: '',
+                  createdDate: r[13] || new Date().toISOString(),
+                  slaDueDate: r[14] || '',
+                  closedDate: r[15] || '',
+                  resolvedDate: r[15] || '',
+                  rating: r[16] ? Number(r[16]) : undefined,
+                  feedback: r[17] || '',
+                  contactNumber: r[18] || '',
+                  slaStatus: 'Within SLA',
+                  isRealTicket: true
+                });
+              }
 
-            if (parsedTickets.length > 0) {
-              pulledTickets = parsedTickets;
-              source = 'Google Sheets CSV Direct Feed';
-              isSuccess = true;
+              if (parsedTickets.length > 0) {
+                pulledTickets = parsedTickets;
+                source = 'Google Sheets CSV Direct Feed';
+                isSuccess = true;
+              }
             }
           }
         }
+      } catch (err: any) {
+        if (!fetchError) fetchError = err.message;
       }
-    } catch (err: any) {
-      if (!fetchError) fetchError = err.message;
+    }
+
+    if (pulledUsers.length === 0) {
+      try {
+        const usersCsvUrl = `https://docs.google.com/spreadsheets/d/${targetSheetId}/gviz/tq?tqx=out:csv&sheet=Users`;
+        const uCsvRes = await fetch(usersCsvUrl, { redirect: 'follow' });
+        if (uCsvRes.ok) {
+          const uCsvText = await uCsvRes.text();
+          if (uCsvText && !uCsvText.includes('<!DOCTYPE') && !uCsvText.includes('accounts.google.com')) {
+            const uRows = parseCSV(uCsvText);
+            if (uRows.length > 1) {
+              const parsedUsers = [];
+              for (let i = 1; i < uRows.length; i++) {
+                const r = uRows[i];
+                if (!r || (!r[0] && !r[1])) continue;
+                const uid = r[0] ? r[0].trim() : '';
+                const empId = r[1] ? r[1].trim() : '';
+                if (uid.toLowerCase() === 'user id' || empId.toLowerCase() === 'employee id') continue;
+                parsedUsers.push({
+                  id: uid || `u_${empId}`,
+                  employeeId: empId || uid,
+                  name: r[2] || '',
+                  email: r[3] || '',
+                  role: r[4] || 'Employee',
+                  department: r[5] || 'General',
+                  designation: r[6] || 'Staff Member',
+                  location: r[7] || 'Headquarters',
+                  status: r[8] || 'Active',
+                  mobile: r[9] || ''
+                });
+              }
+              if (parsedUsers.length > 0) {
+                pulledUsers = parsedUsers;
+                isSuccess = true;
+              }
+            }
+          }
+        }
+      } catch (err: any) {}
     }
   }
 
