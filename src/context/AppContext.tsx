@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
 import {
   User,
   Ticket,
@@ -677,35 +677,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try { localStorage.setItem('hd_settings_v2', JSON.stringify(settings)); } catch {}
   }, [settings]);
 
-  // Automatic Background Auto-Sync to Google Sheets Database
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const sheetId = settings.spreadsheetId || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
-      const scriptUrl = settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
-
-      fetch('/api/google/sync-sheets', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          spreadsheetId: sheetId,
-          webAppUrl: scriptUrl,
-          tickets,
-          users,
-          settings,
-          branches,
-          departments,
-          categories,
-          prioritiesList,
-          statusesList,
-          rolesList,
-          designationsList,
-          action: 'syncAll'
-        })
-      }).catch(err => console.warn('Background Sheets sync update:', err));
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [users, tickets, branches, departments, categories, prioritiesList, statusesList, rolesList, designationsList, settings]);
+  // In-flight throttle map to prevent identical concurrent pushes for the same action/ticket
+  const inFlightSyncRef = useRef<Record<string, number>>({});
 
   // Real-time direct action dispatcher to Google Sheets
   const syncDirectActionToSheets = (payload: {
@@ -726,6 +699,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     settings?: SystemSettings;
     method?: string;
   }) => {
+    // Generate unique key for deduplication
+    const syncKey = `${payload.action}_${payload.ticket?.id || payload.user?.id || payload.userId || payload.comment?.id || 'general'}`;
+    const now = Date.now();
+    if (inFlightSyncRef.current[syncKey] && (now - inFlightSyncRef.current[syncKey]) < 1200) {
+      // Ignore duplicate request triggered within 1.2s
+      return;
+    }
+    inFlightSyncRef.current[syncKey] = now;
+
     const sheetId = settings.spreadsheetId || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
     const scriptUrl = settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
 
@@ -798,7 +780,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       timestamp: new Date().toISOString()
     };
 
-    // 1. Send to server backend route
+    // Single clean call to server backend route
     fetch('/api/google/sync-sheets', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -855,27 +837,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       );
       setLastSyncStatus('error');
     });
-
-    // 2. If ticket / comment action, also send to sync-ticket
-    if (payload.ticket || payload.comment || payload.action.includes('Ticket')) {
-      fetch('/api/google/sync-ticket', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(fullPayload)
-      }).catch(err => console.warn('Direct ticket sync error:', err));
-    }
-
-    // 3. Direct browser client-side POST (with mode: 'no-cors' fallback) to ensure it reaches Google Script even if the hosting container has network delay
-    if (scriptUrl && scriptUrl.startsWith('http')) {
-      try {
-        fetch(scriptUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify(fullPayload),
-          mode: 'no-cors'
-        }).catch(() => {});
-      } catch {}
-    }
   };
 
   const [activeView, setActiveView] = useState<string>('dashboard');
@@ -1046,51 +1007,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     addAuditLog('TICKET_CREATED', 'Tickets', `Ticket ${newTicketId} submitted by ${currentUser?.name || 'Guest User'}`);
 
-    // Trigger immediate direct real-time push to Google Sheet
+    // Trigger clean real-time push to Google Sheet
     syncDirectActionToSheets({
       action: 'createTicket',
       ticket: newTicket,
       tickets: [newTicket, ...tickets],
       method: 'appendRow'
     });
-
-    try {
-      const scriptUrl = settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
-      const sheetId = settings.spreadsheetId || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
-
-      const syncRes = await fetch('/api/google/sync-ticket', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          webAppUrl: scriptUrl,
-          spreadsheetId: sheetId,
-          ticket: newTicket,
-          action: 'createTicket',
-          method: 'appendRow'
-        })
-      });
-
-      const syncData = await syncRes.json();
-      if (syncData.acknowledged) {
-        addAuditLog('GOOGLE_SHEET_ROW_APPENDED', 'Google Sheets Integration', `Ticket ${newTicketId} appended to sheet (${sheetId}) using appendRow method.`);
-      }
-
-      // Secondary guarantee full sync
-      fetch('/api/google/sync-sheets', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          spreadsheetId: sheetId,
-          webAppUrl: scriptUrl,
-          tickets: [newTicket, ...tickets],
-          users,
-          settings,
-          action: 'syncAll'
-        })
-      }).catch(err => console.warn('Background full sheet sync error:', err));
-    } catch (e) {
-      console.warn('Google Sheet ticket sync error:', e);
-    }
 
     return newTicket;
   };
@@ -1130,32 +1053,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       })
     );
 
-    // Trigger immediate real-time batchUpdate to Google Sheet
+    // Trigger real-time batchUpdate to Google Sheet
     if (updatedTicket) {
-      const targetTicket = updatedTicket;
       syncDirectActionToSheets({
         action: 'updateTicket',
-        ticket: targetTicket,
+        ticket: updatedTicket,
         method: 'batchUpdate'
       });
-      const scriptUrl = settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
-      const sheetId = settings.spreadsheetId || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
-
-      fetch('/api/google/sync-ticket', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          webAppUrl: scriptUrl,
-          spreadsheetId: sheetId,
-          ticket: targetTicket,
-          action: 'updateTicket',
-          method: 'batchUpdate'
-        })
-      }).then(res => res.json()).then(data => {
-        if (data.acknowledged) {
-          addAuditLog('GOOGLE_SHEET_BATCH_UPDATED', 'Google Sheets Integration', `Ticket ${ticketId} status update (${newStatus}) written to sheet via batchUpdate.`);
-        }
-      }).catch(err => console.warn('Background Google Sheet status sync error:', err));
     }
 
     setHistory(prev => [
@@ -1189,25 +1093,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
 
     if (updatedTicket) {
-      const targetTicket = updatedTicket;
       syncDirectActionToSheets({
         action: 'updateTicket',
-        ticket: targetTicket,
+        ticket: updatedTicket,
         method: 'batchUpdate'
       });
-      const scriptUrl = settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
-      const sheetId = settings.spreadsheetId || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
-      fetch('/api/google/sync-ticket', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          webAppUrl: scriptUrl,
-          spreadsheetId: sheetId,
-          ticket: targetTicket,
-          action: 'updateTicket',
-          method: 'batchUpdate'
-        })
-      }).catch(err => console.warn('Background Google Sheet priority sync error:', err));
     }
 
     setHistory(prev => [
@@ -1250,27 +1140,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       })
     );
 
-    // Trigger real-time sync to Google Sheet via Apps Script Endpoint
+    // Trigger real-time sync to Google Sheet
     if (updatedTicket) {
-      const targetTicket = updatedTicket;
       syncDirectActionToSheets({
         action: 'updateTicket',
-        ticket: targetTicket,
+        ticket: updatedTicket,
         method: 'batchUpdate'
       });
-      const scriptUrl = settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
-      const sheetId = settings.spreadsheetId || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
-      fetch('/api/google/sync-ticket', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          webAppUrl: scriptUrl,
-          spreadsheetId: sheetId,
-          ticket: targetTicket,
-          action: 'updateTicket',
-          method: 'batchUpdate'
-        })
-      }).catch(err => console.warn('Background Google Sheet agent sync error:', err));
     }
 
     setHistory(prev => [
@@ -1388,20 +1264,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ticket: updatedTicket,
       method: 'appendRow'
     });
-    const scriptUrl = settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
-    const sheetId = settings.spreadsheetId || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
-    fetch('/api/google/sync-ticket', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        webAppUrl: scriptUrl,
-        spreadsheetId: sheetId,
-        comment: newComment,
-        ticket: updatedTicket,
-        action: 'addComment',
-        method: 'appendRow'
-      })
-    }).catch(err => console.warn('Background comment sync error:', err));
 
     setHistory(prev => [
       {

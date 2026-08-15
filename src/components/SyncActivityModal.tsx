@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import {
   FileSpreadsheet,
@@ -44,6 +44,7 @@ export const SyncActivityModal: React.FC = () => {
 
   const [isPushing, setIsPushing] = useState(false);
   const [isPulling, setIsPulling] = useState(false);
+  const [isDeduplicating, setIsDeduplicating] = useState(false);
   const [testResult, setTestResult] = useState<{
     tested: boolean;
     success?: boolean;
@@ -51,9 +52,47 @@ export const SyncActivityModal: React.FC = () => {
     details?: any;
   } | null>(null);
 
+  const handleCleanDuplicates = async () => {
+    setIsDeduplicating(true);
+    try {
+      const res = await fetch('/api/google/clean-duplicates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          webAppUrl: customWebAppUrl.trim() || webAppUrl,
+          spreadsheetId: sheetId
+        })
+      });
+      const data = await res.json();
+      setTestResult({
+        tested: true,
+        success: data.success,
+        message: data.message || `Cleaned duplicate rows! Removed: ${data.removedCount || 0}`,
+        details: data
+      });
+      if (data.success) {
+        syncWithGoogleSheets();
+      }
+    } catch (err: any) {
+      setTestResult({
+        tested: true,
+        success: false,
+        message: `Failed to clean duplicates: ${err.message}`
+      });
+    } finally {
+      setIsDeduplicating(false);
+    }
+  };
+
   const [customWebAppUrl, setCustomWebAppUrl] = useState(settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || '');
   const [showUrlEdit, setShowUrlEdit] = useState(false);
   const [isUrlSaved, setIsUrlSaved] = useState(false);
+
+  useEffect(() => {
+    if (settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl) {
+      setCustomWebAppUrl(settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || '');
+    }
+  }, [settings.googleAppsScriptWebAppUrl, settings.appsScriptUrl]);
 
   if (!isSyncModalOpen) return null;
 
@@ -260,6 +299,16 @@ export const SyncActivityModal: React.FC = () => {
                 )}
               </div>
               <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={handleCleanDuplicates}
+                  disabled={isDeduplicating}
+                  className="px-3 py-1.5 bg-purple-700 hover:bg-purple-800 text-white rounded-lg font-bold text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50 shadow-2xs"
+                  title="Remove repeating duplicate ticket rows from Google Sheet"
+                >
+                  <Sparkles className={`w-3.5 h-3.5 ${isDeduplicating ? 'animate-spin' : ''}`} />
+                  <span>{isDeduplicating ? 'Cleaning...' : 'Clean Duplicates (Fix 4x)'}</span>
+                </button>
+
                 <button
                   onClick={handlePullRealData}
                   disabled={isPulling}

@@ -704,6 +704,45 @@ app.post('/api/google/provision-drive-folders', async (req, res) => {
   }
 });
 
+app.post('/api/google/clean-duplicates', async (req, res) => {
+  const { webAppUrl, spreadsheetId } = req.body;
+  const targetUrl = webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
+  const targetSheetId = spreadsheetId || process.env.SPREADSHEET_ID || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
+
+  try {
+    const response = await fetch(targetUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'cleanDuplicates',
+        spreadsheetId: targetSheetId,
+        timestamp: new Date().toISOString()
+      }),
+      redirect: 'follow'
+    });
+
+    const rawBody = await response.text();
+    let parsed: any = {};
+    try {
+      parsed = JSON.parse(rawBody);
+    } catch {
+      parsed = { message: rawBody };
+    }
+
+    res.json({
+      success: true,
+      removedCount: parsed.removedCount || 0,
+      message: parsed.message || 'Google Sheet checked and deduplicated.',
+      appsScriptResponse: parsed
+    });
+  } catch (err: any) {
+    res.json({
+      success: false,
+      message: `Failed to trigger duplicate cleanup: ${err.message}`
+    });
+  }
+});
+
 app.post('/api/google/upload-drive-file', async (req, res) => {
   try {
     const { webAppUrl, driveFolderId, ticketId, fileName, fileType, fileSize, fileData } = req.body;

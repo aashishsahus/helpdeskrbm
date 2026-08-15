@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Settings, Save, CheckCircle2, ShieldCheck, Database, HardDrive, Bell } from 'lucide-react';
 
@@ -15,6 +15,19 @@ export const SystemSettingsView: React.FC = () => {
   const [autoAssignment, setAutoAssignment] = useState(settings.autoAssignmentEnabled ?? true);
   const [emailNotifs, setEmailNotifs] = useState(settings.emailNotificationsEnabled ?? true);
   const [slaAlerts, setSlaAlerts] = useState(settings.slaBreachAlertsEnabled ?? true);
+
+  // Auto-sync form state whenever settings are updated from any other view or modal
+  useEffect(() => {
+    if (settings.systemName) setSystemName(settings.systemName);
+    if (settings.companyName) setCompanyName(settings.companyName);
+    if (settings.supportEmail) setSupportEmail(settings.supportEmail);
+    if (settings.spreadsheetId) setSpreadsheetId(settings.spreadsheetId);
+    if (settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl) {
+      setWebAppUrl(settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || '');
+    }
+    if (settings.driveFolderId) setDriveFolderId(settings.driveFolderId);
+    if (settings.ticketIdPrefix) setTicketPrefix(settings.ticketIdPrefix);
+  }, [settings]);
 
   const [saved, setSaved] = useState(false);
   const [syncing, setSyncing] = useState(false);

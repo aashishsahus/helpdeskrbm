@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import {
   Code2,
@@ -39,6 +39,45 @@ export const GoogleAppsScriptView: React.FC = () => {
   const [webAppUrlInput, setWebAppUrlInput] = useState(settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || '');
   const [isSavedUrl, setIsSavedUrl] = useState(false);
 
+  useEffect(() => {
+    if (settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl) {
+      setWebAppUrlInput(settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || '');
+    }
+  }, [settings.googleAppsScriptWebAppUrl, settings.appsScriptUrl]);
+
+  // Diagnostic & Deduplication State
+  const [isDiagnosing, setIsDiagnosing] = useState(false);
+  const [diagnosticResult, setDiagnosticResult] = useState<any>(null);
+  const [isDeduplicating, setIsDeduplicating] = useState(false);
+  const [dedupResult, setDedupResult] = useState<{ success: boolean; message: string; removedCount?: number } | null>(null);
+
+  const handleCleanDuplicates = async () => {
+    setIsDeduplicating(true);
+    setDedupResult(null);
+    try {
+      const res = await fetch('/api/google/clean-duplicates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          webAppUrl: settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl,
+          spreadsheetId: settings.spreadsheetId
+        })
+      });
+      const data = await res.json();
+      setDedupResult(data);
+      if (data.success) {
+        syncWithGoogleSheets();
+      }
+    } catch (err: any) {
+      setDedupResult({
+        success: false,
+        message: `Error cleaning duplicates: ${err.message}`
+      });
+    } finally {
+      setIsDeduplicating(false);
+    }
+  };
+
   const handleSaveUrl = () => {
     updateSettings({
       googleAppsScriptWebAppUrl: webAppUrlInput.trim(),
@@ -47,10 +86,6 @@ export const GoogleAppsScriptView: React.FC = () => {
     setIsSavedUrl(true);
     setTimeout(() => setIsSavedUrl(false), 2500);
   };
-  
-  // Diagnostic Tool State
-  const [isDiagnosing, setIsDiagnosing] = useState(false);
-  const [diagnosticResult, setDiagnosticResult] = useState<any>(null);
 
   const handleTestConnection = async () => {
     setIsDiagnosing(true);
@@ -96,6 +131,7 @@ export const GoogleAppsScriptView: React.FC = () => {
   const appsScriptCode = `/**
  * Apex HelpDesk Pro - Complete Google Apps Script Backend (Code.gs)
  * Handles Google Sheets database sync and Google Drive file uploads for attachments.
+ * Includes concurrency lock and automatic row deduplication to prevent duplicate tickets.
  */
 
 var DRIVE_ROOT_FOLDER_ID = "${settings.driveFolderId || '1e9Nu2qsZgOVn36VAnZts18LINrjR_1bR'}";
@@ -115,12 +151,49 @@ function testSync() {
   Logger.log("✅ Google Sheet connected successfully! Sheet Title: " + (ss ? ss.getName() : "Unknown"));
 }
 
+/**
+ * CLEAN DUPLICATE ROWS UTILITY:
+ * Run this function in Apps Script to instantly remove duplicate ticket rows from the sheet!
+ */
+function cleanDuplicateTickets() {
+  var ss;
+  try {
+    ss = SpreadsheetApp.openById(DEFAULT_SPREADSHEET_ID);
+  } catch (e) {
+    ss = SpreadsheetApp.getActiveSpreadsheet();
+  }
+  var tSheet = ss.getSheetByName("Tickets");
+  if (!tSheet) return;
+  var data = tSheet.getDataRange().getValues();
+  var seenIds = {};
+  var deletedCount = 0;
+  for (var r = data.length - 1; r >= 1; r--) {
+    var tid = (data[r][0] || "").toString().trim().toLowerCase();
+    if (tid) {
+      if (seenIds[tid]) {
+        tSheet.deleteRow(r + 1);
+        deletedCount++;
+      } else {
+        seenIds[tid] = true;
+      }
+    }
+  }
+  Logger.log("Deduplication complete! Removed " + deletedCount + " duplicate rows.");
+}
+
 function doGet(e) {
   return ContentService.createTextOutput(JSON.stringify({ status: "OK", service: "Apex Help Desk API", timestamp: new Date().toISOString() }))
     .setMimeType(ContentService.MimeType.JSON);
 }
 
 function doPost(e) {
+  var lock = LockService.getScriptLock();
+  var hasLock = false;
+  try {
+    // Acquire script lock for 15 seconds to prevent concurrent write race conditions
+    hasLock = lock.tryLock(15000);
+  } catch (lockErr) {}
+
   try {
     var contents = {};
     if (e && e.postData && e.postData.contents) {
@@ -160,6 +233,31 @@ function doPost(e) {
       })).setMimeType(ContentService.MimeType.JSON);
     }
 
+    if (action === "cleanDuplicates" || action === "deduplicateTickets") {
+      var tSheet = ss.getSheetByName("Tickets");
+      var removedCount = 0;
+      if (tSheet) {
+        var data = tSheet.getDataRange().getValues();
+        var seenIds = {};
+        for (var r = data.length - 1; r >= 1; r--) {
+          var tid = (data[r][0] || "").toString().trim().toLowerCase();
+          if (tid) {
+            if (seenIds[tid]) {
+              tSheet.deleteRow(r + 1);
+              removedCount++;
+            } else {
+              seenIds[tid] = true;
+            }
+          }
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({
+        success: true,
+        removedCount: removedCount,
+        message: "Successfully cleaned Tickets sheet! Removed " + removedCount + " duplicate rows."
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
     if (action === "getAllData" || action === "getTickets") {
       var tSheet = ss.getSheetByName("Tickets");
       var uSheet = ss.getSheetByName("Users");
@@ -168,13 +266,20 @@ function doPost(e) {
       var comSheet = ss.getSheetByName("TicketComments");
 
       var resultTickets = [];
+      var seenTicketIds = {};
       if (tSheet) {
         var tData = tSheet.getDataRange().getValues();
         for (var tr = 1; tr < tData.length; tr++) {
           var row = tData[tr];
           if (!row[0]) continue;
+          var tidStr = row[0].toString().trim();
+          if (!tidStr) continue;
+          // Deduplicate in get output as well
+          if (seenTicketIds[tidStr.toLowerCase()]) continue;
+          seenTicketIds[tidStr.toLowerCase()] = true;
+
           resultTickets.push({
-            id: row[0].toString(),
+            id: tidStr,
             employeeId: row[1] ? row[1].toString() : "",
             employeeName: row[2] ? row[2].toString() : "",
             employeeEmail: row[3] ? row[3].toString() : "",
@@ -201,13 +306,18 @@ function doPost(e) {
       }
 
       var resultUsers = [];
+      var seenUserIds = {};
       if (uSheet) {
         var uData = uSheet.getDataRange().getValues();
         for (var ur = 1; ur < uData.length; ur++) {
           var uRow = uData[ur];
           if (!uRow[0]) continue;
+          var uidStr = uRow[0].toString().trim();
+          if (seenUserIds[uidStr.toLowerCase()]) continue;
+          seenUserIds[uidStr.toLowerCase()] = true;
+
           resultUsers.push({
-            id: uRow[0].toString(),
+            id: uidStr,
             employeeId: uRow[1] ? uRow[1].toString() : "",
             name: uRow[2] ? uRow[2].toString() : "",
             email: uRow[3] ? uRow[3].toString() : "",
@@ -229,16 +339,18 @@ function doPost(e) {
       })).setMimeType(ContentService.MimeType.JSON);
     }
 
-    if (action === "createTicket") {
+    if (action === "createTicket" || action === "updateTicket") {
       var ticketSheet = ss.getSheetByName("Tickets");
       var attachmentSheet = ss.getSheetByName("TicketAttachments");
       var t = contents.ticket;
 
-      if (ticketSheet && t) {
+      if (ticketSheet && t && t.id) {
         var existingData = ticketSheet.getDataRange().getValues();
         var foundRow = -1;
+        var targetId = t.id.toString().trim().toLowerCase();
+
         for (var r = 1; r < existingData.length; r++) {
-          if (existingData[r][0] && existingData[r][0].toString().trim() === t.id.toString().trim()) {
+          if (existingData[r][0] && existingData[r][0].toString().trim().toLowerCase() === targetId) {
             foundRow = r + 1;
             break;
           }
@@ -253,6 +365,7 @@ function doPost(e) {
           t.rating || "", t.feedback || "", t.contactNumber || ""
         ];
 
+        // If ticket already exists in sheet, UPDATE IT IN-PLACE (Prevents duplicate rows)
         if (foundRow > 0) {
           ticketSheet.getRange(foundRow, 1, 1, rowValues.length).setValues([rowValues]);
         } else {
@@ -279,44 +392,6 @@ function doPost(e) {
       }
 
       return ContentService.createTextOutput(JSON.stringify({ success: true, ticketId: t ? t.id : "" }))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-
-    if (action === "updateTicket") {
-      var ticketSheet = ss.getSheetByName("Tickets");
-      var t = contents.ticket;
-      if (!t || !ticketSheet) {
-        return ContentService.createTextOutput(JSON.stringify({ success: false, message: "Missing ticket or Tickets sheet" }))
-          .setMimeType(ContentService.MimeType.JSON);
-      }
-      var data = ticketSheet.getDataRange().getValues();
-      var foundRow = -1;
-
-      var targetId = (t.id || "").toString().trim().toLowerCase();
-
-      for (var r = 1; r < data.length; r++) {
-        if (data[r][0] && data[r][0].toString().trim().toLowerCase() === targetId) {
-          foundRow = r + 1;
-          break;
-        }
-      }
-
-      var rowValues = [
-        t.id || "", t.employeeId || "", t.employeeName || "", t.employeeEmail || "",
-        t.department || "", t.location || "", t.category || "", t.subCategory || "",
-        t.subject || "", t.description || "", t.priority || "", t.status || "Open",
-        t.assignedAgentName || "", t.createdDate || "",
-        t.slaDueDate || "", t.closedDate || t.resolvedDate || "",
-        t.rating || "", t.feedback || "", t.contactNumber || ""
-      ];
-
-      if (foundRow > 0) {
-        ticketSheet.getRange(foundRow, 1, 1, rowValues.length).setValues([rowValues]);
-      } else {
-        ticketSheet.appendRow(rowValues);
-      }
-
-      return ContentService.createTextOutput(JSON.stringify({ success: true, ticketId: t.id, updatedRow: foundRow }))
         .setMimeType(ContentService.MimeType.JSON);
     }
 
@@ -362,16 +437,12 @@ function doPost(e) {
           .setMimeType(ContentService.MimeType.JSON);
       }
 
-      // Get or create Drive Folder "Internal Help Desk / Tickets"
       var folder = getOrCreateTicketsFolder();
-
-      // Decode base64 and create file in Drive
       var base64Clean = fileData.split(",")[1] || fileData;
       var decodedBytes = Utilities.base64Decode(base64Clean);
       var blob = Utilities.newBlob(decodedBytes, fileType, fileName);
       var driveFile = folder.createFile(blob);
       
-      // Make file viewable with link
       try {
         driveFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
       } catch (e) {}
@@ -379,7 +450,6 @@ function doPost(e) {
       var driveUrl = driveFile.getUrl();
       var fileId = driveFile.getId();
 
-      // Log to TicketAttachments sheet
       var attSheet = ss.getSheetByName("TicketAttachments");
       if (attSheet) {
         attSheet.appendRow([
@@ -518,7 +588,13 @@ function doPost(e) {
           }
         }
 
+        var processedTicketIds = {};
         tickets.forEach(function(t) {
+          if (!t || !t.id) return;
+          var tidKey = t.id.toString().trim().toLowerCase();
+          if (processedTicketIds[tidKey]) return; // Skip duplicate tickets in incoming payload
+          processedTicketIds[tidKey] = true;
+
           var tRow = [
             t.id || "", t.employeeId || "", t.employeeName || "", t.employeeEmail || "",
             t.department || "", t.location || "", t.category || "", t.subCategory || "",
@@ -527,7 +603,7 @@ function doPost(e) {
             t.closedDate || t.resolvedDate || "",
             t.rating || "", t.feedback || "", t.contactNumber || ""
           ];
-          var tidKey = (t.id || "").toString().trim().toLowerCase();
+
           var targetRow = ticketRowMap[tidKey];
           if (targetRow) {
             tSheet.getRange(targetRow, 1, 1, tRow.length).setValues([tRow]);
@@ -549,10 +625,16 @@ function doPost(e) {
           }
         }
 
+        var processedUserKeys = {};
         users.forEach(function(u) {
-          var uRow = [u.id || "", u.employeeId || "", u.name || "", u.email || "", u.role || "", u.department || "", u.designation || "", u.location || "", u.status || "Active"];
+          if (!u || (!u.id && !u.employeeId)) return;
           var uidKey = (u.id || "").toString().trim().toLowerCase();
           var empIdKey = (u.employeeId || "").toString().trim().toLowerCase();
+          var dedupUserKey = uidKey || empIdKey;
+          if (processedUserKeys[dedupUserKey]) return;
+          processedUserKeys[dedupUserKey] = true;
+
+          var uRow = [u.id || "", u.employeeId || "", u.name || "", u.email || "", u.role || "", u.department || "", u.designation || "", u.location || "", u.status || "Active"];
           var targetURow = userRowMap[uidKey] || userRowMap[empIdKey];
           if (targetURow) {
             uSheet.getRange(targetURow, 1, 1, uRow.length).setValues([uRow]);
@@ -632,6 +714,10 @@ function doPost(e) {
   } catch (err) {
     return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
       .setMimeType(ContentService.MimeType.JSON);
+  } finally {
+    if (hasLock) {
+      try { lock.releaseLock(); } catch (e) {}
+    }
   }
 }
 
@@ -734,7 +820,16 @@ function setupHelpDeskSheets(ss) {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={handleCleanDuplicates}
+              disabled={isDeduplicating}
+              className="px-4 py-2 bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs rounded-xl flex items-center gap-2 shadow-sm transition-all disabled:opacity-50"
+              title="Instantly remove duplicate ticket rows from Google Sheet"
+            >
+              <Sparkles className={`w-3.5 h-3.5 ${isDeduplicating ? 'animate-spin' : ''}`} />
+              <span>{isDeduplicating ? 'Cleaning Duplicates...' : 'Clean Duplicate Rows (Fix Repeats)'}</span>
+            </button>
             <button
               onClick={handleTestConnection}
               disabled={isDiagnosing}
@@ -825,6 +920,20 @@ function setupHelpDeskSheets(ss) {
                   <li>Top right me <strong>Deploy → Manage Deployments → Pencil Icon (Edit) → Version: "New Version" → Deploy</strong> karein!</li>
                 </ol>
               </div>
+            )}
+          </div>
+        )}
+
+        {dedupResult && (
+          <div className={`p-4 rounded-xl border ${dedupResult.success ? 'bg-purple-50 border-purple-200 text-purple-900' : 'bg-red-50 border-red-200 text-red-900'} flex items-center justify-between gap-3`}>
+            <div className="flex items-center gap-2 font-bold text-xs">
+              <Sparkles className={`w-4 h-4 ${dedupResult.success ? 'text-purple-600' : 'text-red-600'}`} />
+              <span>{dedupResult.message}</span>
+            </div>
+            {dedupResult.removedCount !== undefined && (
+              <span className="text-[11px] font-mono px-2 py-0.5 bg-white rounded border border-purple-200 text-purple-800 font-bold shrink-0">
+                {dedupResult.removedCount} duplicates removed
+              </span>
             )}
           </div>
         )}
