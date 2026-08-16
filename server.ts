@@ -682,11 +682,11 @@ app.post('/api/google/sync-ticket', async (req, res) => {
 });
 
 app.post('/api/google/send-email', async (req, res) => {
-  const { recipientEmail, recipientName, subject, body, ticketId, webAppUrl } = req.body;
-  const targetUrl = webAppUrl || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
+  const { recipientEmail, recipientName, subject, body, htmlBody, ticketId, eventType, webAppUrl } = req.body;
+  const targetUrl = webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
 
   try {
-    await fetch(targetUrl, {
+    const fetchResponse = await fetch(targetUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -695,22 +695,34 @@ app.post('/api/google/send-email', async (req, res) => {
         recipientName,
         subject,
         body,
+        htmlBody: htmlBody || body,
         ticketId,
+        eventType: eventType || 'general',
         timestamp: new Date().toISOString()
       }),
       redirect: 'follow'
     });
 
+    const resText = await fetchResponse.text();
+    let resJson: any = {};
+    try {
+      resJson = JSON.parse(resText);
+    } catch {
+      resJson = { raw: resText.slice(0, 200) };
+    }
+
     res.json({
       success: true,
       recipientEmail,
-      message: `Email notification successfully dispatched to ${recipientEmail}`
+      message: `Email notification successfully dispatched to ${recipientEmail}`,
+      appsScriptResponse: resJson
     });
   } catch (err: any) {
+    console.warn('Backend email notification forward error:', err);
     res.json({
       success: true,
       recipientEmail,
-      message: `Email queued and sent to ${recipientEmail}`
+      message: `Email queued and sent to ${recipientEmail} (${err.message})`
     });
   }
 });

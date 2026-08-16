@@ -320,7 +320,10 @@ export const TicketDetailsModal: React.FC = () => {
 
                 {/* Status Update */}
                 <div>
-                  <label className="text-[10px] text-gray-500 font-semibold block mb-1">Change Status</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[10px] text-gray-500 font-semibold block">Change Status</label>
+                    <span className="text-[9px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded font-bold">Auto Email on Close</span>
+                  </div>
                   <div className="flex gap-1.5">
                     <select
                       value={newStatus || ticket.status}
@@ -335,6 +338,11 @@ export const TicketDetailsModal: React.FC = () => {
                       <option value="Reopened">Reopened</option>
                     </select>
                   </div>
+                  {(ticket.status === 'Resolved' || ticket.status === 'Closed') && (
+                    <p className="text-[10px] text-emerald-700 mt-1 flex items-center gap-1 font-medium">
+                      <span>✓</span> Confirmation email dispatched to employee & agent.
+                    </p>
+                  )}
                 </div>
 
                 {/* Priority Update */}

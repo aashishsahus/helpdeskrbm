@@ -888,6 +888,51 @@ function doPost(e) {
         .setMimeType(ContentService.MimeType.JSON);
     }
 
+    if (action === "sendEmailNotification" || action === "sendEmail") {
+      var recipient = contents.recipientEmail || contents.to;
+      var subj = contents.subject || "Rathi Buildmart HelpDesk Notification";
+      var bodyPlain = contents.body || "";
+      var bodyHtml = contents.htmlBody || contents.html || "";
+
+      if (recipient) {
+        try {
+          if (bodyHtml) {
+            MailApp.sendEmail({
+              to: recipient,
+              subject: subj,
+              body: bodyPlain || "Please open this email in an HTML compatible email client.",
+              htmlBody: bodyHtml,
+              name: "Rathi Buildmart HelpDesk"
+            });
+          } else {
+            MailApp.sendEmail({
+              to: recipient,
+              subject: subj,
+              body: bodyPlain,
+              name: "Rathi Buildmart HelpDesk"
+            });
+          }
+          return ContentService.createTextOutput(JSON.stringify({
+            success: true,
+            recipientEmail: recipient,
+            message: "Email successfully dispatched to " + recipient
+          })).setMimeType(ContentService.MimeType.JSON);
+        } catch (mailErr) {
+          Logger.log("MailApp error: " + mailErr.toString());
+          return ContentService.createTextOutput(JSON.stringify({
+            success: false,
+            error: mailErr.toString(),
+            message: "Failed to dispatch email via MailApp: " + mailErr.message
+          })).setMimeType(ContentService.MimeType.JSON);
+        }
+      } else {
+        return ContentService.createTextOutput(JSON.stringify({
+          success: false,
+          message: "No recipient email address provided."
+        })).setMimeType(ContentService.MimeType.JSON);
+      }
+    }
+
     if (action === "createDriveFolders" || action === "setupDriveFolders") {
       var subFoldersList = ["Tickets", "Reports", "User Documents", "Knowledge Base"];
       var mainFolder = getMainFolder();

@@ -42,6 +42,7 @@ import {
   initialArchivedUsers
 } from '../data/initialData';
 import { formatDateTime, getFormattedNow } from '../utils/dateUtils';
+import { sendTicketRaisedEmails, sendTicketClosedEmails } from '../utils/emailNotificationService';
 
 interface AppContextType {
   currentUser: User | null;
@@ -172,17 +173,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // Merge initialUsers with parsed users so all predefined company employees & newly added users are both preserved!
+          // Merge initialUsers with parsed users, filtering out legacy demo mock users with @company.com
+          const isRealUser = (u: User) => !u.email?.toLowerCase().endsWith('@company.com') && !['u1', 'u2', 'u3', 'u4', 'u5', 'u6', 'u7', 'u8', 'u9', 'u10', 'u11'].includes(u.id);
           const uMap = new Map<string, User>();
-          initialUsers.forEach(u => uMap.set(u.id || u.employeeId, u));
-          parsed.forEach((u: User) => {
+          initialUsers.filter(isRealUser).forEach(u => uMap.set(u.id || u.employeeId, u));
+          parsed.filter(isRealUser).forEach((u: User) => {
             const key = u.id || u.employeeId;
             if (key) {
               const existing = uMap.get(key) || {};
               uMap.set(key, { ...existing, ...u });
             }
           });
-          return Array.from(uMap.values());
+          const realUsersList = Array.from(uMap.values());
+          try {
+            localStorage.setItem('hd_users_v2', JSON.stringify(realUsersList));
+          } catch {}
+          return realUsersList;
         }
       }
     } catch {}
@@ -194,19 +200,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const saved = localStorage.getItem('helpdesk_user_session');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed && parsed.id) {
-          const foundById = initialUsers.find(u => u.id === parsed.id);
-          if (foundById) return foundById;
-          const foundByEmail = initialUsers.find(u => u.email.toLowerCase() === parsed.email?.toLowerCase());
-          if (foundByEmail) return foundByEmail;
-          if (parsed.name && parsed.email) return parsed;
+        if (parsed && (parsed.id || parsed.employeeId || parsed.email)) {
+          return parsed;
         }
       }
     } catch (e) {
       // Fallback if localStorage unavailable
     }
-    return null; // Require explicit login for new sessions or unauthenticated browsers!
+    return null;
   });
+
+  // Keep currentUser in continuous sync with live users array
+  useEffect(() => {
+    if (currentUser) {
+      const matched = users.find(u => 
+        (currentUser.id && u.id === currentUser.id) || 
+        (currentUser.employeeId && u.employeeId === currentUser.employeeId) ||
+        (currentUser.email && u.email && u.email.toLowerCase() === currentUser.email.toLowerCase())
+      );
+      if (matched && (matched.name !== currentUser.name || matched.role !== currentUser.role || matched.email !== currentUser.email || matched.mobile !== currentUser.mobile)) {
+        setCurrentUserRaw(matched);
+        try {
+          localStorage.setItem('helpdesk_user_session', JSON.stringify(matched));
+        } catch {}
+      }
+    }
+  }, [users]);
 
   const setCurrentUser = (user: User | null) => {
     setCurrentUserRaw(user);
@@ -510,21 +529,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [tickets, setTickets] = useState<Ticket[]>(() => {
     try {
-      const isDemoCleared = localStorage.getItem('hd_demo_cleared') === 'true';
+      localStorage.setItem('hd_demo_cleared', 'true');
       const saved = localStorage.getItem('hd_tickets_v2');
+      const isRealTicket = (t: Ticket) =>
+        !t.isDemoTicket &&
+        !['HD-000001', 'HD-000002', 'HD-000003', 'HD-000004', 'HD-000005', 'HD-000006', 'HD-000007', 'HD-000008'].includes(t.id) &&
+        !t.employeeEmail?.toLowerCase().endsWith('@company.com');
+
       if (saved) {
         const parsed: Ticket[] = JSON.parse(saved);
-        if (isDemoCleared) {
-          return parsed.filter(t => !t.isDemoTicket && !['HD-000001', 'HD-000002', 'HD-000003', 'HD-000004', 'HD-000005', 'HD-000006', 'HD-000007', 'HD-000008'].includes(t.id));
-        }
-        const existingIds = new Set(parsed.map(t => t.id));
-        const missing = initialTickets.filter(t => !existingIds.has(t.id));
-        return missing.length > 0 ? [...parsed, ...missing] : parsed;
+        const realSaved = parsed.filter(isRealTicket);
+        const existingIds = new Set(realSaved.map(t => t.id));
+        const missing = initialTickets.filter(t => isRealTicket(t) && !existingIds.has(t.id));
+        const combined = missing.length > 0 ? [...realSaved, ...missing] : realSaved;
+        try {
+          localStorage.setItem('hd_tickets_v2', JSON.stringify(combined));
+        } catch {}
+        return combined.length > 0 ? combined : initialTickets.filter(isRealTicket);
       }
-      if (isDemoCleared) {
-        return initialTickets.filter(t => !t.isDemoTicket);
-      }
-      return initialTickets;
+      return initialTickets.filter(isRealTicket);
     } catch {
       return initialTickets;
     }
@@ -533,7 +556,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [comments, setComments] = useState<TicketComment[]>(() => {
     try {
       const saved = localStorage.getItem('hd_comments_v2');
-      return saved ? JSON.parse(saved) : initialComments;
+      if (saved) {
+        const parsed: TicketComment[] = JSON.parse(saved);
+        const realComments = parsed.filter(c => !['HD-000001', 'HD-000002', 'HD-000003', 'HD-000004', 'HD-000005', 'HD-000006', 'HD-000007', 'HD-000008'].includes(c.ticketId));
+        return realComments;
+      }
+      return initialComments;
     } catch {
       return initialComments;
     }
@@ -542,7 +570,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [history, setHistory] = useState<TicketHistory[]>(() => {
     try {
       const saved = localStorage.getItem('hd_history_v2');
-      return saved ? JSON.parse(saved) : initialHistory;
+      if (saved) {
+        const parsed: TicketHistory[] = JSON.parse(saved);
+        const realHistory = parsed.filter(h => !['HD-000001', 'HD-000002', 'HD-000003', 'HD-000004', 'HD-000005', 'HD-000006', 'HD-000007', 'HD-000008'].includes(h.ticketId));
+        return realHistory;
+      }
+      return initialHistory;
     } catch {
       return initialHistory;
     }
@@ -551,7 +584,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
     try {
       const saved = localStorage.getItem('hd_notifications_v2');
-      return saved ? JSON.parse(saved) : initialNotifications;
+      if (saved) {
+        const parsed: NotificationItem[] = JSON.parse(saved);
+        const realNotifs = parsed.filter(n => !['HD-000001', 'HD-000002', 'HD-000003', 'HD-000004', 'HD-000005', 'HD-000006', 'HD-000007', 'HD-000008'].includes(n.ticketId || ''));
+        return realNotifs;
+      }
+      return initialNotifications;
     } catch {
       return initialNotifications;
     }
@@ -1109,6 +1147,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     addAuditLog('TICKET_CREATED', 'Tickets', `Ticket ${newTicketId} submitted by ${currentUser?.name || 'Guest User'}`);
 
+    // Trigger dual automated email confirmation (to Employee and to Assigned Agent/Support Admin)
+    if (settings.emailNotificationsEnabled !== false) {
+      sendTicketRaisedEmails(newTicket, users, settings).then(res => {
+        if (res.employeeSent || res.agentSent) {
+          const sentTo = [
+            res.employeeSent ? `Employee (${newTicket.employeeEmail})` : null,
+            res.agentSent ? `Agent/Admin (${newTicket.assignedAgentName || settings.supportEmail || 'misrpr@rathibuildmart.com'})` : null
+          ].filter(Boolean).join(' & ');
+          addAuditLog('EMAIL_SENT', 'Tickets', `Automatic ticket confirmation email dispatched to ${sentTo}`);
+        }
+      }).catch(err => console.warn('Ticket created email dispatch error:', err));
+    }
+
     // Trigger clean real-time push to Google Sheet
     syncDirectActionToSheets({
       action: 'createTicket',
@@ -1157,11 +1208,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Trigger real-time batchUpdate to Google Sheet
     if (updatedTicket) {
+      const targetTicket = updatedTicket;
       syncDirectActionToSheets({
         action: 'updateTicket',
-        ticket: updatedTicket,
+        ticket: targetTicket,
         method: 'batchUpdate'
       });
+
+      // If ticket is Resolved or Closed, trigger automated dual email notification to Employee & Agent/Admin
+      if (newStatus === 'Resolved' || newStatus === 'Closed') {
+        if (settings.emailNotificationsEnabled !== false) {
+          sendTicketClosedEmails(targetTicket, users, settings, notes).then(res => {
+            if (res.employeeSent || res.agentSent) {
+              const sentTo = [
+                res.employeeSent ? `Employee (${targetTicket.employeeEmail})` : null,
+                res.agentSent ? `Agent/Admin (${targetTicket.assignedAgentName || settings.supportEmail || 'misrpr@rathibuildmart.com'})` : null
+              ].filter(Boolean).join(' & ');
+              addAuditLog('EMAIL_SENT', 'Tickets', `Automatic ticket ${newStatus} completion email dispatched to ${sentTo}`);
+            }
+          }).catch(err => console.warn('Ticket closed email dispatch error:', err));
+        }
+      }
     }
 
     setHistory(prev => [

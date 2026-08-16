@@ -185,6 +185,10 @@ export const CreateTicketModal: React.FC = () => {
                 <span className="text-gray-400">Attachments Uploaded:</span>
                 <span className="font-semibold">{files.length} File(s) to Google Drive</span>
               </div>
+              <div className="pt-2 border-t border-gray-200 flex items-center gap-2 text-emerald-800 font-semibold text-[11px] bg-emerald-50 p-2 rounded-lg">
+                <span>📧</span>
+                <span>Confirmation emails automatically sent to both employee and support team.</span>
+              </div>
             </div>
             <div className="pt-4 flex justify-center gap-3">
               <button
