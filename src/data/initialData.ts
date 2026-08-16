@@ -9,7 +9,10 @@ import {
   AuditLogItem,
   SystemSettings,
   TicketComment,
-  TicketHistory
+  TicketHistory,
+  RolePermissionConfig,
+  ArchivedTicket,
+  ArchivedUser
 } from '../types';
 
 export const initialUsers: User[] = [
@@ -755,4 +758,173 @@ export const initialDesignations: string[] = [
   'VP of Operations',
   'Chief Technology Officer'
 ];
+
+export const defaultRolePermissions: RolePermissionConfig[] = [
+  {
+    role: 'Super Admin',
+    canViewDashboard: true,
+    canViewTickets: true,
+    canCreateTickets: true,
+    canEditTickets: true,
+    canDeleteTickets: true, // Super Admin exclusive
+    canViewFeedback: true,
+    canSubmitFeedback: true,
+    canViewReports: true,
+    canManageUsers: true,
+    canDeleteUsersPermanently: true, // Super Admin exclusive
+    canManageDepartments: true,
+    canManageCategories: true,
+    canManageSLA: true,
+    canManageDropdowns: true,
+    canAccessGoogleDriveSync: true,
+    canAccessAppsScript: true,
+    canViewAuditLogs: true,
+    canManageSystemSettings: true,
+    canManageRolePermissions: true, // Super Admin exclusive
+    canAccessArchivedData: true
+  },
+  {
+    role: 'Admin',
+    canViewDashboard: true,
+    canViewTickets: true,
+    canCreateTickets: true,
+    canEditTickets: true,
+    canDeleteTickets: false, // Protected
+    canViewFeedback: true,
+    canSubmitFeedback: true,
+    canViewReports: true,
+    canManageUsers: true,
+    canDeleteUsersPermanently: false, // Protected
+    canManageDepartments: true,
+    canManageCategories: true,
+    canManageSLA: true,
+    canManageDropdowns: true,
+    canAccessGoogleDriveSync: true,
+    canAccessAppsScript: false,
+    canViewAuditLogs: true,
+    canManageSystemSettings: true,
+    canManageRolePermissions: false,
+    canAccessArchivedData: true
+  },
+  {
+    role: 'Support Manager',
+    canViewDashboard: true,
+    canViewTickets: true,
+    canCreateTickets: true,
+    canEditTickets: true,
+    canDeleteTickets: false,
+    canViewFeedback: true,
+    canSubmitFeedback: true,
+    canViewReports: true,
+    canManageUsers: false,
+    canDeleteUsersPermanently: false,
+    canManageDepartments: false,
+    canManageCategories: false,
+    canManageSLA: false,
+    canManageDropdowns: false,
+    canAccessGoogleDriveSync: false,
+    canAccessAppsScript: false,
+    canViewAuditLogs: false,
+    canManageSystemSettings: false,
+    canManageRolePermissions: false,
+    canAccessArchivedData: false
+  },
+  {
+    role: 'Support Agent',
+    canViewDashboard: true,
+    canViewTickets: true,
+    canCreateTickets: true,
+    canEditTickets: true,
+    canDeleteTickets: false,
+    canViewFeedback: true,
+    canSubmitFeedback: false,
+    canViewReports: false,
+    canManageUsers: false,
+    canDeleteUsersPermanently: false,
+    canManageDepartments: false,
+    canManageCategories: false,
+    canManageSLA: false,
+    canManageDropdowns: false,
+    canAccessGoogleDriveSync: false,
+    canAccessAppsScript: false,
+    canViewAuditLogs: false,
+    canManageSystemSettings: false,
+    canManageRolePermissions: false,
+    canAccessArchivedData: false
+  },
+  {
+    role: 'Employee',
+    canViewDashboard: true,
+    canViewTickets: true,
+    canCreateTickets: true,
+    canEditTickets: false,
+    canDeleteTickets: false,
+    canViewFeedback: false,
+    canSubmitFeedback: true,
+    canViewReports: false,
+    canManageUsers: false,
+    canDeleteUsersPermanently: false,
+    canManageDepartments: false,
+    canManageCategories: false,
+    canManageSLA: false,
+    canManageDropdowns: false,
+    canAccessGoogleDriveSync: false,
+    canAccessAppsScript: false,
+    canViewAuditLogs: false,
+    canManageSystemSettings: false,
+    canManageRolePermissions: false,
+    canAccessArchivedData: false
+  }
+];
+
+export const initialArchivedTickets: ArchivedTicket[] = [
+  {
+    id: 'HD-000088',
+    employeeId: 'EMP-1008',
+    employeeName: 'Sample Archived Ticket',
+    employeeEmail: 'sample@rathibuildmart.com',
+    department: 'IT Operations',
+    location: 'RPR',
+    category: 'Hardware Issue',
+    subCategory: 'Monitor / Display',
+    subject: 'Old monitor replacement request (Closed & Archived)',
+    description: 'Replaced damaged display unit. Ticket archived after 90 days retention.',
+    priority: 'Low',
+    status: 'Closed',
+    assignedAgentId: 'u_ashish',
+    assignedAgentName: 'Aashish',
+    createdDate: '2026-06-01 10:00:00',
+    updatedDate: '2026-06-05 16:30:00',
+    slaDueDate: '2026-06-07 10:00:00',
+    slaStatus: 'Safe',
+    contactNumber: '+91 98765 00000',
+    resolvedDate: '2026-06-05 16:30:00',
+    closedDate: '2026-06-05 16:30:00',
+    rating: 5,
+    feedback: 'Promptly solved.',
+    archivedAt: '2026-08-01 12:00:00',
+    archivedBy: 'Misr Pr (Super Admin)',
+    archivedByEmail: 'misrpr@rathibuildmart.com',
+    archiveReason: 'Periodic archive of resolved tickets'
+  }
+];
+
+export const initialArchivedUsers: ArchivedUser[] = [
+  {
+    id: 'u_archived_sample',
+    employeeId: 'EMP-0999',
+    name: 'Former Staff Member',
+    email: 'former.staff@rathibuildmart.com',
+    role: 'Employee',
+    department: 'Sales',
+    designation: 'Sales Intern',
+    location: 'RPR',
+    status: 'Disabled',
+    archivedAt: '2026-08-01 10:00:00',
+    archivedBy: 'Misr Pr (Super Admin)',
+    archivedByEmail: 'misrpr@rathibuildmart.com',
+    archiveReason: 'Internship contract concluded'
+  }
+];
+
 

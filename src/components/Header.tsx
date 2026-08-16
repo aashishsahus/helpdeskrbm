@@ -59,6 +59,7 @@ export const Header: React.FC = () => {
     ? users.filter(u => u.email.toLowerCase() === currentUser.email.toLowerCase())
     : [];
 
+  const isAdmin = currentUser ? (currentUser.role === 'Admin' || currentUser.role === 'Super Admin') : false;
   const firstName = currentUser?.name ? currentUser.name.split(' ')[0] : 'Guest';
 
   const handleManualSync = async () => {
@@ -237,43 +238,58 @@ export const Header: React.FC = () => {
           </div>
           )}
 
-          {/* Saved in Sheets Indicator Badge - Interactive */}
-          <button
-            onClick={() => setIsSyncModalOpen(true)}
-            className={`hidden sm:flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-full shadow-2xs transition-all hover:scale-105 cursor-pointer ${
-              lastSyncStatus === 'error'
-                ? 'bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200'
-                : isSyncing || lastSyncStatus === 'syncing'
-                ? 'bg-blue-100 text-blue-900 border border-blue-300'
-                : 'bg-[#D1FAE5] text-[#065F46] border border-[#A7F3D0] hover:bg-[#A7F3D0]/60'
-            }`}
-            title="Click to view real-time Google Sheets sync activity & diagnostics"
-          >
-            <span className={`w-1.5 h-1.5 rounded-full ${
-              lastSyncStatus === 'error'
-                ? 'bg-amber-500'
-                : isSyncing || lastSyncStatus === 'syncing'
-                ? 'bg-blue-500 animate-ping'
-                : 'bg-[#10B981]'
-            }`}></span>
-            <span>{isSyncing ? 'SYNCING...' : lastSyncStatus === 'error' ? 'SYNC STATUS' : 'SAVED IN SHEETS'}</span>
-            {sheetSyncLogs.length > 0 && (
-              <span className="text-[10px] bg-black/10 px-1.5 py-0.2 rounded-full ml-0.5">
-                {sheetSyncLogs.length}
-              </span>
-            )}
-          </button>
+          {/* Admin Exclusive: Interactive Saved in Sheets / Sync Center Button */}
+          {isAdmin ? (
+            <>
+              <button
+                id="admin-sync-center-trigger-btn"
+                onClick={() => setIsSyncModalOpen(true)}
+                className={`hidden sm:flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-full shadow-2xs transition-all hover:scale-105 cursor-pointer ${
+                  lastSyncStatus === 'error'
+                    ? 'bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200'
+                    : isSyncing || lastSyncStatus === 'syncing'
+                    ? 'bg-blue-100 text-blue-900 border border-blue-300'
+                    : 'bg-[#D1FAE5] text-[#065F46] border border-[#A7F3D0] hover:bg-[#A7F3D0]/60'
+                }`}
+                title="Admin Only: Click to open Google Sheets Live Sync Center & Endpoint Settings"
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${
+                  lastSyncStatus === 'error'
+                    ? 'bg-amber-500'
+                    : isSyncing || lastSyncStatus === 'syncing'
+                    ? 'bg-blue-500 animate-ping'
+                    : 'bg-[#10B981]'
+                }`}></span>
+                <span>{isSyncing ? 'SYNCING...' : lastSyncStatus === 'error' ? 'SYNC STATUS' : 'SAVED IN SHEETS'}</span>
+                {sheetSyncLogs.length > 0 && (
+                  <span className="text-[10px] bg-black/10 px-1.5 py-0.2 rounded-full ml-0.5">
+                    {sheetSyncLogs.length}
+                  </span>
+                )}
+              </button>
 
-          {/* Sync Refresh Button */}
-          <button
-            onClick={handleManualSync}
-            className={`p-1.5 text-gray-600 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-full transition-all ${
-              isSyncing ? 'animate-spin text-emerald-600' : ''
-            }`}
-            title="Refresh & Force Sync Data with Google Sheets"
-          >
-            <RotateCw className="w-4 h-4" />
-          </button>
+              {/* Admin Sync Refresh Button */}
+              <button
+                id="admin-sync-refresh-btn"
+                onClick={handleManualSync}
+                className={`p-1.5 text-gray-600 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-full transition-all ${
+                  isSyncing ? 'animate-spin text-emerald-600' : ''
+                }`}
+                title="Force Refresh Data from Google Sheets"
+              >
+                <RotateCw className="w-4 h-4" />
+              </button>
+            </>
+          ) : (
+            /* Regular Employees / Agents: Clean, Non-Clickable Connected Status */
+            <div
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-full bg-emerald-50 text-[#065F46] border border-emerald-200 select-none"
+              title="Central Database Connected"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+              <span>Connected</span>
+            </div>
+          )}
 
           {/* Notification Bell Badge */}
           <div className="relative">

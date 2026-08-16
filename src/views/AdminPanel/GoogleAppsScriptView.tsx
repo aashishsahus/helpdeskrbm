@@ -504,9 +504,35 @@ function doPost(e) {
         .setMimeType(ContentService.MimeType.JSON);
     }
 
-    if (action === "deleteUser") {
+    if (action === "deleteUser" || action === "deleteUserAndArchive") {
       var uSheet = ss.getSheetByName("Users");
-      var targetUserId = (contents.userId || "").toString().trim().toLowerCase();
+      var archUSheet = ss.getSheetByName("ArchivedUsers");
+      if (!archUSheet) {
+        archUSheet = ss.insertSheet("ArchivedUsers");
+        archUSheet.appendRow(["Archived At", "Archived By", "Reason", "User ID", "Emp ID", "Name", "Email", "Role", "Dept", "Designation", "Location", "Status"]);
+      }
+
+      var targetUserId = (contents.userId || (contents.user && contents.user.id) || "").toString().trim().toLowerCase();
+      var archU = contents.archivedUser || contents.user;
+
+      if (archU && archUSheet) {
+        var archURow = [
+          archU.archivedAt || new Date().toISOString(),
+          archU.archivedBy || "Super Admin",
+          archU.archiveReason || "Permanent deletion & archival",
+          archU.id || "",
+          archU.employeeId || "",
+          archU.name || "",
+          archU.email || "",
+          archU.role || "",
+          archU.department || "",
+          archU.designation || "",
+          archU.location || "",
+          archU.status || "Disabled"
+        ];
+        archUSheet.appendRow(archURow);
+      }
+
       if (targetUserId && uSheet) {
         var existingUsersData = uSheet.getDataRange().getValues();
         for (var ur = 1; ur < existingUsersData.length; ur++) {
@@ -518,7 +544,157 @@ function doPost(e) {
           }
         }
       }
-      return ContentService.createTextOutput(JSON.stringify({ success: true, message: "User deleted from Google Sheets" }))
+      return ContentService.createTextOutput(JSON.stringify({ success: true, message: "User permanently deleted and archived to ArchivedUsers sheet tab." }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (action === "deleteTicketAndArchive") {
+      var tSheet = ss.getSheetByName("Tickets");
+      var archTSheet = ss.getSheetByName("ArchivedTickets");
+      if (!archTSheet) {
+        archTSheet = ss.insertSheet("ArchivedTickets");
+        archTSheet.appendRow(["Archived At", "Archived By", "Reason", "Ticket ID", "Emp ID", "Emp Name", "Email", "Dept", "Location", "Category", "SubCategory", "Subject", "Description", "Priority", "Status", "Agent", "Created Date", "SLA Due", "Closed Date & Time", "Rating", "Feedback", "Contact"]);
+      }
+
+      var archT = contents.archivedTicket || contents.ticket;
+      var targetTid = (contents.ticketId || (contents.ticket && contents.ticket.id) || "").toString().trim().toLowerCase();
+
+      if (archT && archTSheet) {
+        var archTRow = [
+          archT.archivedAt || new Date().toISOString(),
+          archT.archivedBy || "Super Admin",
+          archT.archiveReason || "Permanent deletion & archival",
+          archT.id || "",
+          archT.employeeId || "",
+          archT.employeeName || "",
+          archT.employeeEmail || "",
+          archT.department || "",
+          archT.location || "",
+          archT.category || "",
+          archT.subCategory || "",
+          archT.subject || "",
+          archT.description || "",
+          archT.priority || "",
+          archT.status || "Closed",
+          archT.assignedAgentName || "",
+          archT.createdDate || "",
+          archT.slaDueDate || "",
+          archT.closedDate || archT.resolvedDate || "",
+          archT.rating || "",
+          archT.feedback || "",
+          archT.contactNumber || ""
+        ];
+        archTSheet.appendRow(archTRow);
+      }
+
+      if (targetTid && tSheet) {
+        var existingTData = tSheet.getDataRange().getValues();
+        for (var tr = 1; tr < existingTData.length; tr++) {
+          var rowTid = existingTData[tr][0] ? existingTData[tr][0].toString().trim().toLowerCase() : "";
+          if (rowTid === targetTid) {
+            tSheet.deleteRow(tr + 1);
+            break;
+          }
+        }
+      }
+
+      return ContentService.createTextOutput(JSON.stringify({ success: true, message: "Ticket permanently removed and archived in ArchivedTickets sheet." }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (action === "restoreTicket") {
+      var tSheet = ss.getSheetByName("Tickets");
+      var archTSheet = ss.getSheetByName("ArchivedTickets");
+      var t = contents.ticket;
+      if (t && tSheet) {
+        var tRow = [
+          t.id || "", t.employeeId || "", t.employeeName || "", t.employeeEmail || "",
+          t.department || "", t.location || "", t.category || "", t.subCategory || "",
+          t.subject || "", t.description || "", t.priority || "", t.status || "Open",
+          t.assignedAgentName || "", t.createdDate || "", t.slaDueDate || "",
+          t.closedDate || t.resolvedDate || "",
+          t.rating || "", t.feedback || "", t.contactNumber || ""
+        ];
+        tSheet.appendRow(tRow);
+      }
+      if (t && t.id && archTSheet) {
+        var existingArchData = archTSheet.getDataRange().getValues();
+        var tidKey = t.id.toString().trim().toLowerCase();
+        for (var ar = 1; ar < existingArchData.length; ar++) {
+          var rowArchTid = existingArchData[ar][3] ? existingArchData[ar][3].toString().trim().toLowerCase() : "";
+          if (rowArchTid === tidKey) {
+            archTSheet.deleteRow(ar + 1);
+            break;
+          }
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({ success: true, message: "Ticket restored successfully." }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (action === "restoreUser") {
+      var uSheet = ss.getSheetByName("Users");
+      var archUSheet = ss.getSheetByName("ArchivedUsers");
+      var u = contents.user;
+      if (u && uSheet) {
+        var uRow = [
+          u.id || "", u.employeeId || "", u.name || "", u.email || "",
+          u.role || "", u.department || "", u.designation || "", u.location || "",
+          u.status || "Active"
+        ];
+        uSheet.appendRow(uRow);
+      }
+      if (u && (u.id || u.employeeId) && archUSheet) {
+        var existingArchUData = archUSheet.getDataRange().getValues();
+        var uidKey = (u.id || "").toString().trim().toLowerCase();
+        var empKey = (u.employeeId || "").toString().trim().toLowerCase();
+        for (var aur = 1; aur < existingArchUData.length; aur++) {
+          var rowUid = existingArchUData[aur][3] ? existingArchUData[aur][3].toString().trim().toLowerCase() : "";
+          var rowEmp = existingArchUData[aur][4] ? existingArchUData[aur][4].toString().trim().toLowerCase() : "";
+          if ((uidKey && rowUid === uidKey) || (empKey && rowEmp === empKey)) {
+            archUSheet.deleteRow(aur + 1);
+            break;
+          }
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({ success: true, message: "User restored successfully." }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (action === "updateRolePermissions") {
+      var rpSheet = ss.getSheetByName("RolePermissions");
+      if (!rpSheet) {
+        rpSheet = ss.insertSheet("RolePermissions");
+      }
+      rpSheet.clearContents();
+      rpSheet.appendRow(["Role", "canViewDashboard", "canViewTickets", "canCreateTickets", "canEditTickets", "canDeleteTickets", "canViewFeedback", "canSubmitFeedback", "canViewReports", "canManageUsers", "canDeleteUsersPermanently", "canManageDepartments", "canManageCategories", "canManageSLA", "canManageDropdowns", "canAccessGoogleDriveSync", "canAccessAppsScript", "canViewAuditLogs", "canManageSystemSettings", "canManageRolePermissions", "canAccessArchivedData"]);
+      var rolePermissions = contents.rolePermissions || [];
+      rolePermissions.forEach(function(p) {
+        rpSheet.appendRow([
+          p.role || "",
+          !!p.canViewDashboard,
+          !!p.canViewTickets,
+          !!p.canCreateTickets,
+          !!p.canEditTickets,
+          !!p.canDeleteTickets,
+          !!p.canViewFeedback,
+          !!p.canSubmitFeedback,
+          !!p.canViewReports,
+          !!p.canManageUsers,
+          !!p.canDeleteUsersPermanently,
+          !!p.canManageDepartments,
+          !!p.canManageCategories,
+          !!p.canManageSLA,
+          !!p.canManageDropdowns,
+          !!p.canAccessGoogleDriveSync,
+          !!p.canAccessAppsScript,
+          !!p.canViewAuditLogs,
+          !!p.canManageSystemSettings,
+          !!p.canManageRolePermissions,
+          !!p.canAccessArchivedData
+        ]);
+      });
+      return ContentService.createTextOutput(JSON.stringify({ success: true, message: "Role Permissions synchronized to Google Sheet." }))
         .setMimeType(ContentService.MimeType.JSON);
     }
 
@@ -790,13 +966,19 @@ function getOrCreateTicketsFolder() {
 /** Setup Spreadsheet Tabs */
 function setupHelpDeskSheets(ss) {
   var targetSS = ss || SpreadsheetApp.getActiveSpreadsheet();
-  var tabs = ["Users", "Tickets", "TicketComments", "TicketAttachments", "TicketHistory", "Departments", "Categories", "MasterDropdowns", "SLARules", "Notifications", "KnowledgeBase", "AuditLogs", "Settings"];
+  var tabs = ["Users", "Tickets", "ArchivedTickets", "ArchivedUsers", "RolePermissions", "TicketComments", "TicketAttachments", "TicketHistory", "Departments", "Categories", "MasterDropdowns", "SLARules", "Notifications", "KnowledgeBase", "AuditLogs", "Settings"];
   
   tabs.forEach(function(tabName) {
     if (!targetSS.getSheetByName(tabName)) {
       var sheet = targetSS.insertSheet(tabName);
       if (tabName === "Tickets") {
         sheet.appendRow(["Ticket ID", "Emp ID", "Emp Name", "Email", "Dept", "Location", "Category", "SubCategory", "Subject", "Description", "Priority", "Status", "Agent", "Created Date", "SLA Due", "Closed Date & Time", "Rating", "Feedback", "Contact"]);
+      } else if (tabName === "ArchivedTickets") {
+        sheet.appendRow(["Archived At", "Archived By", "Reason", "Ticket ID", "Emp ID", "Emp Name", "Email", "Dept", "Location", "Category", "SubCategory", "Subject", "Description", "Priority", "Status", "Agent", "Created Date", "SLA Due", "Closed Date & Time", "Rating", "Feedback", "Contact"]);
+      } else if (tabName === "ArchivedUsers") {
+        sheet.appendRow(["Archived At", "Archived By", "Reason", "User ID", "Emp ID", "Name", "Email", "Role", "Dept", "Designation", "Location", "Status"]);
+      } else if (tabName === "RolePermissions") {
+        sheet.appendRow(["Role", "canViewDashboard", "canViewTickets", "canCreateTickets", "canEditTickets", "canDeleteTickets", "canViewFeedback", "canSubmitFeedback", "canViewReports", "canManageUsers", "canDeleteUsersPermanently", "canManageDepartments", "canManageCategories", "canManageSLA", "canManageDropdowns", "canAccessGoogleDriveSync", "canAccessAppsScript", "canViewAuditLogs", "canManageSystemSettings", "canManageRolePermissions", "canAccessArchivedData"]);
       } else if (tabName === "TicketComments") {
         sheet.appendRow(["Comment ID", "Ticket ID", "Author Name", "Author Role", "Content", "Is Internal Note", "Created At"]);
       } else if (tabName === "TicketAttachments") {

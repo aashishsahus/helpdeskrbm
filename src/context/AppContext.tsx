@@ -15,7 +15,10 @@ import {
   SystemSettings,
   TicketPriority,
   TicketStatus,
-  UserRole
+  UserRole,
+  RolePermissionConfig,
+  ArchivedTicket,
+  ArchivedUser
 } from '../types';
 import {
   initialUsers,
@@ -33,7 +36,10 @@ import {
   initialPriorities,
   initialStatuses,
   initialRoles,
-  initialDesignations
+  initialDesignations,
+  defaultRolePermissions,
+  initialArchivedTickets,
+  initialArchivedUsers
 } from '../data/initialData';
 import { formatDateTime, getFormattedNow } from '../utils/dateUtils';
 
@@ -42,6 +48,10 @@ interface AppContextType {
   setCurrentUser: (user: User | null) => void;
   users: User[];
   tickets: Ticket[];
+  archivedTickets: ArchivedTicket[];
+  archivedUsers: ArchivedUser[];
+  rolePermissions: RolePermissionConfig[];
+  hasPermission: (permissionKey: keyof RolePermissionConfig) => boolean;
   comments: TicketComment[];
   history: TicketHistory[];
   notifications: NotificationItem[];
@@ -101,14 +111,24 @@ interface AppContextType {
   updateTicketStatus: (ticketId: string, status: TicketStatus, notes?: string) => void;
   updateTicketPriority: (ticketId: string, priority: TicketPriority) => void;
   assignTicket: (ticketId: string, agentId: string) => void;
+  deleteTicketPermanentlyAndArchive: (ticketId: string, reason?: string) => Promise<{ success: boolean; message: string }>;
+  deleteTicketPermanently: (ticketId: string, reason?: string) => Promise<{ success: boolean; message: string }>;
+  restoreArchivedTicket: (ticketId: string) => Promise<{ success: boolean; message: string }>;
+  purgeArchivedTicketPermanently: (ticketId: string) => Promise<{ success: boolean; message: string }>;
   addTicketComment: (ticketId: string, content: string, isInternalNote?: boolean, attachments?: File[]) => Promise<void>;
   rateTicket: (ticketId: string, rating: number, feedback?: string) => void;
   
-  // User Management
+  // User Management & RBAC
   addUser: (user: Omit<User, 'id'>) => void;
   updateUser: (id: string, updates: Partial<User>) => void;
   toggleUserStatus: (id: string) => void;
+  deleteUserPermanentlyAndArchive: (userId: string, reason?: string) => Promise<{ success: boolean; message: string }>;
+  deleteUserPermanently: (userId: string, reason?: string) => Promise<{ success: boolean; message: string }>;
+  restoreArchivedUser: (userId: string) => Promise<{ success: boolean; message: string }>;
+  purgeArchivedUserPermanently: (userId: string) => Promise<{ success: boolean; message: string }>;
   restoreDefaultUsers: () => void;
+  updateRolePermission: (role: UserRole, permissionKey: keyof RolePermissionConfig, value: boolean) => void;
+  resetRolePermissionsToDefault: () => void;
   detectAndLoginSystemUser: () => Promise<User | null>;
   loginByIdOrQuery: (query: string, passwordInput?: string) => { success: boolean; user?: User; matches?: User[]; message: string };
   loginWithGoogleEmail: (googleEmail: string, passwordInput?: string) => { success: boolean; user?: User; matches?: User[]; message: string };
@@ -603,6 +623,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [slaRules, setSlaRules] = useState<SLARule[]>(initialSLARules);
   const [knowledgeBase, setKnowledgeBase] = useState<KnowledgeBaseArticle[]>(initialKnowledgeBase);
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>(initialAuditLogs);
+
+  // Role Permissions Access Matrix
+  const [rolePermissions, setRolePermissions] = useState<RolePermissionConfig[]>(() => {
+    try {
+      const saved = localStorage.getItem('hd_role_permissions_v1');
+      if (saved) {
+        const parsed: RolePermissionConfig[] = JSON.parse(saved);
+        const rolesSet = new Set(parsed.map(p => p.role));
+        const missing = defaultRolePermissions.filter(p => !rolesSet.has(p.role));
+        return missing.length > 0 ? [...parsed, ...missing] : parsed;
+      }
+      return defaultRolePermissions;
+    } catch {
+      return defaultRolePermissions;
+    }
+  });
+
+  // Archived Tickets Storage
+  const [archivedTickets, setArchivedTickets] = useState<ArchivedTicket[]>(() => {
+    try {
+      const saved = localStorage.getItem('hd_archived_tickets_v1');
+      return saved ? JSON.parse(saved) : initialArchivedTickets;
+    } catch {
+      return initialArchivedTickets;
+    }
+  });
+
+  // Archived Users Storage
+  const [archivedUsers, setArchivedUsers] = useState<ArchivedUser[]>(() => {
+    try {
+      const saved = localStorage.getItem('hd_archived_users_v1');
+      return saved ? JSON.parse(saved) : initialArchivedUsers;
+    } catch {
+      return initialArchivedUsers;
+    }
+  });
   
   const [settings, setSettings] = useState<SystemSettings>(() => {
     try {
@@ -687,6 +743,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [users]);
 
   useEffect(() => {
+    try { localStorage.setItem('hd_role_permissions_v1', JSON.stringify(rolePermissions)); } catch {}
+  }, [rolePermissions]);
+
+  useEffect(() => {
+    try { localStorage.setItem('hd_archived_tickets_v1', JSON.stringify(archivedTickets)); } catch {}
+  }, [archivedTickets]);
+
+  useEffect(() => {
+    try { localStorage.setItem('hd_archived_users_v1', JSON.stringify(archivedUsers)); } catch {}
+  }, [archivedUsers]);
+
+  useEffect(() => {
     try { localStorage.setItem('hd_settings_v2', JSON.stringify(settings)); } catch {}
   }, [settings]);
 
@@ -697,11 +765,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const syncDirectActionToSheets = (payload: {
     action: string;
     ticket?: any;
+    ticketId?: string;
     user?: any;
     userId?: string;
     comment?: any;
     tickets?: Ticket[];
     users?: User[];
+    archivedTickets?: ArchivedTicket[];
+    archivedUsers?: ArchivedUser[];
+    archivedTicket?: ArchivedTicket;
+    archivedUser?: ArchivedUser;
+    rolePermissions?: RolePermissionConfig[];
     departments?: Department[];
     categories?: Category[];
     branches?: string[];
@@ -713,7 +787,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     method?: string;
   }) => {
     // Generate unique key for deduplication
-    const syncKey = `${payload.action}_${payload.ticket?.id || payload.user?.id || payload.userId || payload.comment?.id || 'general'}`;
+    const syncKey = `${payload.action}_${payload.ticket?.id || payload.user?.id || payload.userId || payload.comment?.id || payload.archivedTicket?.id || payload.archivedUser?.id || 'general'}`;
     const now = Date.now();
     if (inFlightSyncRef.current[syncKey] && (now - inFlightSyncRef.current[syncKey]) < 1200) {
       // Ignore duplicate request triggered within 1.2s
@@ -724,7 +798,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const sheetId = settings.spreadsheetId || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
     const scriptUrl = settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
 
-    let targetTab: 'Tickets' | 'Users' | 'Departments' | 'Categories' | 'MasterDropdowns' | 'TicketComments' | 'SystemSettings' | 'All' = 'Tickets';
+    let targetTab: 'Tickets' | 'Users' | 'ArchivedTickets' | 'ArchivedUsers' | 'RolePermissions' | 'Departments' | 'Categories' | 'MasterDropdowns' | 'TicketComments' | 'SystemSettings' | 'All' = 'Tickets';
     let recordName = 'Support Ticket Record';
 
     if (payload.action === 'createTicket') {
@@ -733,15 +807,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } else if (payload.action === 'updateTicket') {
       targetTab = 'Tickets';
       recordName = `Ticket ${payload.ticket?.id || ''} (Status: ${payload.ticket?.status || 'Updated'})`;
+    } else if (payload.action === 'deleteTicketAndArchive') {
+      targetTab = 'ArchivedTickets';
+      recordName = `Ticket ${payload.ticket?.id || payload.archivedTicket?.id || ''} (Moved to Archived Vault)`;
+    } else if (payload.action === 'restoreTicket') {
+      targetTab = 'Tickets';
+      recordName = `Ticket ${payload.ticket?.id || ''} (Restored from Archive)`;
     } else if (payload.action === 'addUser') {
       targetTab = 'Users';
       recordName = `New User: ${payload.user?.name || ''} (${payload.user?.role || ''})`;
     } else if (payload.action === 'updateUser') {
       targetTab = 'Users';
       recordName = `User Updated: ${payload.user?.name || payload.userId || ''} (${payload.user?.employeeId || ''})`;
-    } else if (payload.action === 'deleteUser') {
+    } else if (payload.action === 'deleteUserAndArchive' || payload.action === 'deleteUser') {
+      targetTab = 'ArchivedUsers';
+      recordName = `User ${payload.user?.name || payload.userId || ''} (Permanently Deleted & Archived)`;
+    } else if (payload.action === 'restoreUser') {
       targetTab = 'Users';
-      recordName = `User Deleted (ID: ${payload.userId || ''})`;
+      recordName = `User ${payload.user?.name || payload.userId || ''} (Restored from Archive)`;
+    } else if (payload.action === 'updateRolePermissions') {
+      targetTab = 'RolePermissions';
+      recordName = `Role Permissions Access Matrix`;
     } else if (payload.action === 'addComment') {
       targetTab = 'TicketComments';
       recordName = `Comment on Ticket ${payload.ticket?.id || ''}`;
@@ -781,6 +867,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       webAppUrl: scriptUrl,
       tickets: payload.tickets || tickets,
       users: payload.users || users,
+      archivedTickets: payload.archivedTickets || archivedTickets,
+      archivedUsers: payload.archivedUsers || archivedUsers,
+      rolePermissions: payload.rolePermissions || rolePermissions,
       settings: payload.settings || settings,
       branches: payload.branches || branches,
       departments: payload.departments || departments,
@@ -1390,6 +1479,262 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  // Check role permission helper
+  const hasPermission = (permissionKey: keyof RolePermissionConfig): boolean => {
+    if (!currentUser) return false;
+    if (currentUser.role === 'Super Admin') return true;
+    const permConfig = rolePermissions.find(p => p.role === currentUser.role);
+    if (!permConfig) return false;
+    return !!permConfig[permissionKey];
+  };
+
+  // Permanently Delete Ticket & Archive to Vault / Google Sheet
+  const deleteTicketPermanentlyAndArchive = async (ticketId: string, reason?: string): Promise<{ success: boolean; message: string }> => {
+    const targetTicket = tickets.find(t => t.id === ticketId);
+    if (!targetTicket) {
+      return { success: false, message: `Ticket ${ticketId} not found.` };
+    }
+
+    const nowFormatted = getFormattedNow();
+    const archivedItem: ArchivedTicket = {
+      ...targetTicket,
+      archivedAt: nowFormatted,
+      archivedBy: currentUser ? `${currentUser.name} (${currentUser.role})` : 'Super Admin',
+      archivedByEmail: currentUser?.email || 'misrpr@rathibuildmart.com',
+      archiveReason: reason || 'Permanent deletion & archival by Super Admin'
+    };
+
+    // Remove from active tickets and add to archived
+    const updatedTickets = tickets.filter(t => t.id !== ticketId);
+    const updatedArchived = [archivedItem, ...archivedTickets];
+
+    setTickets(updatedTickets);
+    setArchivedTickets(updatedArchived);
+
+    if (selectedTicketId === ticketId) {
+      setSelectedTicketId(null);
+    }
+
+    // Sync to Google Sheets
+    syncDirectActionToSheets({
+      action: 'deleteTicketAndArchive',
+      ticket: targetTicket,
+      archivedTicket: archivedItem,
+      tickets: updatedTickets,
+      archivedTickets: updatedArchived,
+      method: 'batchUpdate'
+    });
+
+    addAuditLog(
+      'TICKET_ARCHIVED_AND_DELETED',
+      'Tickets',
+      `Ticket ${ticketId} permanently deleted from active queue and archived by ${currentUser?.name || 'Super Admin'}. Reason: ${reason || 'N/A'}`
+    );
+
+    return {
+      success: true,
+      message: `Ticket ${ticketId} permanently deleted from active list and securely archived in the "ArchivedTickets" sheet.`
+    };
+  };
+
+  // Restore Ticket from Archive back to Active queue
+  const restoreArchivedTicket = async (ticketId: string): Promise<{ success: boolean; message: string }> => {
+    const archivedItem = archivedTickets.find(t => t.id === ticketId);
+    if (!archivedItem) {
+      return { success: false, message: `Archived ticket ${ticketId} not found.` };
+    }
+
+    const { archivedAt, archivedBy, archivedByEmail, archiveReason, ...originalTicket } = archivedItem;
+    const restoredTicket: Ticket = {
+      ...originalTicket,
+      updatedDate: getFormattedNow()
+    };
+
+    const updatedArchived = archivedTickets.filter(t => t.id !== ticketId);
+    const updatedTickets = [restoredTicket, ...tickets];
+
+    setArchivedTickets(updatedArchived);
+    setTickets(updatedTickets);
+
+    syncDirectActionToSheets({
+      action: 'restoreTicket',
+      ticket: restoredTicket,
+      tickets: updatedTickets,
+      archivedTickets: updatedArchived,
+      method: 'batchUpdate'
+    });
+
+    addAuditLog('TICKET_RESTORED', 'Tickets', `Ticket ${ticketId} restored from Archive by ${currentUser?.name || 'Super Admin'}.`);
+
+    return {
+      success: true,
+      message: `Ticket ${ticketId} successfully restored back to active tickets.`
+    };
+  };
+
+  // Purge ticket permanently from archive vault
+  const purgeArchivedTicketPermanently = async (ticketId: string): Promise<{ success: boolean; message: string }> => {
+    const updatedArchived = archivedTickets.filter(t => t.id !== ticketId);
+    setArchivedTickets(updatedArchived);
+
+    syncDirectActionToSheets({
+      action: 'purgeArchivedTicket',
+      ticketId,
+      archivedTickets: updatedArchived,
+      method: 'batchUpdate'
+    });
+
+    addAuditLog('TICKET_PURGED', 'Archive Vault', `Ticket ${ticketId} purged permanently from archive database.`);
+
+    return {
+      success: true,
+      message: `Ticket ${ticketId} purged permanently.`
+    };
+  };
+
+  // Permanently Delete User & Archive to Vault / Google Sheet
+  const deleteUserPermanentlyAndArchive = async (userId: string, reason?: string): Promise<{ success: boolean; message: string }> => {
+    const targetUser = users.find(u => u.id === userId);
+    if (!targetUser) {
+      return { success: false, message: `User with ID ${userId} not found.` };
+    }
+
+    // Safety check: protect current logged-in user or master Super Admin
+    if (currentUser && currentUser.id === userId) {
+      return { success: false, message: 'Security protection: You cannot delete your own active Super Admin account.' };
+    }
+
+    if (targetUser.email === 'misrpr@rathibuildmart.com') {
+      return { success: false, message: 'Security protection: Primary Super Admin account cannot be deleted.' };
+    }
+
+    const nowFormatted = getFormattedNow();
+    const archivedItem: ArchivedUser = {
+      ...targetUser,
+      archivedAt: nowFormatted,
+      archivedBy: currentUser ? `${currentUser.name} (${currentUser.role})` : 'Super Admin',
+      archivedByEmail: currentUser?.email || 'misrpr@rathibuildmart.com',
+      archiveReason: reason || 'User permanently removed and archived by Super Admin'
+    };
+
+    const updatedUsers = users.filter(u => u.id !== userId);
+    const updatedArchived = [archivedItem, ...archivedUsers];
+
+    setUsers(updatedUsers);
+    setArchivedUsers(updatedArchived);
+
+    syncDirectActionToSheets({
+      action: 'deleteUserAndArchive',
+      user: targetUser,
+      userId: targetUser.id,
+      archivedUser: archivedItem,
+      users: updatedUsers,
+      archivedUsers: updatedArchived,
+      method: 'batchUpdate'
+    });
+
+    addAuditLog(
+      'USER_PERMANENTLY_ARCHIVED_DELETED',
+      'User Management',
+      `User ${targetUser.name} (${targetUser.employeeId || targetUser.email}) permanently deleted and moved to ArchivedUsers sheet. Reason: ${reason || 'N/A'}`
+    );
+
+    return {
+      success: true,
+      message: `User ${targetUser.name} deleted and transferred to "ArchivedUsers" sheet.`
+    };
+  };
+
+  // Restore User from Archive
+  const restoreArchivedUser = async (userId: string): Promise<{ success: boolean; message: string }> => {
+    const archivedItem = archivedUsers.find(u => u.id === userId);
+    if (!archivedItem) {
+      return { success: false, message: `Archived user ${userId} not found.` };
+    }
+
+    const { archivedAt, archivedBy, archivedByEmail, archiveReason, ...originalUser } = archivedItem;
+    const restoredUser: User = {
+      ...originalUser,
+      status: 'Active'
+    };
+
+    const updatedArchived = archivedUsers.filter(u => u.id !== userId);
+    const updatedUsers = [...users, restoredUser];
+
+    setArchivedUsers(updatedArchived);
+    setUsers(updatedUsers);
+
+    syncDirectActionToSheets({
+      action: 'restoreUser',
+      user: restoredUser,
+      users: updatedUsers,
+      archivedUsers: updatedArchived,
+      method: 'batchUpdate'
+    });
+
+    addAuditLog('USER_RESTORED', 'User Management', `User ${restoredUser.name} restored from Archive by ${currentUser?.name || 'Super Admin'}.`);
+
+    return {
+      success: true,
+      message: `User ${restoredUser.name} restored to active users list.`
+    };
+  };
+
+  // Purge user permanently from archive
+  const purgeArchivedUserPermanently = async (userId: string): Promise<{ success: boolean; message: string }> => {
+    const updatedArchived = archivedUsers.filter(u => u.id !== userId);
+    setArchivedUsers(updatedArchived);
+
+    syncDirectActionToSheets({
+      action: 'purgeArchivedUser',
+      userId,
+      archivedUsers: updatedArchived,
+      method: 'batchUpdate'
+    });
+
+    addAuditLog('USER_PURGED', 'Archive Vault', `Archived user ID ${userId} purged permanently.`);
+
+    return {
+      success: true,
+      message: `Archived user purged permanently.`
+    };
+  };
+
+  // Role Permissions Matrix Updates
+  const updateRolePermission = (role: UserRole, permissionKey: keyof RolePermissionConfig, value: boolean) => {
+    // Prevent locking Super Admin out of role management
+    if (role === 'Super Admin' && permissionKey === 'canManageRolePermissions' && !value) {
+      return;
+    }
+
+    const updated = rolePermissions.map(item => {
+      if (item.role === role) {
+        return { ...item, [permissionKey]: value };
+      }
+      return item;
+    });
+
+    setRolePermissions(updated);
+    syncDirectActionToSheets({
+      action: 'updateRolePermissions',
+      rolePermissions: updated,
+      method: 'batchUpdate'
+    });
+
+    addAuditLog('ROLE_PERMISSION_UPDATED', 'Access Control (RBAC)', `Set "${permissionKey}" = ${value} for role "${role}"`);
+  };
+
+  // Reset Role Permissions to Default
+  const resetRolePermissionsToDefault = () => {
+    setRolePermissions(defaultRolePermissions);
+    syncDirectActionToSheets({
+      action: 'updateRolePermissions',
+      rolePermissions: defaultRolePermissions,
+      method: 'batchUpdate'
+    });
+    addAuditLog('ROLE_PERMISSIONS_RESET', 'Access Control (RBAC)', `Reset all role permission configurations to standard corporate defaults.`);
+  };
+
   const restoreDefaultUsers = () => {
     const uMap = new Map<string, User>();
     initialUsers.forEach(u => uMap.set(u.id || u.employeeId, u));
@@ -1945,6 +2290,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setCurrentUser,
         users,
         tickets,
+        archivedTickets,
+        archivedUsers,
+        rolePermissions,
+        hasPermission,
         comments,
         history,
         notifications,
@@ -1999,13 +2348,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateTicketStatus,
         updateTicketPriority,
         assignTicket,
+        deleteTicketPermanentlyAndArchive,
+        deleteTicketPermanently: deleteTicketPermanentlyAndArchive,
+        restoreArchivedTicket,
+        purgeArchivedTicketPermanently,
         addTicketComment,
         rateTicket,
 
         addUser,
         updateUser,
         toggleUserStatus,
+        deleteUserPermanentlyAndArchive,
+        deleteUserPermanently: deleteUserPermanentlyAndArchive,
+        restoreArchivedUser,
+        purgeArchivedUserPermanently,
         restoreDefaultUsers,
+        updateRolePermission,
+        resetRolePermissionsToDefault,
         detectAndLoginSystemUser,
         loginByIdOrQuery,
         loginWithGoogleEmail,

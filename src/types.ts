@@ -6,6 +6,30 @@ export type TicketStatus = 'Open' | 'Pending' | 'In Progress' | 'Resolved' | 'Cl
 
 export type SLAStatus = 'Safe' | 'Due Soon' | 'Breached';
 
+export interface RolePermissionConfig {
+  role: UserRole;
+  canViewDashboard: boolean;
+  canViewTickets: boolean;
+  canCreateTickets: boolean;
+  canEditTickets: boolean;
+  canDeleteTickets: boolean; // Super Admin exclusive by default
+  canViewFeedback: boolean;
+  canSubmitFeedback: boolean;
+  canViewReports: boolean;
+  canManageUsers: boolean;
+  canDeleteUsersPermanently: boolean; // Super Admin exclusive by default
+  canManageDepartments: boolean;
+  canManageCategories: boolean;
+  canManageSLA: boolean;
+  canManageDropdowns: boolean;
+  canAccessGoogleDriveSync: boolean;
+  canAccessAppsScript: boolean;
+  canViewAuditLogs: boolean;
+  canManageSystemSettings: boolean;
+  canManageRolePermissions: boolean; // Super Admin exclusive
+  canAccessArchivedData: boolean; // Access archived tickets & users vault
+}
+
 export interface User {
   id: string;
   employeeId: string;
@@ -52,6 +76,20 @@ export interface Ticket {
   attachments?: TicketAttachment[];
   isDemoTicket?: boolean;
   isRealTicket?: boolean;
+}
+
+export interface ArchivedTicket extends Ticket {
+  archivedAt: string;
+  archivedBy: string;
+  archivedByEmail?: string;
+  archiveReason?: string;
+}
+
+export interface ArchivedUser extends User {
+  archivedAt: string;
+  archivedBy: string;
+  archivedByEmail?: string;
+  archiveReason?: string;
 }
 
 export interface TicketAttachment {

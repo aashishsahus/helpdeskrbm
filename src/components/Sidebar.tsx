@@ -19,17 +19,20 @@ import {
   UserCheck,
   Building,
   Briefcase,
-  Star
+  Star,
+  ShieldCheck,
+  Archive
 } from 'lucide-react';
 import { isTicketRaisedByUser, isTicketAssignedToAgent } from '../utils/ticketSecurity';
 
 export const Sidebar: React.FC = () => {
-  const { currentUser, activeView, setActiveView, tickets, notifications } = useApp();
+  const { currentUser, activeView, setActiveView, tickets, notifications, hasPermission, archivedTickets, archivedUsers } = useApp();
   const [isExpanded, setIsExpanded] = useState(false);
 
   const isEmployee = currentUser ? currentUser.role === 'Employee' : true;
   const isAgent = currentUser ? (currentUser.role === 'Support Agent' || currentUser.role === 'Support Manager') : false;
   const isAdmin = currentUser ? (currentUser.role === 'Admin' || currentUser.role === 'Super Admin') : false;
+  const isSuperAdmin = currentUser?.role === 'Super Admin';
 
   const userTickets = currentUser
     ? isEmployee
@@ -78,7 +81,20 @@ export const Sidebar: React.FC = () => {
       id: 'users',
       label: 'User Management',
       icon: Users,
-      visible: isAdmin
+      visible: isAdmin && hasPermission('manage_users')
+    },
+    {
+      id: 'role-permissions',
+      label: 'Role Permissions (RBAC)',
+      icon: ShieldCheck,
+      visible: isAdmin && hasPermission('manage_roles')
+    },
+    {
+      id: 'archived-data',
+      label: 'Archived Vault (Deleted)',
+      icon: Archive,
+      badge: (archivedTickets.length + archivedUsers.length) > 0 ? (archivedTickets.length + archivedUsers.length) : undefined,
+      visible: isSuperAdmin || hasPermission('view_audit_logs')
     },
     {
       id: 'dropdown-settings',

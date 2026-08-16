@@ -24,6 +24,8 @@ import { GoogleAppsScriptView } from './views/AdminPanel/GoogleAppsScriptView';
 import { AuditLogsView } from './views/AdminPanel/AuditLogsView';
 import { SystemSettingsView } from './views/AdminPanel/SystemSettingsView';
 import { MasterDropdownsView } from './views/AdminPanel/MasterDropdownsView';
+import { RolePermissionsView } from './views/AdminPanel/RolePermissionsView';
+import { ArchivedVaultView } from './views/AdminPanel/ArchivedVaultView';
 
 import { LoginModal } from './components/LoginModal';
 import { LoginPage } from './views/LoginPage';
@@ -103,6 +105,16 @@ const MainLayout: React.FC = () => {
       case 'audit-logs':
       case 'admin_audit':
         return <AuditLogsView />;
+
+      case 'role-permissions':
+      case 'role_permissions':
+      case 'admin_roles':
+        return <RolePermissionsView />;
+
+      case 'archived-data':
+      case 'archived_vault':
+      case 'admin_archive':
+        return <ArchivedVaultView />;
 
       case 'settings':
       case 'admin_settings':

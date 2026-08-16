@@ -8,7 +8,11 @@ import {
   AlertCircle,
   Paperclip,
   Trash2,
-  FolderSync
+  FolderSync,
+  UserCheck,
+  ShieldCheck,
+  Building,
+  User
 } from 'lucide-react';
 import { TicketPriority } from '../types';
 
@@ -17,6 +21,7 @@ export const CreateTicketModal: React.FC = () => {
     isCreateTicketOpen,
     setIsCreateTicketOpen,
     currentUser,
+    users,
     departments,
     categories,
     branches,
@@ -31,6 +36,7 @@ export const CreateTicketModal: React.FC = () => {
   const [subject, setSubject] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<TicketPriority>('Medium');
+  const [assignedAgentId, setAssignedAgentId] = useState<string>('');
   const [requiredByDate, setRequiredByDate] = useState('');
   const [contactNumber, setContactNumber] = useState(currentUser?.mobile || '+91 98765 43210');
   const [files, setFiles] = useState<File[]>([]);
@@ -43,6 +49,12 @@ export const CreateTicketModal: React.FC = () => {
 
   const currentCategoryObj = categories.find(c => c.name === category);
   const availableSubCategories = currentCategoryObj ? currentCategoryObj.subCategories : ['General'];
+
+  // Selected agent details
+  const selectedAgent = users.find(u => u.id === assignedAgentId || u.employeeId === assignedAgentId);
+
+  // Active support agents and staff list
+  const activeStaff = users.filter(u => u.status !== 'Disabled');
 
   const handleCategoryChange = (catName: string) => {
     setCategory(catName);
@@ -98,6 +110,8 @@ export const CreateTicketModal: React.FC = () => {
         subject,
         description,
         priority,
+        assignedAgentId: selectedAgent?.id || (assignedAgentId ? assignedAgentId : undefined),
+        assignedAgentName: selectedAgent?.name || (assignedAgentId ? assignedAgentId : undefined),
         requiredByDate: requiredByDate || undefined,
         contactNumber,
         attachments: files
@@ -115,13 +129,14 @@ export const CreateTicketModal: React.FC = () => {
     setCreatedTicketId(null);
     setSubject('');
     setDescription('');
+    setAssignedAgentId('');
     setFiles([]);
     setIsCreateTicketOpen(false);
   };
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden border border-gray-200 animate-in fade-in zoom-in-95 duration-150">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden border border-gray-200 animate-in fade-in zoom-in-95 duration-150 my-8">
         {/* Header */}
         <div className="bg-[#111827] text-white px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -130,7 +145,7 @@ export const CreateTicketModal: React.FC = () => {
             </div>
             <div>
               <h2 className="text-base font-bold text-white">Create New Support Ticket</h2>
-              <p className="text-xs text-gray-400">All attachments automatically saved to Google Drive ticket folder</p>
+              <p className="text-xs text-gray-400">Direct agent assignment & auto-sync with Google Sheets</p>
             </div>
           </div>
           <button
@@ -151,7 +166,7 @@ export const CreateTicketModal: React.FC = () => {
             <p className="text-sm text-gray-600 max-w-md mx-auto">
               Ticket <strong className="font-mono text-blue-600 text-base">{createdTicketId}</strong> has been registered in the system and logged to Google Sheets database.
             </p>
-            <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 text-xs text-gray-600 max-w-md mx-auto space-y-1 text-left">
+            <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 text-xs text-gray-600 max-w-md mx-auto space-y-2 text-left">
               <div className="flex justify-between">
                 <span className="text-gray-400">Category:</span>
                 <span className="font-semibold">{category} ({subCategory})</span>
@@ -159,6 +174,12 @@ export const CreateTicketModal: React.FC = () => {
               <div className="flex justify-between">
                 <span className="text-gray-400">Priority:</span>
                 <span className="font-semibold text-blue-600">{priority}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Assigned Agent:</span>
+                <span className="font-semibold text-emerald-700">
+                  {selectedAgent ? `${selectedAgent.name} (${selectedAgent.employeeId || selectedAgent.id})` : 'Auto-Assigned / Department Queue'}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400">Attachments Uploaded:</span>
@@ -222,8 +243,8 @@ export const CreateTicketModal: React.FC = () => {
               </div>
             </div>
 
-            {/* Category, Sub Category, Priority */}
-            <div className="grid grid-cols-3 gap-3">
+            {/* Category & Sub Category */}
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-bold text-gray-700 mb-1">Category</label>
                 <select
@@ -249,9 +270,14 @@ export const CreateTicketModal: React.FC = () => {
                   ))}
                 </select>
               </div>
+            </div>
 
+            {/* Priority & Assign Direct Agent / User Dropdown */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-blue-50/40 p-3.5 rounded-xl border border-blue-100">
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Priority</label>
+                <label className="block text-xs font-bold text-gray-700 mb-1">
+                  Ticket Priority <span className="text-red-500">*</span>
+                </label>
                 <select
                   value={priority}
                   onChange={e => setPriority(e.target.value as TicketPriority)}
@@ -261,6 +287,61 @@ export const CreateTicketModal: React.FC = () => {
                     <option key={p} value={p}>{p}</option>
                   ))}
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-blue-900 mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <UserCheck className="w-3.5 h-3.5 text-blue-600" />
+                    Assign To User / Support Agent
+                  </span>
+                  <span className="text-[10px] text-gray-400 font-normal">Optional</span>
+                </label>
+                <select
+                  value={assignedAgentId}
+                  onChange={e => setAssignedAgentId(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-blue-200 rounded-lg text-xs font-semibold text-gray-800 focus:ring-2 focus:ring-blue-500 outline-none"
+                >
+                  <option value="">-- Auto Assign / Default Routing --</option>
+                  <optgroup label="Support Agents & Managers">
+                    {activeStaff
+                      .filter(u => u.role === 'Support Agent' || u.role === 'Support Manager')
+                      .map(u => (
+                        <option key={u.id} value={u.id}>
+                          [{u.employeeId || u.id}] {u.name} — {u.role} ({u.department || 'Support'})
+                        </option>
+                      ))}
+                  </optgroup>
+                  <optgroup label="System Administrators">
+                    {activeStaff
+                      .filter(u => u.role === 'Super Admin' || u.role === 'Admin')
+                      .map(u => (
+                        <option key={u.id} value={u.id}>
+                          [{u.employeeId || u.id}] {u.name} — {u.role} ({u.department || 'Admin'})
+                        </option>
+                      ))}
+                  </optgroup>
+                  <optgroup label="All Other Staff Members">
+                    {activeStaff
+                      .filter(u => u.role === 'Employee')
+                      .map(u => (
+                        <option key={u.id} value={u.id}>
+                          [{u.employeeId || u.id}] {u.name} — {u.designation || 'Staff'} ({u.department})
+                        </option>
+                      ))}
+                  </optgroup>
+                </select>
+
+                {selectedAgent && (
+                  <div className="mt-2 flex items-center gap-2 p-1.5 bg-white rounded-lg border border-blue-200 text-[11px] text-gray-700">
+                    <div className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-[10px] shrink-0">
+                      {selectedAgent.name.charAt(0)}
+                    </div>
+                    <span className="font-bold text-blue-900">{selectedAgent.name}</span>
+                    <span className="text-gray-400 font-mono text-[10px]">({selectedAgent.employeeId || selectedAgent.id})</span>
+                    <span className="text-[10px] text-emerald-700 font-semibold ml-auto">{selectedAgent.role}</span>
+                  </div>
+                )}
               </div>
             </div>
 

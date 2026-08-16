@@ -202,7 +202,10 @@ export const SystemSettingsView: React.FC = () => {
             </div>
 
             <div>
-              <label className="block font-bold text-gray-700 mb-1">Google Apps Script Web App Endpoint URL</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block font-bold text-gray-700">Google Apps Script Web App Endpoint URL</label>
+                <span className="text-[10px] text-emerald-800 bg-emerald-100 font-bold px-2 py-0.5 rounded">Central Single Source</span>
+              </div>
               <input
                 type="text"
                 value={webAppUrl}
@@ -210,6 +213,9 @@ export const SystemSettingsView: React.FC = () => {
                 placeholder="https://script.google.com/macros/s/.../exec"
                 className="w-full p-2 border rounded-lg font-mono text-xs"
               />
+              <p className="text-[10px] text-gray-500 mt-1">
+                💡 <strong>Central Single Entry:</strong> Sirf yahan ek baar paste karke save karein. Poora helpdesk isi endpoint se automatically sync hoga.
+              </p>
             </div>
 
             <div>

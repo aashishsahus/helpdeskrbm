@@ -27,6 +27,7 @@ interface SyncActivityModalProps {
 
 export const SyncActivityModal: React.FC = () => {
   const {
+    currentUser,
     isSyncModalOpen,
     setIsSyncModalOpen,
     sheetSyncLogs,
@@ -41,6 +42,8 @@ export const SyncActivityModal: React.FC = () => {
     realTicketsCount,
     setActiveView
   } = useApp();
+
+  const isAdmin = currentUser ? (currentUser.role === 'Admin' || currentUser.role === 'Super Admin') : false;
 
   const [isPushing, setIsPushing] = useState(false);
   const [isPulling, setIsPulling] = useState(false);
@@ -94,7 +97,8 @@ export const SyncActivityModal: React.FC = () => {
     }
   }, [settings.googleAppsScriptWebAppUrl, settings.appsScriptUrl]);
 
-  if (!isSyncModalOpen) return null;
+  // Restrict to Admin / Super Admin only
+  if (!isSyncModalOpen || !isAdmin) return null;
 
   const sheetId = settings.spreadsheetId || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
   const webAppUrl = customWebAppUrl || settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || '';
@@ -281,7 +285,7 @@ export const SyncActivityModal: React.FC = () => {
                 </div>
               </div>
               <p className="text-[11px] text-gray-500 leading-relaxed">
-                👉 Google Apps Script editor me <b>Deploy ➔ Manage Deployments</b> se apna active <b>Web app URL</b> copy karke yahan paste karein aur <b>Save URL</b> click karein.
+                👉 <strong>Single Global Setup:</strong> Ye URL sirf <strong>ek baar</strong> yahan ya <em>Admin Settings</em> me save karna hota hai. Save hote hi poore system ke sabhi tickets, departments, comments aur users me yahi live endpoint automatically apply ho jata hai.
               </p>
             </div>
 

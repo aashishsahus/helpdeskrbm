@@ -463,7 +463,12 @@ app.post('/api/google/sync-sheets', async (req, res) => {
     prioritiesList,
     statusesList,
     rolesList,
-    designationsList
+    designationsList,
+    archivedTickets,
+    archivedUsers,
+    archivedTicket,
+    archivedUser,
+    rolePermissions
   } = req.body;
 
   const targetUrl = webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
@@ -480,6 +485,11 @@ app.post('/api/google/sync-sheets', async (req, res) => {
       comment: comment || undefined,
       tickets: tickets || [],
       users: users || [],
+      archivedTickets: archivedTickets || [],
+      archivedUsers: archivedUsers || [],
+      archivedTicket: archivedTicket || undefined,
+      archivedUser: archivedUser || undefined,
+      rolePermissions: rolePermissions || [],
       settings: settings || {},
       branches: branches || [],
       departments: departments || [],

@@ -18,7 +18,9 @@ import {
   UserCheck,
   ShieldCheck,
   FileText,
-  Mail
+  Mail,
+  Trash2,
+  AlertTriangle as AlertIcon
 } from 'lucide-react';
 import { TicketPriority, TicketStatus } from '../types';
 import { SendEmailModal } from './SendEmailModal';
@@ -36,7 +38,8 @@ export const TicketDetailsModal: React.FC = () => {
     updateTicketPriority,
     assignTicket,
     addTicketComment,
-    rateTicket
+    rateTicket,
+    deleteTicketPermanently
   } = useApp();
 
   const [commentText, setCommentText] = useState('');
@@ -46,6 +49,9 @@ export const TicketDetailsModal: React.FC = () => {
   const [starRating, setStarRating] = useState<number>(5);
   const [feedbackText, setFeedbackText] = useState('');
   const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteReason, setDeleteReason] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
 
   if (!selectedTicketId) return null;
 
@@ -360,6 +366,20 @@ export const TicketDetailsModal: React.FC = () => {
                     ))}
                   </select>
                 </div>
+
+                {/* Super Admin Permanent Delete / Archive Option */}
+                {currentUser?.role === 'Super Admin' && (
+                  <div className="pt-2 border-t border-gray-100">
+                    <button
+                      type="button"
+                      onClick={() => setShowDeleteConfirm(true)}
+                      className="w-full py-1.5 px-3 bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Archive & Delete Ticket</span>
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -436,6 +456,66 @@ export const TicketDetailsModal: React.FC = () => {
         ticketId={ticket.id}
         ticketSubject={ticket.subject}
       />
+
+      {/* Super Admin Permanent Delete / Archive Confirmation Dialog */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-60 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-red-200 animate-in fade-in zoom-in-95 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-red-100 rounded-xl text-red-600">
+                <AlertIcon className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-bold text-gray-900 text-sm">Move Ticket to Archive Vault?</h3>
+                <p className="text-xs text-gray-500 font-mono">{ticket.id} - {ticket.subject}</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-gray-600 leading-relaxed">
+              This will remove the ticket from the active queues and transfer all ticket metadata, SLA logs, and history to the <span className="font-bold text-gray-800">"ArchivedTickets"</span> Google Sheet tab.
+            </p>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1">Reason for Deletion / Archival *</label>
+              <textarea
+                rows={2}
+                value={deleteReason}
+                onChange={e => setDeleteReason(e.target.value)}
+                placeholder="E.g., Duplicate ticket, test submission, resolved externally..."
+                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs outline-none focus:bg-white focus:ring-2 focus:ring-red-500"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  setDeleteReason('');
+                }}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-lg text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={async () => {
+                  setIsDeleting(true);
+                  await deleteTicketPermanently(ticket.id, deleteReason || 'Deleted by Super Admin');
+                  setIsDeleting(false);
+                  setShowDeleteConfirm(false);
+                  setSelectedTicketId(null);
+                }}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shadow-md"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{isDeleting ? 'Archiving...' : 'Confirm Archive & Delete'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
