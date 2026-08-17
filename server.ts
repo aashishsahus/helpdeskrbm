@@ -111,10 +111,57 @@ app.get(['/auth/callback', '/auth/callback/'], (req, res) => {
     </html>
   `);
 });
+// Runtime Dynamic Configuration for Google Workspace Integration
+let runtimeConfig = {
+  spreadsheetId: process.env.SPREADSHEET_ID || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow',
+  webAppUrl: process.env.GOOGLE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec',
+  driveFolderId: '1e9Nu2qsZgOVn36VAnZts18LINrjR_1bR',
+  lastUpdated: new Date().toISOString()
+};
+
+// Get current active runtime Google Workspace Config
+app.get('/api/google/get-config', (req, res) => {
+  res.json({
+    success: true,
+    config: runtimeConfig
+  });
+});
+
+// Save & apply updated Google Apps Script Web App URL & Spreadsheet ID
+app.post('/api/google/save-config', (req, res) => {
+  const { webAppUrl, appsScriptUrl, googleAppsScriptWebAppUrl, spreadsheetId, driveFolderId } = req.body;
+  const newUrl = webAppUrl || googleAppsScriptWebAppUrl || appsScriptUrl;
+  if (newUrl && typeof newUrl === 'string' && newUrl.trim()) {
+    runtimeConfig.webAppUrl = newUrl.trim();
+  }
+  if (spreadsheetId && typeof spreadsheetId === 'string' && spreadsheetId.trim()) {
+    runtimeConfig.spreadsheetId = spreadsheetId.trim();
+  }
+  if (driveFolderId && typeof driveFolderId === 'string' && driveFolderId.trim()) {
+    runtimeConfig.driveFolderId = driveFolderId.trim();
+  }
+  runtimeConfig.lastUpdated = new Date().toISOString();
+
+  res.json({
+    success: true,
+    message: 'Google Workspace runtime configuration updated successfully!',
+    config: runtimeConfig
+  });
+});
+
 app.post('/api/google/diagnose-connection', async (req, res) => {
   const { webAppUrl, spreadsheetId } = req.body;
-  const targetUrl = webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
-  const targetSheetId = spreadsheetId || process.env.SPREADSHEET_ID || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
+  const providedUrl = webAppUrl && typeof webAppUrl === 'string' && webAppUrl.trim();
+  if (providedUrl) {
+    runtimeConfig.webAppUrl = providedUrl;
+  }
+  const providedSheetId = spreadsheetId && typeof spreadsheetId === 'string' && spreadsheetId.trim();
+  if (providedSheetId) {
+    runtimeConfig.spreadsheetId = providedSheetId;
+  }
+
+  const targetUrl = providedUrl || runtimeConfig.webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
+  const targetSheetId = providedSheetId || runtimeConfig.spreadsheetId || process.env.SPREADSHEET_ID || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
 
   const diagnostics: any = {
     testedAt: new Date().toISOString(),
@@ -284,8 +331,15 @@ function parseCSV(text: string): string[][] {
 // Pull real data directly from Google Sheets / Apps Script
 app.post('/api/google/pull-sheet-data', async (req, res) => {
   const { spreadsheetId, webAppUrl } = req.body;
-  const targetSheetId = spreadsheetId || process.env.SPREADSHEET_ID || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
-  const targetUrl = webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
+  if (webAppUrl && typeof webAppUrl === 'string' && webAppUrl.trim()) {
+    runtimeConfig.webAppUrl = webAppUrl.trim();
+  }
+  if (spreadsheetId && typeof spreadsheetId === 'string' && spreadsheetId.trim()) {
+    runtimeConfig.spreadsheetId = spreadsheetId.trim();
+  }
+
+  const targetSheetId = (spreadsheetId && spreadsheetId.trim()) || runtimeConfig.spreadsheetId || process.env.SPREADSHEET_ID || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
+  const targetUrl = (webAppUrl && webAppUrl.trim()) || runtimeConfig.webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
 
   let pulledTickets: any[] = [];
   let pulledUsers: any[] = [];
@@ -471,8 +525,15 @@ app.post('/api/google/sync-sheets', async (req, res) => {
     rolePermissions
   } = req.body;
 
-  const targetUrl = webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
-  const targetSheetId = spreadsheetId || process.env.SPREADSHEET_ID || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
+  if (webAppUrl && typeof webAppUrl === 'string' && webAppUrl.trim()) {
+    runtimeConfig.webAppUrl = webAppUrl.trim();
+  }
+  if (spreadsheetId && typeof spreadsheetId === 'string' && spreadsheetId.trim()) {
+    runtimeConfig.spreadsheetId = spreadsheetId.trim();
+  }
+
+  const targetUrl = (webAppUrl && webAppUrl.trim()) || runtimeConfig.webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
+  const targetSheetId = (spreadsheetId && spreadsheetId.trim()) || runtimeConfig.spreadsheetId || process.env.SPREADSHEET_ID || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
 
   try {
     const payload = {
@@ -589,8 +650,15 @@ app.post('/api/google/sync-sheets', async (req, res) => {
 
 app.post('/api/google/sync-ticket', async (req, res) => {
   const { webAppUrl, ticket, comment, action, method, spreadsheetId } = req.body;
-  const targetUrl = webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
-  const targetSheetId = spreadsheetId || process.env.SPREADSHEET_ID || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
+  if (webAppUrl && typeof webAppUrl === 'string' && webAppUrl.trim()) {
+    runtimeConfig.webAppUrl = webAppUrl.trim();
+  }
+  if (spreadsheetId && typeof spreadsheetId === 'string' && spreadsheetId.trim()) {
+    runtimeConfig.spreadsheetId = spreadsheetId.trim();
+  }
+
+  const targetUrl = (webAppUrl && webAppUrl.trim()) || runtimeConfig.webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
+  const targetSheetId = (spreadsheetId && spreadsheetId.trim()) || runtimeConfig.spreadsheetId || process.env.SPREADSHEET_ID || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
 
   // Explicitly assign method: 'appendRow' for creation/comments, 'batchUpdate' for updates
   const resolvedMethod = method || (action === 'createTicket' || action === 'addComment' ? 'appendRow' : 'batchUpdate');
@@ -683,7 +751,7 @@ app.post('/api/google/sync-ticket', async (req, res) => {
 
 app.post('/api/google/send-email', async (req, res) => {
   const { recipientEmail, recipientName, subject, body, htmlBody, ticketId, eventType, webAppUrl } = req.body;
-  const targetUrl = webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
+  const targetUrl = (webAppUrl && webAppUrl.trim()) || runtimeConfig.webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
 
   try {
     const fetchResponse = await fetch(targetUrl, {
@@ -729,7 +797,7 @@ app.post('/api/google/send-email', async (req, res) => {
 
 app.post('/api/google/provision-drive-folders', async (req, res) => {
   const { webAppUrl } = req.body;
-  const targetUrl = webAppUrl || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
+  const targetUrl = (webAppUrl && webAppUrl.trim()) || runtimeConfig.webAppUrl || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
 
   try {
     const response = await fetch(targetUrl, {
@@ -769,8 +837,15 @@ app.post('/api/google/provision-drive-folders', async (req, res) => {
 
 app.post('/api/google/clean-duplicates', async (req, res) => {
   const { webAppUrl, spreadsheetId } = req.body;
-  const targetUrl = webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
-  const targetSheetId = spreadsheetId || process.env.SPREADSHEET_ID || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
+  if (webAppUrl && typeof webAppUrl === 'string' && webAppUrl.trim()) {
+    runtimeConfig.webAppUrl = webAppUrl.trim();
+  }
+  if (spreadsheetId && typeof spreadsheetId === 'string' && spreadsheetId.trim()) {
+    runtimeConfig.spreadsheetId = spreadsheetId.trim();
+  }
+
+  const targetUrl = (webAppUrl && webAppUrl.trim()) || runtimeConfig.webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
+  const targetSheetId = (spreadsheetId && spreadsheetId.trim()) || runtimeConfig.spreadsheetId || process.env.SPREADSHEET_ID || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
 
   try {
     const response = await fetch(targetUrl, {
@@ -809,7 +884,7 @@ app.post('/api/google/clean-duplicates', async (req, res) => {
 app.post('/api/google/upload-drive-file', async (req, res) => {
   try {
     const { webAppUrl, driveFolderId, ticketId, fileName, fileType, fileSize, fileData } = req.body;
-    const targetUrl = webAppUrl || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
+    const targetUrl = (webAppUrl && webAppUrl.trim()) || runtimeConfig.webAppUrl || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
 
     const rawFolderId = driveFolderId || '1e9Nu2qsZgOVn36VAnZts18LINrjR_1bR';
     const folderUrl = rawFolderId.startsWith('http')

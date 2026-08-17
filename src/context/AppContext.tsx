@@ -2051,6 +2051,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addAuditLog('DESIGNATION_DELETED', 'Master Settings', `Deleted designation ${designation}`);
   };
 
+  // Initial sync with backend runtime configuration
+  useEffect(() => {
+    fetch('/api/google/get-config')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.config) {
+          const currentUrl = settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl;
+          if (!currentUrl && data.config.webAppUrl) {
+            setSettings(prev => {
+              const updated = {
+                ...prev,
+                googleAppsScriptWebAppUrl: data.config.webAppUrl,
+                appsScriptUrl: data.config.webAppUrl,
+                spreadsheetId: data.config.spreadsheetId || prev.spreadsheetId,
+                driveFolderId: data.config.driveFolderId || prev.driveFolderId
+              };
+              try { localStorage.setItem('hd_settings_v2', JSON.stringify(updated)); } catch {}
+              return updated;
+            });
+          } else if (currentUrl) {
+            fetch('/api/google/save-config', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                webAppUrl: currentUrl,
+                spreadsheetId: settings.spreadsheetId,
+                driveFolderId: settings.driveFolderId
+              })
+            }).catch(() => {});
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   // SLA Rule Update
   const updateSLARule = (id: string, resolutionHours: number) => {
     setSlaRules(prev => prev.map(r => (r.id === id ? { ...r, resolutionHours } : r)));
@@ -2059,7 +2094,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Settings
   const updateSettings = (newSettings: Partial<SystemSettings>) => {
     const updated = { ...settings, ...newSettings };
+    if (newSettings.googleAppsScriptWebAppUrl) {
+      updated.appsScriptUrl = newSettings.googleAppsScriptWebAppUrl.trim();
+      updated.googleAppsScriptWebAppUrl = newSettings.googleAppsScriptWebAppUrl.trim();
+    } else if (newSettings.appsScriptUrl) {
+      updated.appsScriptUrl = newSettings.appsScriptUrl.trim();
+      updated.googleAppsScriptWebAppUrl = newSettings.appsScriptUrl.trim();
+    }
+    if (newSettings.spreadsheetId) {
+      updated.spreadsheetId = newSettings.spreadsheetId.trim();
+    }
+    if (newSettings.driveFolderId) {
+      updated.driveFolderId = newSettings.driveFolderId.trim();
+    }
+
     setSettings(updated);
+    try {
+      localStorage.setItem('hd_settings_v2', JSON.stringify(updated));
+    } catch (e) {}
+
+    // Immediately push to backend server runtimeConfig
+    fetch('/api/google/save-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        webAppUrl: updated.googleAppsScriptWebAppUrl || updated.appsScriptUrl,
+        spreadsheetId: updated.spreadsheetId,
+        driveFolderId: updated.driveFolderId
+      })
+    }).catch(err => console.warn('Config save to backend error:', err));
+
     syncDirectActionToSheets({
       action: 'syncAll',
       settings: updated

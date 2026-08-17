@@ -33,23 +33,34 @@ export const GoogleAppsScriptView: React.FC = () => {
     updateSettings,
     syncWithGoogleSheets
   } = useApp();
+
   const [copied, setCopied] = useState(false);
   const [isForceSyncing, setIsForceSyncing] = useState(false);
   const [syncStatusMsg, setSyncStatusMsg] = useState('');
-  const [webAppUrlInput, setWebAppUrlInput] = useState(settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || '');
+  
+  // Current active URL in settings
+  const activeUrl = settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || '';
+  
+  // Editable input state
+  const [webAppUrlInput, setWebAppUrlInput] = useState(activeUrl);
   const [isSavedUrl, setIsSavedUrl] = useState(false);
 
-  useEffect(() => {
-    if (settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl) {
-      setWebAppUrlInput(settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || '');
-    }
-  }, [settings.googleAppsScriptWebAppUrl, settings.appsScriptUrl]);
-
-  // Diagnostic & Deduplication State
+  // Diagnostic & Live Render State
   const [isDiagnosing, setIsDiagnosing] = useState(false);
   const [diagnosticResult, setDiagnosticResult] = useState<any>(null);
   const [isDeduplicating, setIsDeduplicating] = useState(false);
   const [dedupResult, setDedupResult] = useState<{ success: boolean; message: string; removedCount?: number } | null>(null);
+
+  // Keep input synchronized when settings change externally
+  useEffect(() => {
+    if (activeUrl) {
+      setWebAppUrlInput(activeUrl);
+    }
+  }, [activeUrl]);
+
+  // Check if input has unsaved changes
+  const isDirty = webAppUrlInput.trim() !== activeUrl.trim();
+  const isValidFormat = webAppUrlInput.trim().startsWith('https://script.google.com/macros/s/') && webAppUrlInput.trim().includes('/exec');
 
   const handleCleanDuplicates = async () => {
     setIsDeduplicating(true);
@@ -59,7 +70,7 @@ export const GoogleAppsScriptView: React.FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          webAppUrl: settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl,
+          webAppUrl: activeUrl,
           spreadsheetId: settings.spreadsheetId
         })
       });
@@ -78,32 +89,43 @@ export const GoogleAppsScriptView: React.FC = () => {
     }
   };
 
-  const handleSaveUrl = () => {
+  const handleSaveUrl = async (urlToSave?: string) => {
+    const target = (urlToSave || webAppUrlInput).trim();
+    if (!target) return;
+
     updateSettings({
-      googleAppsScriptWebAppUrl: webAppUrlInput.trim(),
-      appsScriptUrl: webAppUrlInput.trim()
+      googleAppsScriptWebAppUrl: target,
+      appsScriptUrl: target
     });
+
     setIsSavedUrl(true);
-    setTimeout(() => setIsSavedUrl(false), 2500);
+    setTimeout(() => setIsSavedUrl(false), 3000);
+
+    // Automatically trigger a live connection test to verify the new endpoint
+    runDiagnosticTest(target);
   };
 
-  const handleTestConnection = async () => {
+  const runDiagnosticTest = async (testUrl?: string) => {
+    const url = (testUrl || webAppUrlInput || activeUrl).trim();
     setIsDiagnosing(true);
     setDiagnosticResult(null);
     try {
+      const startTime = performance.now();
       const res = await fetch('/api/google/diagnose-connection', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          webAppUrl: settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl,
+          webAppUrl: url,
           spreadsheetId: settings.spreadsheetId
         })
       });
       const data = await res.json();
-      setDiagnosticResult(data);
+      const latencyMs = Math.round(performance.now() - startTime);
+      setDiagnosticResult({ ...data, latencyMs });
     } catch (err: any) {
       setDiagnosticResult({
         success: false,
+        latencyMs: 0,
         diagnostics: {
           error: err.message,
           issueDetected: 'NETWORK_ERROR',
@@ -115,11 +137,15 @@ export const GoogleAppsScriptView: React.FC = () => {
     }
   };
 
+  const handleTestConnection = () => {
+    runDiagnosticTest();
+  };
+
   const handleManualForceSync = async () => {
     setIsForceSyncing(true);
     setSyncStatusMsg('Syncing all tabs to Google Sheets...');
     try {
-      const res = await syncWithGoogleSheets();
+      const res = await syncWithGoogleSheets(settings.spreadsheetId, activeUrl);
       setSyncStatusMsg(res?.message || 'All records successfully synchronized with Google Sheets!');
     } catch {
       setSyncStatusMsg('All records successfully synchronized with Google Sheets!');
@@ -1062,6 +1088,205 @@ function setupHelpDeskSheets(ss) {
         </p>
       </div>
 
+      {/* Live Web App Endpoint Manager & Real-Time Render Inspector */}
+      <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-2xs space-y-5">
+        <div className="flex items-center justify-between flex-wrap gap-3 border-b border-gray-100 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-blue-100 rounded-xl text-blue-800">
+              <Terminal className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-extrabold text-base text-gray-900">Google Apps Script Web App Endpoint</h3>
+                {activeUrl ? (
+                  <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 font-bold text-xs rounded-full flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span>ACTIVE ENDPOINT CONNECTED</span>
+                  </span>
+                ) : (
+                  <span className="px-2.5 py-0.5 bg-amber-100 text-amber-800 font-bold text-xs rounded-full flex items-center gap-1">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                    <span>ENDPOINT NOT CONFIGURED</span>
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Central Web App webhook for live real-time bidirectional Google Sheets data read/write & Gmail automation.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={handleTestConnection}
+              disabled={isDiagnosing}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl flex items-center gap-2 shadow-sm transition-all disabled:opacity-50"
+            >
+              <PlayCircle className={`w-3.5 h-3.5 ${isDiagnosing ? 'animate-spin' : ''}`} />
+              <span>{isDiagnosing ? 'Testing Web App...' : '⚡ Test & Ping Endpoint'}</span>
+            </button>
+
+            {activeUrl && (
+              <a
+                href={activeUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-xs rounded-xl flex items-center gap-1.5 border border-gray-300 transition-all"
+                title="Directly opens the Web App in a new tab to view the live JSON doGet response"
+              >
+                <span>Open Endpoint (Test Render)</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            )}
+          </div>
+        </div>
+
+        {/* Current Active Endpoint Display */}
+        <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              <span>Current Active System Web App URL (Live Render View):</span>
+            </div>
+            {activeUrl && (
+              <span className="text-[11px] font-mono px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded font-bold">
+                Source of Truth
+              </span>
+            )}
+          </div>
+
+          <div className="p-3 bg-white border border-gray-300 rounded-lg flex items-center justify-between gap-3 overflow-hidden">
+            <code className="text-xs font-mono text-gray-800 break-all select-all flex-1">
+              {activeUrl || 'No Web App URL set yet. Please paste your Google Apps Script URL below.'}
+            </code>
+            {activeUrl && (
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(activeUrl);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }}
+                className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-xs font-bold shrink-0 flex items-center gap-1"
+                title="Copy Active URL"
+              >
+                {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copied ? 'Copied' : 'Copy'}</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Edit / Update Endpoint URL Input */}
+        <div className="p-4 bg-blue-50/60 border border-blue-200 rounded-xl space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <label className="block text-xs font-extrabold text-blue-950 uppercase tracking-wider">
+              Paste New / Updated Google Apps Script Web App URL:
+            </label>
+            {isDirty && (
+              <span className="text-[10px] px-2 py-0.5 bg-amber-100 text-amber-800 font-extrabold rounded-full border border-amber-300 animate-pulse">
+                ● Unsaved Changes
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+            <input
+              type="text"
+              value={webAppUrlInput}
+              onChange={(e) => setWebAppUrlInput(e.target.value)}
+              placeholder="https://script.google.com/macros/s/AKfy.../exec"
+              className="flex-1 text-xs font-mono px-3.5 py-2.5 bg-white border border-blue-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-hidden text-gray-900 shadow-2xs"
+            />
+            <button
+              onClick={() => handleSaveUrl()}
+              disabled={!webAppUrlInput.trim()}
+              className={`px-5 py-2.5 font-extrabold text-xs rounded-xl transition-all shrink-0 flex items-center gap-1.5 shadow-sm disabled:opacity-50 ${
+                isSavedUrl
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white'
+              }`}
+            >
+              {isSavedUrl ? (
+                <>
+                  <CheckCircle2 className="w-4 h-4 text-white" />
+                  <span>✓ URL Saved & Applied!</span>
+                </>
+              ) : (
+                <>
+                  <Code2 className="w-4 h-4" />
+                  <span>💾 Save & Apply Endpoint</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {webAppUrlInput.trim() && !isValidFormat && (
+            <div className="text-[11px] text-amber-800 bg-amber-50 p-2.5 rounded-lg border border-amber-300 flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>
+                <strong>Warning:</strong> URL must start with <code>https://script.google.com/macros/s/</code> and end with <code>/exec</code> (not <code>/edit</code> or <code>/dev</code>).
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Live Diagnostics & Response Render Box */}
+        {diagnosticResult && (
+          <div className={`p-4 rounded-xl border ${diagnosticResult.success ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-amber-50 border-amber-300 text-amber-950'} space-y-3 animate-in fade-in`}>
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2 font-bold text-sm">
+                {diagnosticResult.success ? (
+                  <>
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                    <span>Live Web App Responding Successfully! Google Apps Script is operational.</span>
+                  </>
+                ) : (
+                  <>
+                    <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+                    <span>Connection Diagnostic Report: Issue Detected</span>
+                  </>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {diagnosticResult.latencyMs > 0 && (
+                  <span className="text-[11px] font-mono px-2 py-0.5 bg-white/80 rounded border text-gray-700">
+                    ⏱ {diagnosticResult.latencyMs}ms
+                  </span>
+                )}
+                <span className="text-xs font-mono px-2 py-0.5 bg-white/80 rounded border font-bold">
+                  Status: {diagnosticResult.diagnostics?.statusCode || (diagnosticResult.success ? '200 OK' : 'Error')}
+                </span>
+              </div>
+            </div>
+
+            {/* Render Preview Details */}
+            {diagnosticResult.diagnostics?.rawSnippet && (
+              <div className="space-y-1">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-gray-700">Live Render Response Output:</div>
+                <pre className="p-3 bg-gray-900 text-emerald-300 font-mono text-[11px] rounded-lg overflow-x-auto border border-gray-800 max-h-32">
+                  {diagnosticResult.diagnostics.rawSnippet}
+                </pre>
+              </div>
+            )}
+
+            {!diagnosticResult.success && (
+              <div className="text-xs space-y-2 pt-2 border-t border-amber-200">
+                <p className="font-bold text-amber-900">Kyun update nahi ho raha hai aur isko kaise theek karein:</p>
+                <ol className="list-decimal list-inside space-y-1 text-amber-800">
+                  {diagnosticResult.diagnostics?.fixInstructions?.map((inst: string, idx: number) => (
+                    <li key={idx} className="font-medium">{inst}</li>
+                  ))}
+                  <li>Google Sheet open karein → <strong>Extensions → Apps Script</strong>.</li>
+                  <li>Niche diye gaye <strong>Code.gs</strong> ko pura Copy karein aur Apps Script me paste karke Save karein.</li>
+                  <li>Apps Script me <strong>testSync</strong> function select karke <strong>▶ Run</strong> karein (Google account se permission Allow karein).</li>
+                  <li>Top right me <strong>Deploy → Manage Deployments → Pencil Icon (Edit) → Version: "New Version" → Deploy</strong> karein!</li>
+                </ol>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Live Google Sheets Sync Inspector Dashboard */}
       <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-2xs space-y-4">
         <div className="flex items-center justify-between flex-wrap gap-4 border-b border-gray-100 pb-4">
@@ -1094,14 +1319,6 @@ function setupHelpDeskSheets(ss) {
               <span>{isDeduplicating ? 'Cleaning Duplicates...' : 'Clean Duplicate Rows (Fix Repeats)'}</span>
             </button>
             <button
-              onClick={handleTestConnection}
-              disabled={isDiagnosing}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl flex items-center gap-2 shadow-sm transition-all disabled:opacity-50"
-            >
-              <PlayCircle className={`w-3.5 h-3.5 ${isDiagnosing ? 'animate-spin' : ''}`} />
-              <span>{isDiagnosing ? 'Testing Connection...' : 'Test Connection / Diagnose'}</span>
-            </button>
-            <button
               onClick={handleManualForceSync}
               disabled={isForceSyncing}
               className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl flex items-center gap-2 shadow-sm transition-all disabled:opacity-50"
@@ -1121,71 +1338,6 @@ function setupHelpDeskSheets(ss) {
             </a>
           </div>
         </div>
-
-        {/* Quick Web App URL Input & Connection Check */}
-        <div className="p-3.5 bg-gray-50 border border-gray-200 rounded-xl flex items-center justify-between flex-wrap gap-3">
-          <div className="flex-1 min-w-[280px]">
-            <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
-              Google Apps Script Web App Deployment URL
-            </label>
-            <input
-              type="text"
-              value={webAppUrlInput}
-              onChange={(e) => setWebAppUrlInput(e.target.value)}
-              placeholder="https://script.google.com/macros/s/AKfy.../exec"
-              className="w-full text-xs font-mono px-3 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
-            />
-          </div>
-          <div className="flex items-center gap-2 pt-4 sm:pt-0">
-            <button
-              onClick={handleSaveUrl}
-              className={`px-4 py-2 font-bold text-xs rounded-lg transition-all ${
-                isSavedUrl
-                  ? 'bg-emerald-600 text-white'
-                  : 'bg-gray-900 hover:bg-gray-800 text-white'
-              }`}
-            >
-              {isSavedUrl ? '✓ URL Saved!' : 'Save URL'}
-            </button>
-          </div>
-        </div>
-        {diagnosticResult && (
-          <div className={`p-4 rounded-xl border ${diagnosticResult.success ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-amber-50 border-amber-300 text-amber-950'} space-y-2`}>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 font-bold text-sm">
-                {diagnosticResult.success ? (
-                  <>
-                    <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                    <span>Connection Successful! Google Apps Script is actively writing to Google Sheets.</span>
-                  </>
-                ) : (
-                  <>
-                    <AlertTriangle className="w-5 h-5 text-amber-600" />
-                    <span>Connection Issue Detected with Google Apps Script Web App!</span>
-                  </>
-                )}
-              </div>
-              <span className="text-xs font-mono px-2 py-0.5 bg-white/80 rounded border">
-                Status: {diagnosticResult.diagnostics?.statusCode || (diagnosticResult.success ? '200 OK' : 'Error')}
-              </span>
-            </div>
-
-            {!diagnosticResult.success && (
-              <div className="text-xs space-y-1.5 pt-1 border-t border-amber-200">
-                <p className="font-semibold text-amber-900">Kyun update nahi ho raha hai aur isko kaise theek karein:</p>
-                <ol className="list-decimal list-inside space-y-1 text-amber-800">
-                  {diagnosticResult.diagnostics?.fixInstructions?.map((inst: string, idx: number) => (
-                    <li key={idx} className="font-medium">{inst}</li>
-                  ))}
-                  <li>Google Sheet open karein → <strong>Extensions → Apps Script</strong>.</li>
-                  <li>Niche diye gaye <strong>Code.gs</strong> ko pura Copy karein aur Apps Script me paste karke Save karein.</li>
-                  <li>Apps Script me <strong>testSync</strong> function select karke <strong>▶ Run</strong> karein (Google account se permission Allow karein).</li>
-                  <li>Top right me <strong>Deploy → Manage Deployments → Pencil Icon (Edit) → Version: "New Version" → Deploy</strong> karein!</li>
-                </ol>
-              </div>
-            )}
-          </div>
-        )}
 
         {dedupResult && (
           <div className={`p-4 rounded-xl border ${dedupResult.success ? 'bg-purple-50 border-purple-200 text-purple-900' : 'bg-red-50 border-red-200 text-red-900'} flex items-center justify-between gap-3`}>
