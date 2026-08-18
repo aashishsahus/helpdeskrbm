@@ -20,11 +20,16 @@ import {
   FileText,
   Mail,
   Trash2,
-  AlertTriangle as AlertIcon
+  AlertTriangle as AlertIcon,
+  ArrowUpRight,
+  ArrowDownLeft,
+  Flame,
+  Timer
 } from 'lucide-react';
 import { TicketPriority, TicketStatus } from '../types';
 import { SendEmailModal } from './SendEmailModal';
 import { SendWhatsAppModal } from './SendWhatsAppModal';
+import { getTicketDelayInfo, getTicketRelationship } from '../utils/slaCalculator';
 
 export const TicketDetailsModal: React.FC = () => {
   const {
@@ -110,6 +115,9 @@ export const TicketDetailsModal: React.FC = () => {
     rateTicket(ticket.id, starRating, feedbackText);
   };
 
+  const rel = getTicketRelationship(ticket, currentUser);
+  const delayInfo = getTicketDelayInfo(ticket);
+
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden border border-gray-200 animate-in fade-in zoom-in-95 duration-150">
@@ -123,10 +131,35 @@ export const TicketDetailsModal: React.FC = () => {
           </div>
           <button
             onClick={() => setSelectedTicketId(null)}
-            className="p-1 hover:bg-gray-800 rounded-lg text-gray-400 hover:text-white transition-colors"
+            className="p-1 hover:bg-gray-800 rounded-lg text-gray-400 hover:text-white transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
+        </div>
+
+        {/* Dynamic Context & SLA Status Bar */}
+        <div className="bg-gray-100 border-b border-gray-200 px-6 py-2.5 flex items-center justify-between gap-3 flex-wrap">
+          {/* Origin / Relationship Badge */}
+          <div className="flex items-center gap-2">
+            <span className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg border font-extrabold shadow-2xs ${rel.badgeClass}`}>
+              {rel.iconType === 'raised' && <ArrowUpRight className="w-3.5 h-3.5" />}
+              {rel.iconType === 'assigned' && <ArrowDownLeft className="w-3.5 h-3.5" />}
+              {rel.badgeLabel}
+            </span>
+            <span className="text-[11px] text-gray-600 font-medium hidden sm:inline">
+              • {rel.description}
+            </span>
+          </div>
+
+          {/* SLA Delay Alert */}
+          <div className="flex items-center gap-2">
+            <div className={`px-3 py-1 rounded-lg border text-xs font-bold flex items-center gap-1.5 shadow-2xs ${delayInfo.badgeClass}`}>
+              {delayInfo.isDelayed && <Flame className="w-3.5 h-3.5 text-red-600 animate-bounce" />}
+              {delayInfo.isDueSoon && <Timer className="w-3.5 h-3.5 text-amber-600" />}
+              {delayInfo.category === 'safe' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />}
+              <span>{delayInfo.statusLabel} ({delayInfo.subLabel})</span>
+            </div>
+          </div>
         </div>
 
         {/* Modal Content Scroll Area */}

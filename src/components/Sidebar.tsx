@@ -100,68 +100,68 @@ export const Sidebar: React.FC = () => {
       id: 'settings',
       label: 'System Settings',
       icon: Settings,
-      visible: isAdmin
+      visible: isSuperAdmin || hasPermission('canManageSystemSettings')
     },
     {
       id: 'users',
       label: 'User Management',
       icon: Users,
-      visible: isAdmin && hasPermission('manage_users')
+      visible: isSuperAdmin || hasPermission('canManageUsers')
     },
     {
       id: 'role-permissions',
       label: 'Role Permissions (RBAC)',
       icon: ShieldCheck,
-      visible: isAdmin && hasPermission('manage_roles')
+      visible: isSuperAdmin || hasPermission('canManageRolePermissions')
     },
     {
       id: 'departments',
       label: 'Departments',
       icon: Building2,
-      visible: isAdmin
+      visible: isSuperAdmin || hasPermission('canManageDepartments')
     },
     {
       id: 'categories',
       label: 'Categories & Sub',
       icon: Tags,
-      visible: isAdmin
+      visible: isSuperAdmin || hasPermission('canManageCategories')
     },
     {
       id: 'sla',
       label: 'SLA Config',
       icon: Clock,
-      visible: isAdmin
+      visible: isSuperAdmin || hasPermission('canManageSLA')
     },
     {
       id: 'dropdown-settings',
       label: 'Dropdown Settings',
       icon: MapPin,
-      visible: isAdmin
+      visible: isSuperAdmin || hasPermission('canManageDropdowns')
     },
     {
       id: 'google-drive',
       label: 'Google Drive & Sheets',
       icon: FolderSync,
-      visible: isAdmin
+      visible: isSuperAdmin || hasPermission('canAccessGoogleDriveSync')
     },
     {
       id: 'apps-script',
       label: 'Apps Script',
       icon: Code2,
-      visible: isAdmin
+      visible: isSuperAdmin || hasPermission('canAccessAppsScript')
     },
     {
       id: 'archived-data',
       label: 'Archived Vault (Deleted)',
       icon: Archive,
       badge: totalArchivedCount > 0 ? totalArchivedCount : undefined,
-      visible: isSuperAdmin || hasPermission('view_audit_logs')
+      visible: isSuperAdmin || hasPermission('canAccessArchivedData')
     },
     {
       id: 'audit-logs',
       label: 'Audit Logs',
       icon: ShieldAlert,
-      visible: isAdmin
+      visible: isSuperAdmin || hasPermission('canViewAuditLogs')
     }
   ].filter(item => item.visible);
 
@@ -298,7 +298,7 @@ export const Sidebar: React.FC = () => {
         )}
 
         {/* Grouped Admin Settings Accordion */}
-        {isAdmin && (
+        {(isAdmin || adminSubItems.length > 0) && (
           <div className="relative group">
             {/* Header / Trigger for Admin Settings */}
             <button
