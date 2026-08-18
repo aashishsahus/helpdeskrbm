@@ -470,9 +470,20 @@ export const TicketDetailsModal: React.FC = () => {
                   <p className="text-[10px] text-gray-500">{ticket.location}</p>
                 </div>
 
+                {ticket.ticketType && (
+                  <div>
+                    <span className="text-gray-400 block text-[10px]">Request Type</span>
+                    <span className="inline-block font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded text-[11px]">
+                      {ticket.ticketType}
+                    </span>
+                  </div>
+                )}
+
                 <div>
-                  <span className="text-gray-400 block text-[10px]">Category / Sub Category</span>
-                  <p className="font-semibold text-gray-800">{ticket.category} → {ticket.subCategory}</p>
+                  <span className="text-gray-400 block text-[10px]">Hierarchy (Category / Module / Sub-Category)</span>
+                  <p className="font-semibold text-gray-800">
+                    {ticket.category} {ticket.module ? `→ ${ticket.module}` : ''} → {ticket.subCategory}
+                  </p>
                 </div>
 
                 <div>

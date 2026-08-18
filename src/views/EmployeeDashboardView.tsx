@@ -195,22 +195,24 @@ export const EmployeeDashboardView: React.FC = () => {
 
         {/* Data Grid Table */}
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100 bg-white">
-                <th className="px-6 py-3 w-28">Ticket ID</th>
-                <th className="px-6 py-3">Subject & Category</th>
-                <th className="px-6 py-3 w-28">Priority</th>
-                <th className="px-6 py-3 w-32">Status</th>
-                <th className="px-6 py-3 w-36">Assigned To</th>
-                <th className="px-6 py-3 w-32">Created Date</th>
-                <th className="px-6 py-3 w-16 text-center">Action</th>
+                <th className="px-5 py-3 w-28">Ticket ID</th>
+                <th className="px-5 py-3 min-w-[200px]">Subject & Type</th>
+                <th className="px-5 py-3 min-w-[140px]">Category & Module</th>
+                <th className="px-5 py-3 min-w-[150px]">Sub-Category / Action Item</th>
+                <th className="px-5 py-3 w-24">Priority</th>
+                <th className="px-5 py-3 w-28">Status</th>
+                <th className="px-5 py-3 w-36">Assigned To</th>
+                <th className="px-5 py-3 w-28">Created Date</th>
+                <th className="px-5 py-3 w-16 text-center">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50 text-xs">
               {filteredTickets.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-12 text-gray-400">
+                  <td colSpan={9} className="text-center py-12 text-gray-400">
                     <Inbox className="w-8 h-8 mx-auto mb-2 text-gray-300" />
                     No support tickets match your filter criteria.
                   </td>
@@ -222,28 +224,48 @@ export const EmployeeDashboardView: React.FC = () => {
                     onClick={() => setSelectedTicketId(t.id)}
                     className="hover:bg-blue-50/40 transition-colors cursor-pointer group"
                   >
-                    <td className="px-6 py-4 font-mono font-bold text-blue-600">{t.id}</td>
-                    <td className="px-6 py-4">
-                      <p className="text-sm font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">{t.subject}</p>
-                      <p className="text-[10px] text-gray-500 font-mono">{t.department} • {t.category} → {t.subCategory}</p>
+                    <td className="px-5 py-4 font-mono font-bold text-blue-600">{t.id}</td>
+                    <td className="px-5 py-4">
+                      <p className="text-xs font-bold text-gray-900 group-hover:text-blue-600 transition-colors">{t.subject}</p>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        {t.ticketType && (
+                          <span className="text-[9px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.2 rounded">
+                            {t.ticketType}
+                          </span>
+                        )}
+                        <span className="text-[10px] text-gray-400 font-mono">{t.department}</span>
+                      </div>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-5 py-4">
+                      <p className="font-bold text-gray-900 text-xs">{t.category}</p>
+                      {t.module && (
+                        <span className="inline-block mt-0.5 px-1.5 py-0.2 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                          {t.module}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-5 py-4">
+                      <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-50 text-purple-800 border border-purple-200 max-w-[170px] truncate" title={t.subCategory}>
+                        {t.subCategory}
+                      </span>
+                    </td>
+                    <td className="px-5 py-4">
                       <span className={`inline-block px-2 py-0.5 text-[10px] rounded uppercase ${getPriorityBadge(t.priority)}`}>
                         {t.priority}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-5 py-4">
                       <span className={`px-2 py-1 rounded text-xs font-semibold ${getStatusBadge(t.status)}`}>
                         {t.status}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-gray-700 font-medium">
+                    <td className="px-5 py-4 text-gray-700 font-medium">
                       {t.assignedAgentName || <span className="text-gray-400 italic">Unassigned</span>}
                     </td>
-                    <td className="px-6 py-4 text-gray-500 font-mono text-[11px]">
+                    <td className="px-5 py-4 text-gray-500 font-mono text-[11px]">
                       {new Date(t.createdDate).toLocaleDateString()}
                     </td>
-                    <td className="px-6 py-4 text-center">
+                    <td className="px-5 py-4 text-center">
                       <button className="p-1.5 hover:bg-white hover:shadow-2xs border border-transparent hover:border-gray-200 rounded transition-all">
                         <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-blue-600" />
                       </button>

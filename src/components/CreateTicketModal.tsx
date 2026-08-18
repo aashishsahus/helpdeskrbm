@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import {
   X,
@@ -12,9 +12,18 @@ import {
   UserCheck,
   ShieldCheck,
   Building,
-  User
+  User,
+  Layers,
+  Sparkles
 } from 'lucide-react';
 import { TicketPriority } from '../types';
+import {
+  TICKET_TYPES,
+  TICKET_HIERARCHY_DATA,
+  getCategoriesForType,
+  getModulesForCategory,
+  getSubCategoriesForModule
+} from '../data/ticketHierarchy';
 
 export const CreateTicketModal: React.FC = () => {
   const {
@@ -29,26 +38,89 @@ export const CreateTicketModal: React.FC = () => {
     createTicket
   } = useApp();
 
+  // Background profile auto-fills (Hidden from inputs as requested)
   const [department, setDepartment] = useState(currentUser?.department || 'IT Operations');
   const [location, setLocation] = useState(currentUser?.location || 'RPR');
-  const [category, setCategory] = useState('Hardware');
-  const [subCategory, setSubCategory] = useState('Laptop');
+
+  // Hierarchy State: Type -> Category -> Module -> Sub-Category
+  const [ticketType, setTicketType] = useState<string>('Modification Request');
+  const [category, setCategory] = useState<string>('Orbit');
+  const [module, setModule] = useState<string>('Invoice');
+  const [subCategory, setSubCategory] = useState<string>('Add Item');
+
   const [subject, setSubject] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<TicketPriority>('Medium');
   const [assignedAgentId, setAssignedAgentId] = useState<string>('');
   const [requiredByDate, setRequiredByDate] = useState('');
-  const [contactNumber, setContactNumber] = useState(currentUser?.mobile || '+91 98765 43210');
+  const [contactNumber, setContactNumber] = useState(currentUser?.mobile || '');
   const [files, setFiles] = useState<File[]>([]);
   const [fileError, setFileError] = useState('');
 
   const [submitting, setSubmitting] = useState(false);
   const [createdTicketId, setCreatedTicketId] = useState<string | null>(null);
 
+  // Synchronize profile defaults and initial hierarchy whenever modal opens
+  useEffect(() => {
+    if (isCreateTicketOpen && currentUser) {
+      const userDept = currentUser.department || (departments[0]?.name ?? 'IT Operations');
+      const userLoc = currentUser.location || (branches[0] ?? 'RPR');
+      setDepartment(userDept);
+      setLocation(userLoc);
+      setContactNumber(currentUser.mobile || '');
+    }
+  }, [isCreateTicketOpen, currentUser, departments, branches]);
+
   if (!isCreateTicketOpen) return null;
 
-  const currentCategoryObj = categories.find(c => c.name === category);
-  const availableSubCategories = currentCategoryObj ? currentCategoryObj.subCategories : ['General'];
+  // Registered category names from system settings
+  const registeredCategoryNames = categories.map(c => c.name);
+  const availableCategories = getCategoriesForType(ticketType, registeredCategoryNames);
+  const availableModules = getModulesForCategory(category, ticketType);
+
+  const fallbackSubs = categories.find(c => c.name === category)?.subCategories || [];
+  const availableSubCategories = getSubCategoriesForModule(category, module, ticketType, fallbackSubs);
+
+  // Hierarchy Handlers
+  const handleTypeChange = (newType: string) => {
+    setTicketType(newType);
+    const newCats = getCategoriesForType(newType, registeredCategoryNames);
+    const validCat = newCats.includes(category) ? category : newCats[0] || 'Orbit';
+    setCategory(validCat);
+
+    const newMods = getModulesForCategory(validCat, newType);
+    const validMod = newMods[0] || 'General';
+    setModule(validMod);
+
+    const newSubs = getSubCategoriesForModule(validCat, validMod, newType, fallbackSubs);
+    setSubCategory(newSubs[0] || 'General');
+  };
+
+  const handleCategoryChange = (newCat: string) => {
+    setCategory(newCat);
+    const newMods = getModulesForCategory(newCat, ticketType);
+    const validMod = newMods[0] || 'General';
+    setModule(validMod);
+
+    const catObj = categories.find(c => c.name === newCat);
+    if (catObj && catObj.defaultPriority) {
+      setPriority(catObj.defaultPriority);
+    }
+
+    const newSubs = getSubCategoriesForModule(newCat, validMod, ticketType, catObj?.subCategories || []);
+    setSubCategory(newSubs[0] || 'General');
+  };
+
+  const handleModuleChange = (newMod: string) => {
+    setModule(newMod);
+    const newSubs = getSubCategoriesForModule(category, newMod, ticketType, fallbackSubs);
+    setSubCategory(newSubs[0] || 'General');
+  };
+
+  // Auto-fill a clean subject suggestion based on selected hierarchy
+  const handleAutoSuggestSubject = () => {
+    setSubject(`[${category} - ${module}] ${subCategory}`);
+  };
 
   // Selected agent details
   const selectedAgent = users.find(u => u.id === assignedAgentId || u.employeeId === assignedAgentId);
@@ -56,28 +128,10 @@ export const CreateTicketModal: React.FC = () => {
   // Active support agents and staff list
   const activeStaff = users.filter(u => u.status !== 'Disabled');
 
-  const handleCategoryChange = (catName: string) => {
-    setCategory(catName);
-    const cat = categories.find(c => c.name === catName);
-    if (cat) {
-      setSubCategory(cat.subCategories[0] || 'General');
-      setPriority(cat.defaultPriority);
-    }
-  };
-
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files) return;
     const selected = Array.from(e.target.files);
     setFileError('');
-
-    const allowedTypes = [
-      'application/pdf',
-      'image/jpeg',
-      'image/png',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'text/csv'
-    ];
 
     for (const f of selected as File[]) {
       if (f.size > 15 * 1024 * 1024) {
@@ -105,7 +159,9 @@ export const CreateTicketModal: React.FC = () => {
         employeeEmail: currentUser?.email || 'guest@rathibuildmart.com',
         department,
         location,
+        ticketType,
         category,
+        module,
         subCategory,
         subject,
         description,
@@ -145,7 +201,7 @@ export const CreateTicketModal: React.FC = () => {
             </div>
             <div>
               <h2 className="text-base font-bold text-white">Create New Support Ticket</h2>
-              <p className="text-xs text-gray-400">Direct agent assignment & auto-sync with Google Sheets</p>
+              <p className="text-xs text-gray-400">Structured ticket hierarchy & automated profile assignment</p>
             </div>
           </div>
           <button
@@ -168,12 +224,24 @@ export const CreateTicketModal: React.FC = () => {
             </p>
             <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 text-xs text-gray-600 max-w-md mx-auto space-y-2 text-left">
               <div className="flex justify-between">
-                <span className="text-gray-400">Category:</span>
-                <span className="font-semibold">{category} ({subCategory})</span>
+                <span className="text-gray-400">Request Type:</span>
+                <span className="font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">{ticketType}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Category & Module:</span>
+                <span className="font-semibold">{category} → {module}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Sub-Category / Action:</span>
+                <span className="font-semibold text-gray-900">{subCategory}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400">Priority:</span>
                 <span className="font-semibold text-blue-600">{priority}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Department & Location:</span>
+                <span className="font-semibold text-gray-800">{department} ({location})</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400">Assigned Agent:</span>
@@ -181,10 +249,12 @@ export const CreateTicketModal: React.FC = () => {
                   {selectedAgent ? `${selectedAgent.name} (${selectedAgent.employeeId || selectedAgent.id})` : 'Auto-Assigned / Department Queue'}
                 </span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Attachments Uploaded:</span>
-                <span className="font-semibold">{files.length} File(s) to Google Drive</span>
-              </div>
+              {files.length > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Attachments:</span>
+                  <span className="font-semibold">{files.length} File(s)</span>
+                </div>
+              )}
               <div className="pt-2 border-t border-gray-200 flex items-center gap-2 text-emerald-800 font-semibold text-[11px] bg-emerald-50 p-2 rounded-lg">
                 <span>📧</span>
                 <span>Confirmation emails automatically sent to both employee and support team.</span>
@@ -202,72 +272,98 @@ export const CreateTicketModal: React.FC = () => {
         ) : (
           /* Ticket Form */
           <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
-            {/* Requester Bar */}
-            <div className="grid grid-cols-3 gap-3 p-3 bg-gray-50 rounded-xl border border-gray-200 text-xs">
-              <div>
-                <span className="text-gray-400 block text-[10px] uppercase font-bold">Employee ID</span>
-                <span className="font-semibold text-gray-900 font-mono">{currentUser?.employeeId || 'GUEST'}</span>
-              </div>
-              <div>
-                <span className="text-gray-400 block text-[10px] uppercase font-bold">Employee Name</span>
-                <span className="font-semibold text-gray-900">{currentUser?.name || 'Guest User'}</span>
-              </div>
-              <div>
-                <span className="text-gray-400 block text-[10px] uppercase font-bold">Email</span>
-                <span className="font-semibold text-gray-900 truncate block">{currentUser?.email || 'unauthenticated'}</span>
+            {/* Requester Profile Summary Bar (Department and Branch/Location auto-attached) */}
+            <div className="p-3 bg-gradient-to-r from-gray-50 to-blue-50/40 rounded-xl border border-gray-200 text-xs">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <div>
+                  <span className="text-gray-400 block text-[10px] uppercase font-bold">Requester</span>
+                  <span className="font-semibold text-gray-900 truncate block">
+                    {currentUser?.name || 'Guest User'} <span className="font-mono text-gray-500 text-[10px]">({currentUser?.employeeId || 'EMP-GUEST'})</span>
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-400 block text-[10px] uppercase font-bold">Email</span>
+                  <span className="font-semibold text-gray-900 truncate block">{currentUser?.email || 'guest@rathibuildmart.com'}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400 block text-[10px] uppercase font-bold">Department (Profile)</span>
+                  <span className="inline-flex items-center gap-1 font-semibold text-blue-700 bg-blue-100/60 px-2 py-0.5 rounded text-[11px] truncate">
+                    <Building className="w-3 h-3 text-blue-600 shrink-0" />
+                    <span className="truncate">{currentUser?.department || department}</span>
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-400 block text-[10px] uppercase font-bold">Branch (Profile)</span>
+                  <span className="inline-flex items-center gap-1 font-semibold text-emerald-800 bg-emerald-100/60 px-2 py-0.5 rounded text-[11px] truncate">
+                    <span>📍</span>
+                    <span className="truncate">{currentUser?.location || location}</span>
+                  </span>
+                </div>
               </div>
             </div>
 
-            {/* Department & Location */}
-            <div className="grid grid-cols-2 gap-4">
+            {/* Hierarchical Selection Row 1: Type & Category */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Department</label>
+                <label className="block text-xs font-bold text-gray-800 mb-1 flex items-center justify-between">
+                  <span>Ticket Type <span className="text-red-500">*</span></span>
+                  <span className="text-[10px] text-blue-600 font-semibold bg-blue-50 px-1.5 py-0.5 rounded">Type</span>
+                </label>
                 <select
-                  value={department}
-                  onChange={e => setDepartment(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs font-medium focus:ring-2 focus:ring-blue-500 outline-none"
+                  value={ticketType}
+                  onChange={e => handleTypeChange(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs font-bold text-blue-900 focus:ring-2 focus:ring-blue-500 outline-none"
                 >
-                  {departments.map(d => (
-                    <option key={d.id} value={d.name}>{d.name}</option>
+                  {TICKET_TYPES.map(t => (
+                    <option key={t} value={t}>{t}</option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Branch / Office Location</label>
-                <select
-                  value={location}
-                  onChange={e => setLocation(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs font-medium focus:ring-2 focus:ring-blue-500 outline-none font-semibold"
-                >
-                  {branches.map(b => (
-                    <option key={b} value={b}>{b}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Category & Sub Category */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Category</label>
+                <label className="block text-xs font-bold text-gray-800 mb-1 flex items-center justify-between">
+                  <span>Category <span className="text-red-500">*</span></span>
+                  <span className="text-[10px] text-blue-600 font-semibold bg-blue-50 px-1.5 py-0.5 rounded">Category</span>
+                </label>
                 <select
                   value={category}
                   onChange={e => handleCategoryChange(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs font-medium focus:ring-2 focus:ring-blue-500 outline-none"
+                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs font-bold text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none"
                 >
-                  {categories.map(c => (
-                    <option key={c.id} value={c.name}>{c.name}</option>
+                  {availableCategories.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Hierarchical Selection Row 2: Module & Sub-Category */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-800 mb-1 flex items-center justify-between">
+                  <span>Module <span className="text-red-500">*</span></span>
+                  <span className="text-[10px] text-blue-600 font-semibold bg-blue-50 px-1.5 py-0.5 rounded">Module</span>
+                </label>
+                <select
+                  value={module}
+                  onChange={e => handleModuleChange(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs font-bold text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none"
+                >
+                  {availableModules.map(m => (
+                    <option key={m} value={m}>{m}</option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Sub Category</label>
+                <label className="block text-xs font-bold text-gray-800 mb-1 flex items-center justify-between">
+                  <span>Sub-Category / Action Item <span className="text-red-500">*</span></span>
+                  <span className="text-[10px] text-blue-600 font-semibold bg-blue-50 px-1.5 py-0.5 rounded">Sub-Category</span>
+                </label>
                 <select
                   value={subCategory}
                   onChange={e => setSubCategory(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs font-medium focus:ring-2 focus:ring-blue-500 outline-none"
+                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs font-semibold text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none"
                 >
                   {availableSubCategories.map((sub, idx) => (
                     <option key={idx} value={sub}>{sub}</option>
@@ -351,15 +447,25 @@ export const CreateTicketModal: React.FC = () => {
 
             {/* Subject */}
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                Subject / Issue Title <span className="text-red-500">*</span>
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-bold text-gray-700">
+                  Subject / Issue Title <span className="text-red-500">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={handleAutoSuggestSubject}
+                  className="text-[10px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 hover:underline"
+                >
+                  <Sparkles className="w-3 h-3 text-blue-500" />
+                  Auto-fill Title from Selection
+                </button>
+              </div>
               <input
                 type="text"
                 required
                 value={subject}
                 onChange={e => setSubject(e.target.value)}
-                placeholder="Brief summary of the issue (e.g. Printer offline in Sales bay)"
+                placeholder={`Brief summary (e.g. [${category} - ${module}] ${subCategory})`}
                 className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs font-medium focus:ring-2 focus:ring-blue-500 outline-none"
               />
             </div>
@@ -371,7 +477,7 @@ export const CreateTicketModal: React.FC = () => {
               </label>
               <textarea
                 required
-                rows={4}
+                rows={3}
                 value={description}
                 onChange={e => setDescription(e.target.value)}
                 placeholder="Describe exact symptoms, error codes, steps to reproduce, or urgent operational impacts..."
@@ -382,11 +488,17 @@ export const CreateTicketModal: React.FC = () => {
             {/* Dates & Contact */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Contact Phone Number</label>
+                <label className="block text-xs font-bold text-gray-700 mb-1 flex items-center justify-between">
+                  <span>Contact Phone Number</span>
+                  <span className="text-[10px] text-gray-400 font-normal">
+                    {currentUser?.mobile ? 'Auto-filled from profile' : 'Optional'}
+                  </span>
+                </label>
                 <input
                   type="text"
                   value={contactNumber}
                   onChange={e => setContactNumber(e.target.value)}
+                  placeholder="e.g. +91 98765 43210"
                   className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs font-medium focus:ring-2 focus:ring-blue-500 outline-none"
                 />
               </div>
@@ -476,3 +588,4 @@ export const CreateTicketModal: React.FC = () => {
     </div>
   );
 };
+

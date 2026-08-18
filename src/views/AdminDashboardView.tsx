@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import {
   BarChart,
@@ -22,45 +22,90 @@ import {
   Users,
   Building2,
   Calendar,
-  CheckCircle2
+  CheckCircle2,
+  Filter
 } from 'lucide-react';
+import { DateRangeFilter } from '../components/DateRangeFilter';
+import { DateRangeFilterType, isDateInRange, getDateRangeLabel } from '../utils/dateUtils';
 
 export const AdminDashboardView: React.FC = () => {
   const { tickets, users, departments, categories, slaRules, setSelectedTicketId, currentUser } = useApp();
 
-  const [dateFilter, setDateFilter] = useState<'thisMonth' | 'lastMonth' | 'all'>('all');
+  const [dateFilter, setDateFilter] = useState<DateRangeFilterType>('all');
+  const [customStart, setCustomStart] = useState<string>('');
+  const [customEnd, setCustomEnd] = useState<string>('');
   const [ticketStatusFilter, setTicketStatusFilter] = useState<string>('All');
 
-  // Metrics
-  const totalTickets = tickets.length;
-  const openCount = tickets.filter(t => t.status === 'Open').length;
-  const inProgressCount = tickets.filter(t => t.status === 'In Progress').length;
-  const pendingCount = tickets.filter(t => t.status === 'Pending').length;
-  const resolvedCount = tickets.filter(t => t.status === 'Resolved').length;
-  const closedCount = tickets.filter(t => t.status === 'Closed').length;
-  const slaBreached = tickets.filter(t => t.slaStatus === 'Breached').length;
+  // Filter tickets by selected date range
+  const filteredTickets = useMemo(() => {
+    return tickets.filter(t => isDateInRange(t.createdDate, dateFilter, customStart, customEnd));
+  }, [tickets, dateFilter, customStart, customEnd]);
+
+  // Metrics based on filtered tickets
+  const totalTickets = filteredTickets.length;
+  const openCount = filteredTickets.filter(t => t.status === 'Open').length;
+  const inProgressCount = filteredTickets.filter(t => t.status === 'In Progress').length;
+  const pendingCount = filteredTickets.filter(t => t.status === 'Pending').length;
+  const resolvedCount = filteredTickets.filter(t => t.status === 'Resolved').length;
+  const closedCount = filteredTickets.filter(t => t.status === 'Closed').length;
+  const slaBreached = filteredTickets.filter(t => t.slaStatus === 'Breached').length;
 
   const slaCompliancePct = totalTickets > 0 ? (((totalTickets - slaBreached) / totalTickets) * 100).toFixed(1) : '100';
 
   // Priority Distribution Chart Data
   const priorityData = [
-    { name: 'Critical', value: tickets.filter(t => t.priority === 'Critical').length, color: '#EF4444' },
-    { name: 'High', value: tickets.filter(t => t.priority === 'High').length, color: '#F97316' },
-    { name: 'Medium', value: tickets.filter(t => t.priority === 'Medium').length, color: '#3B82F6' },
-    { name: 'Low', value: tickets.filter(t => t.priority === 'Low').length, color: '#6B7280' }
+    { name: 'Critical', value: filteredTickets.filter(t => t.priority === 'Critical').length, color: '#EF4444' },
+    { name: 'High', value: filteredTickets.filter(t => t.priority === 'High').length, color: '#F97316' },
+    { name: 'Medium', value: filteredTickets.filter(t => t.priority === 'Medium').length, color: '#3B82F6' },
+    { name: 'Low', value: filteredTickets.filter(t => t.priority === 'Low').length, color: '#6B7280' }
   ];
 
   // Department Breakdown Data
   const departmentData = departments.map(d => ({
     name: d.name.replace('&', 'and').split(' ')[0],
-    count: tickets.filter(t => t.department === d.name).length
+    count: filteredTickets.filter(t => t.department === d.name).length
   }));
 
-  // Category Distribution
-  const categoryData = categories.slice(0, 6).map(c => ({
-    name: c.name,
-    count: tickets.filter(t => t.category === c.name).length
-  }));
+  // Category Distribution (Hierarchy Level 2 - Orbit, FMS, Hardware, etc.)
+  const categoryCountMap: { [cat: string]: number } = {};
+  categories.forEach(c => {
+    categoryCountMap[c.name] = 0;
+  });
+  filteredTickets.forEach(t => {
+    if (t.category) {
+      categoryCountMap[t.category] = (categoryCountMap[t.category] || 0) + 1;
+    }
+  });
+  const categoryData = Object.entries(categoryCountMap)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([name, count]) => ({
+      name,
+      count
+    }));
+
+  // Ticket Request Type Distribution
+  const typeLabels = ['Modification Request', 'New Request', 'Support / How-To', 'Approval Request', 'Verification Request', 'Issue / Bug'];
+  const ticketTypeData = typeLabels.map(tType => ({
+    name: tType.replace('Request', 'Req').replace('Support / How-To', 'How-To'),
+    fullName: tType,
+    count: filteredTickets.filter(t => t.ticketType === tType).length
+  })).filter(d => d.count > 0 || true);
+
+  // Module Breakdown Data
+  const moduleCounts: { [key: string]: number } = {};
+  filteredTickets.forEach(t => {
+    if (t.module) {
+      moduleCounts[t.module] = (moduleCounts[t.module] || 0) + 1;
+    }
+  });
+  const topModulesData = Object.entries(moduleCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 7)
+    .map(([mod, count]) => ({
+      name: mod,
+      count
+    }));
 
   // Monthly Trend Data
   const monthlyData = [
@@ -69,8 +114,14 @@ export const AdminDashboardView: React.FC = () => {
     { month: 'May', created: 30, resolved: 28 },
     { month: 'Jun', created: 35, resolved: 33 },
     { month: 'Jul', created: 42, resolved: 39 },
-    { month: 'Aug', created: tickets.length, resolved: resolvedCount + closedCount }
+    { month: 'Aug', created: filteredTickets.length, resolved: resolvedCount + closedCount }
   ];
+
+  const handleDateFilterChange = (newFilter: DateRangeFilterType, s?: string, e?: string) => {
+    setDateFilter(newFilter);
+    if (s !== undefined) setCustomStart(s);
+    if (e !== undefined) setCustomEnd(e);
+  };
 
   return (
     <div className="p-8 space-y-8 flex-1 overflow-y-auto bg-[#F3F4F6]">
@@ -91,27 +142,13 @@ export const AdminDashboardView: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2 bg-white p-1 rounded-xl border border-gray-200 text-xs font-semibold">
-          <Calendar className="w-3.5 h-3.5 text-gray-400 ml-2" />
-          <button
-            onClick={() => setDateFilter('thisMonth')}
-            className={`px-3 py-1 rounded-lg transition-all ${dateFilter === 'thisMonth' ? 'bg-blue-600 text-white font-bold' : 'text-gray-600 hover:text-gray-900'}`}
-          >
-            This Month
-          </button>
-          <button
-            onClick={() => setDateFilter('lastMonth')}
-            className={`px-3 py-1 rounded-lg transition-all ${dateFilter === 'lastMonth' ? 'bg-blue-600 text-white font-bold' : 'text-gray-600 hover:text-gray-900'}`}
-          >
-            Last Month
-          </button>
-          <button
-            onClick={() => setDateFilter('all')}
-            className={`px-3 py-1 rounded-lg transition-all ${dateFilter === 'all' ? 'bg-blue-600 text-white font-bold' : 'text-gray-600 hover:text-gray-900'}`}
-          >
-            All Time
-          </button>
-        </div>
+        {/* Dynamic Multi-Period Date Filter Component */}
+        <DateRangeFilter
+          value={dateFilter}
+          onChange={handleDateFilterChange}
+          customStartDate={customStart}
+          customEndDate={customEnd}
+        />
       </div>
 
       {/* Top 8 Executive KPI Cards */}
@@ -157,28 +194,51 @@ export const AdminDashboardView: React.FC = () => {
         </div>
       </div>
 
-      {/* Analytics Charts Grid */}
+      {/* Analytics Charts Grid (4 Cards) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Monthly Trend Chart */}
+        {/* Ticket Request Type Distribution */}
         <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-2xs space-y-4">
           <div className="flex items-center justify-between border-b border-gray-100 pb-3">
             <div>
-              <h3 className="font-bold text-sm text-gray-900">Monthly Ticket Flow Trend</h3>
-              <p className="text-[10px] text-gray-400">Created vs Resolved tickets month over month</p>
+              <h3 className="font-bold text-sm text-gray-900">Ticket Type Distribution (Hierarchy Level 1)</h3>
+              <p className="text-[10px] text-gray-400">Modification, New Request, How-To, Approval & Bug volume</p>
             </div>
-            <span className="text-xs font-mono font-semibold px-2 py-1 bg-gray-100 text-gray-700 rounded">
-              2026 YTD
+            <span className="text-xs font-mono font-semibold px-2 py-1 bg-blue-50 text-blue-700 rounded border border-blue-200">
+              {typeLabels.length} Types
             </span>
           </div>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthlyData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <BarChart data={ticketTypeData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#6B7280' }} />
-                <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} />
+                <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#4B5563' }} angle={-15} textAnchor="end" interval={0} />
+                <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} allowDecimals={false} />
                 <Tooltip contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
-                <Bar dataKey="created" fill="#3B82F6" name="Created" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="resolved" fill="#10B981" name="Resolved" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="count" fill="#3B82F6" name="Tickets" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Top Modules Breakdown */}
+        <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-2xs space-y-4">
+          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+            <div>
+              <h3 className="font-bold text-sm text-gray-900">Top ERP / IT Modules (Hierarchy Level 3)</h3>
+              <p className="text-[10px] text-gray-400">Most active functional modules across categories</p>
+            </div>
+            <span className="text-xs font-mono font-semibold px-2 py-1 bg-indigo-50 text-indigo-700 rounded border border-indigo-200">
+              Module Volume
+            </span>
+          </div>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart layout="vertical" data={topModulesData} margin={{ top: 10, right: 10, left: 30, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E5E7EB" />
+                <XAxis type="number" tick={{ fontSize: 11, fill: '#6B7280' }} allowDecimals={false} />
+                <YAxis dataKey="name" type="category" tick={{ fontSize: 11, fill: '#4B5563', fontWeight: 600 }} width={90} />
+                <Tooltip contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
+                <Bar dataKey="count" fill="#6366F1" name="Tickets" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -215,43 +275,22 @@ export const AdminDashboardView: React.FC = () => {
           </div>
         </div>
 
-        {/* Department Wise Breakdown */}
-        <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-2xs space-y-4">
-          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-            <div>
-              <h3 className="font-bold text-sm text-gray-900">Department Wise Ticket Volume</h3>
-              <p className="text-[10px] text-gray-400">Tickets generated by department origin</p>
-            </div>
-          </div>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={departmentData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#6B7280' }} />
-                <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} />
-                <Tooltip contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
-                <Bar dataKey="count" fill="#8B5CF6" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
         {/* Top Category Distribution */}
         <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-2xs space-y-4">
           <div className="flex items-center justify-between border-b border-gray-100 pb-3">
             <div>
-              <h3 className="font-bold text-sm text-gray-900">Top Categories Breakdown</h3>
+              <h3 className="font-bold text-sm text-gray-900">Top Categories Breakdown (Hierarchy Level 2)</h3>
               <p className="text-[10px] text-gray-400">Most frequent support request categories</p>
             </div>
           </div>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart layout="vertical" data={categoryData} margin={{ top: 10, right: 10, left: 20, bottom: 0 }}>
+              <BarChart layout="vertical" data={categoryData} margin={{ top: 10, right: 10, left: 30, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E5E7EB" />
-                <XAxis type="number" tick={{ fontSize: 11, fill: '#6B7280' }} />
-                <YAxis dataKey="name" type="category" tick={{ fontSize: 11, fill: '#6B7280' }} width={100} />
+                <XAxis type="number" tick={{ fontSize: 11, fill: '#6B7280' }} allowDecimals={false} />
+                <YAxis dataKey="name" type="category" tick={{ fontSize: 11, fill: '#4B5563' }} width={100} />
                 <Tooltip contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
-                <Bar dataKey="count" fill="#F59E0B" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="count" fill="#F59E0B" name="Tickets" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -264,10 +303,10 @@ export const AdminDashboardView: React.FC = () => {
           <div>
             <h2 className="font-bold text-gray-900 text-sm flex items-center gap-2">
               <Ticket className="w-4 h-4 text-purple-600" />
-              Live Enterprise Ticket Feed (All Departments)
+              Live Enterprise Ticket Feed (All Departments & Hierarchy)
             </h2>
             <p className="text-[11px] text-gray-400">
-              Showing real-time tickets logged across all employees, departments, and branch locations.
+              Showing real-time tickets logged across all employees, departments, and full 4-tier categorization.
             </p>
           </div>
 
@@ -276,7 +315,7 @@ export const AdminDashboardView: React.FC = () => {
               <button
                 key={st}
                 onClick={() => setTicketStatusFilter(st)}
-                className={`px-3 py-1 rounded-lg transition-all text-xs ${
+                className={`px-3 py-1 rounded-lg transition-all text-xs cursor-pointer ${
                   ticketStatusFilter === st
                     ? 'bg-white text-gray-900 shadow-xs font-bold'
                     : 'text-gray-500 hover:text-gray-900'
@@ -292,35 +331,55 @@ export const AdminDashboardView: React.FC = () => {
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100 bg-white">
-                <th className="px-6 py-3 w-28">Ticket ID</th>
-                <th className="px-6 py-3">Requester & Dept</th>
-                <th className="px-6 py-3">Subject & Category</th>
-                <th className="px-6 py-3 w-28">Priority</th>
-                <th className="px-6 py-3 w-32">Status</th>
-                <th className="px-6 py-3 w-36">Assigned Agent</th>
-                <th className="px-6 py-3 w-32">Logged Time</th>
+                <th className="px-4 py-3 w-28">Ticket ID</th>
+                <th className="px-4 py-3 min-w-[150px]">Requester & Dept</th>
+                <th className="px-4 py-3 min-w-[180px]">Subject</th>
+                <th className="px-4 py-3 min-w-[120px]">Ticket Type</th>
+                <th className="px-4 py-3 min-w-[130px]">Category & Module</th>
+                <th className="px-4 py-3 min-w-[140px]">Sub-Category / Action Item</th>
+                <th className="px-4 py-3 w-20">Priority</th>
+                <th className="px-4 py-3 w-24">Status</th>
+                <th className="px-4 py-3 w-32">Assigned Agent</th>
+                <th className="px-4 py-3 w-28">Logged Time</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {tickets
+              {filteredTickets
                 .filter(t => ticketStatusFilter === 'All' || t.status === ticketStatusFilter)
-                .slice(0, 10)
+                .slice(0, 15)
                 .map(t => (
                   <tr
                     key={t.id}
                     onClick={() => setSelectedTicketId(t.id)}
                     className="hover:bg-purple-50/30 transition-colors cursor-pointer"
                   >
-                    <td className="px-6 py-3 font-mono font-bold text-purple-600">{t.id}</td>
-                    <td className="px-6 py-3">
+                    <td className="px-4 py-3 font-mono font-bold text-purple-600">{t.id}</td>
+                    <td className="px-4 py-3">
                       <p className="font-semibold text-gray-900">{t.employeeName}</p>
                       <p className="text-[10px] text-gray-400">{t.department} • {t.location || 'HQ'}</p>
                     </td>
-                    <td className="px-6 py-3">
+                    <td className="px-4 py-3">
                       <p className="font-medium text-gray-800 line-clamp-1">{t.subject}</p>
-                      <p className="text-[10px] text-gray-400 font-mono">{t.category} → {t.subCategory}</p>
                     </td>
-                    <td className="px-6 py-3">
+                    <td className="px-4 py-3">
+                      <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold border text-blue-800 bg-blue-50/80 border-blue-200">
+                        {t.ticketType || 'Standard'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <p className="font-bold text-gray-900 text-xs">{t.category}</p>
+                      {t.module && (
+                        <span className="inline-block mt-0.5 px-1.5 py-0.2 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                          {t.module}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-50 text-purple-800 border border-purple-200 max-w-[150px] truncate" title={t.subCategory}>
+                        {t.subCategory}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
                       <span className={`inline-block px-2 py-0.5 text-[10px] rounded uppercase font-bold ${
                         t.priority === 'Critical' ? 'bg-red-100 text-red-700' :
                         t.priority === 'High' ? 'bg-orange-100 text-orange-700' :
@@ -330,7 +389,7 @@ export const AdminDashboardView: React.FC = () => {
                         {t.priority}
                       </span>
                     </td>
-                    <td className="px-6 py-3">
+                    <td className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded text-[11px] font-semibold ${
                         t.status === 'Open' ? 'text-blue-600 bg-blue-50' :
                         t.status === 'In Progress' ? 'text-orange-600 bg-orange-50' :
@@ -341,10 +400,10 @@ export const AdminDashboardView: React.FC = () => {
                         {t.status}
                       </span>
                     </td>
-                    <td className="px-6 py-3 text-gray-600 font-medium">
+                    <td className="px-4 py-3 text-gray-600 font-medium">
                       {t.assignedAgentName || <span className="text-gray-400 italic font-normal">Unassigned</span>}
                     </td>
-                    <td className="px-6 py-3 text-gray-400 font-mono text-[11px]">
+                    <td className="px-4 py-3 text-gray-400 font-mono text-[11px]">
                       {new Date(t.createdDate).toLocaleDateString()}
                     </td>
                   </tr>

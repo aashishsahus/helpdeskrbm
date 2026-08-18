@@ -4,7 +4,7 @@ import { Tags, Plus, Edit2, Trash2 } from 'lucide-react';
 import { TicketPriority } from '../../types';
 
 export const CategoryManagement: React.FC = () => {
-  const { categories, addCategory, editCategory, deleteCategory, departments, prioritiesList } = useApp();
+  const { categories, addCategory, editCategory, deleteCategory, departments, prioritiesList, setActiveView } = useApp();
 
   const [name, setName] = useState('');
   const [department, setDepartment] = useState(departments[0]?.name || 'IT Support');
@@ -35,9 +35,18 @@ export const CategoryManagement: React.FC = () => {
 
   return (
     <div className="p-8 space-y-6 flex-1 overflow-y-auto bg-[#F3F4F6]">
-      <div>
-        <h1 className="text-xl font-bold text-gray-900">Categories & Sub-Categories</h1>
-        <p className="text-xs text-gray-500">Define ticket categories, sub-topic lists, and default priority classifications.</p>
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">Categories & Sub-Categories</h1>
+          <p className="text-xs text-gray-500">Define ticket categories, sub-topic lists, and default priority classifications.</p>
+        </div>
+        <button
+          onClick={() => setActiveView('dropdown-settings')}
+          className="px-3.5 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 font-bold text-xs rounded-xl shadow-xs flex items-center gap-2 transition-all"
+        >
+          <span>Open Full Ticket Hierarchy Matrix (Type → Module → Action Item)</span>
+          <span className="text-base">→</span>
+        </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

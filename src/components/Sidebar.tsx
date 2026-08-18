@@ -56,13 +56,13 @@ export const Sidebar: React.FC = () => {
   const primaryNavItems = [
     {
       id: 'dashboard',
-      label: isEmployee ? 'My Help Desk' : isAgent ? 'Support Queue' : 'Dashboard',
+      label: isEmployee ? 'My Help Desk' : isAgent ? 'Support Agent Desk' : 'Executive Dashboard',
       icon: LayoutDashboard,
       visible: true
     },
     {
       id: 'tickets',
-      label: isEmployee ? 'My Tickets' : isAgent ? 'Support Queue' : 'Ticket Directory',
+      label: isEmployee ? 'My Tickets' : isAgent ? 'Ticket Directory' : 'Ticket Directory',
       icon: Ticket,
       badge: openTicketsCount > 0 ? openTicketsCount : undefined,
       visible: true

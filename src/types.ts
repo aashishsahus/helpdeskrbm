@@ -54,7 +54,9 @@ export interface Ticket {
   employeeEmail: string;
   department: string;
   location: string;
+  ticketType?: string;
   category: string;
+  module?: string;
   subCategory: string;
   subject: string;
   description: string;

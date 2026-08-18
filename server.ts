@@ -395,7 +395,9 @@ app.post('/api/google/pull-sheet-data', async (req, res) => {
           if (csvText && !csvText.includes('<!DOCTYPE') && !csvText.includes('accounts.google.com')) {
             const rows = parseCSV(csvText);
             if (rows.length > 1) {
-              // Header is row 0
+              const headerRow = rows[0].map(h => (h || '').trim().toLowerCase());
+              const is21Col = rows[0].length >= 21 || headerRow.includes('ticket type') || headerRow.includes('module');
+              
               const parsedTickets = [];
               for (let i = 1; i < rows.length; i++) {
                 const r = rows[i];
@@ -403,31 +405,61 @@ app.post('/api/google/pull-sheet-data', async (req, res) => {
                 const ticketId = r[0].trim();
                 if (!ticketId || ticketId.toLowerCase() === 'ticket id') continue;
 
-                parsedTickets.push({
-                  id: ticketId,
-                  employeeId: r[1] || 'EMP-001',
-                  employeeName: r[2] || 'User',
-                  employeeEmail: r[3] || '',
-                  department: r[4] || 'General',
-                  location: r[5] || 'Headquarters',
-                  category: r[6] || 'Support',
-                  subCategory: r[7] || '',
-                  subject: r[8] || 'Ticket ' + ticketId,
-                  description: r[9] || '',
-                  priority: r[10] || 'Medium',
-                  status: r[11] || 'Open',
-                  assignedAgentName: r[12] || '',
-                  assignedAgentId: '',
-                  createdDate: r[13] || new Date().toISOString(),
-                  slaDueDate: r[14] || '',
-                  closedDate: r[15] || '',
-                  resolvedDate: r[15] || '',
-                  rating: r[16] ? Number(r[16]) : undefined,
-                  feedback: r[17] || '',
-                  contactNumber: r[18] || '',
-                  slaStatus: 'Within SLA',
-                  isRealTicket: true
-                });
+                if (is21Col) {
+                  parsedTickets.push({
+                    id: ticketId,
+                    employeeId: r[1] || 'EMP-001',
+                    employeeName: r[2] || 'User',
+                    employeeEmail: r[3] || '',
+                    ticketType: r[4] || 'Support / How-To',
+                    department: r[5] || 'IT Operations',
+                    location: r[6] || 'Headquarters',
+                    category: r[7] || 'Orbit',
+                    module: r[8] || '',
+                    subCategory: r[9] || '',
+                    subject: r[10] || 'Ticket ' + ticketId,
+                    description: r[11] || '',
+                    priority: r[12] || 'Medium',
+                    status: r[13] || 'Open',
+                    assignedAgentName: r[14] || '',
+                    assignedAgentId: '',
+                    createdDate: r[15] || new Date().toISOString(),
+                    slaDueDate: r[16] || '',
+                    closedDate: r[17] || '',
+                    resolvedDate: r[17] || '',
+                    rating: r[18] ? Number(r[18]) : undefined,
+                    feedback: r[19] || '',
+                    contactNumber: r[20] || '',
+                    slaStatus: 'Within SLA',
+                    isRealTicket: true
+                  });
+                } else {
+                  parsedTickets.push({
+                    id: ticketId,
+                    employeeId: r[1] || 'EMP-001',
+                    employeeName: r[2] || 'User',
+                    employeeEmail: r[3] || '',
+                    department: r[4] || 'General',
+                    location: r[5] || 'Headquarters',
+                    category: r[6] || 'Support',
+                    subCategory: r[7] || '',
+                    subject: r[8] || 'Ticket ' + ticketId,
+                    description: r[9] || '',
+                    priority: r[10] || 'Medium',
+                    status: r[11] || 'Open',
+                    assignedAgentName: r[12] || '',
+                    assignedAgentId: '',
+                    createdDate: r[13] || new Date().toISOString(),
+                    slaDueDate: r[14] || '',
+                    closedDate: r[15] || '',
+                    resolvedDate: r[15] || '',
+                    rating: r[16] ? Number(r[16]) : undefined,
+                    feedback: r[17] || '',
+                    contactNumber: r[18] || '',
+                    slaStatus: 'Within SLA',
+                    isRealTicket: true
+                  });
+                }
               }
 
               if (parsedTickets.length > 0) {
@@ -514,6 +546,8 @@ app.post('/api/google/sync-sheets', async (req, res) => {
     branches,
     departments,
     categories,
+    hierarchy,
+    ticketTypes,
     prioritiesList,
     statusesList,
     rolesList,
@@ -535,31 +569,63 @@ app.post('/api/google/sync-sheets', async (req, res) => {
   const targetUrl = (webAppUrl && webAppUrl.trim()) || runtimeConfig.webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
   const targetSheetId = (spreadsheetId && spreadsheetId.trim()) || runtimeConfig.spreadsheetId || process.env.SPREADSHEET_ID || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
 
+  // Format date in YYYY-MM-DD HH:mm format (e.g. 2026-08-18 00:00)
+  const formatSheetDate = (dateVal: any): string => {
+    if (!dateVal) return '';
+    try {
+      const d = typeof dateVal === 'string' || typeof dateVal === 'number' ? new Date(dateVal) : dateVal;
+      if (isNaN(d.getTime())) return String(dateVal);
+      const pad = (n: number) => (n < 10 ? '0' : '') + n;
+      const year = d.getFullYear();
+      const month = pad(d.getMonth() + 1);
+      const day = pad(d.getDate());
+      const hours = pad(d.getHours());
+      const minutes = pad(d.getMinutes());
+      return `${year}-${month}-${day} ${hours}:${minutes}`;
+    } catch {
+      return String(dateVal);
+    }
+  };
+
+  const sanitizeTicket = (t: any) => {
+    if (!t || typeof t !== 'object') return t;
+    return {
+      ...t,
+      createdDate: formatSheetDate(t.createdDate),
+      updatedDate: formatSheetDate(t.updatedDate),
+      slaDueDate: formatSheetDate(t.slaDueDate),
+      closedDate: formatSheetDate(t.closedDate),
+      resolvedDate: formatSheetDate(t.resolvedDate)
+    };
+  };
+
   try {
     const payload = {
       action: action || 'syncAll',
       method: 'batchUpdate',
       spreadsheetId: targetSheetId,
-      ticket: ticket || undefined,
+      ticket: ticket ? sanitizeTicket(ticket) : undefined,
       user: user || undefined,
       userId: userId || undefined,
       comment: comment || undefined,
-      tickets: tickets || [],
+      tickets: Array.isArray(tickets) ? tickets.map(sanitizeTicket) : [],
       users: users || [],
-      archivedTickets: archivedTickets || [],
+      archivedTickets: Array.isArray(archivedTickets) ? archivedTickets.map(sanitizeTicket) : [],
       archivedUsers: archivedUsers || [],
-      archivedTicket: archivedTicket || undefined,
+      archivedTicket: archivedTicket ? sanitizeTicket(archivedTicket) : undefined,
       archivedUser: archivedUser || undefined,
       rolePermissions: rolePermissions || [],
       settings: settings || {},
       branches: branches || [],
       departments: departments || [],
       categories: categories || [],
+      hierarchy: hierarchy || [],
+      ticketTypes: ticketTypes || [],
       prioritiesList: prioritiesList || [],
       statusesList: statusesList || [],
       rolesList: rolesList || [],
       designationsList: designationsList || [],
-      timestamp: new Date().toISOString()
+      timestamp: formatSheetDate(new Date())
     };
 
     const response = await fetch(targetUrl, {

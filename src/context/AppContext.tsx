@@ -47,6 +47,7 @@ import {
 } from '../data/initialData';
 import { formatDateTime, getFormattedNow } from '../utils/dateUtils';
 import { sendTicketRaisedEmails, sendTicketClosedEmails } from '../utils/emailNotificationService';
+import { getStoredHierarchy, getStoredTicketTypes } from '../data/ticketHierarchy';
 
 interface AppContextType {
   currentUser: User | null;
@@ -643,7 +644,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [categories, setCategories] = useState<Category[]>(() => {
     try {
       const saved = localStorage.getItem('hd_categories_v1');
-      return saved ? JSON.parse(saved) : initialCategories;
+      if (saved) {
+        const parsed: Category[] = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Merge initialCategories with saved, ensuring Orbit, FMS, Hardware, Software etc. are always present
+          const catMap = new Map<string, Category>();
+          initialCategories.forEach(c => catMap.set(c.name.trim().toLowerCase(), c));
+          parsed.forEach((c: Category) => {
+            const key = c.name?.trim().toLowerCase();
+            if (key) {
+              const existing = catMap.get(key) || {};
+              catMap.set(key, { ...existing, ...c });
+            }
+          });
+          const merged = Array.from(catMap.values());
+          try {
+            localStorage.setItem('hd_categories_v1', JSON.stringify(merged));
+          } catch {}
+          return merged;
+        }
+      }
+      return initialCategories;
     } catch {
       return initialCategories;
     }
@@ -901,6 +922,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     rolePermissions?: RolePermissionConfig[];
     departments?: Department[];
     categories?: Category[];
+    hierarchy?: any[];
+    ticketTypes?: string[];
     branches?: string[];
     prioritiesList?: string[];
     statusesList?: string[];
@@ -957,9 +980,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } else if (payload.action.includes('Department')) {
       targetTab = 'Departments';
       recordName = `Department Master Data`;
-    } else if (payload.action.includes('Category')) {
+    } else if (payload.action.includes('Category') || payload.action.includes('Hierarchy')) {
       targetTab = 'Categories';
-      recordName = `Category Master Data`;
+      recordName = `Hierarchy & Category Master Data`;
     } else if (payload.action === 'updateDropdowns') {
       targetTab = 'MasterDropdowns';
       recordName = `Master Dropdowns & Values`;
@@ -985,6 +1008,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setActiveSyncToast(newLogItem);
     setLastSyncStatus('syncing');
 
+    const hierarchyData = payload.hierarchy || getStoredHierarchy();
+    const typesData = payload.ticketTypes || getStoredTicketTypes();
+
     const fullPayload = {
       spreadsheetId: sheetId,
       webAppUrl: scriptUrl,
@@ -997,6 +1023,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       branches: payload.branches || branches,
       departments: payload.departments || departments,
       categories: payload.categories || categories,
+      hierarchy: hierarchyData,
+      ticketTypes: typesData,
       prioritiesList: payload.prioritiesList || prioritiesList,
       statusesList: payload.statusesList || statusesList,
       rolesList: payload.rolesList || rolesList,
@@ -1963,6 +1991,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     const updatedCats = [...categories, newCat];
     setCategories(updatedCats);
+    try {
+      localStorage.setItem('hd_categories_v1', JSON.stringify(updatedCats));
+    } catch {}
     syncDirectActionToSheets({
       action: 'updateCategories',
       categories: updatedCats
@@ -1973,6 +2004,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const editCategory = (id: string, updates: Partial<Category>) => {
     const updatedCats = categories.map(c => (c.id === id ? { ...c, ...updates } : c));
     setCategories(updatedCats);
+    try {
+      localStorage.setItem('hd_categories_v1', JSON.stringify(updatedCats));
+    } catch {}
     syncDirectActionToSheets({
       action: 'updateCategories',
       categories: updatedCats
@@ -1983,6 +2017,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deleteCategory = (id: string) => {
     const updatedCats = categories.filter(c => c.id !== id);
     setCategories(updatedCats);
+    try {
+      localStorage.setItem('hd_categories_v1', JSON.stringify(updatedCats));
+    } catch {}
     syncDirectActionToSheets({
       action: 'updateCategories',
       categories: updatedCats
@@ -2317,6 +2354,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           branches,
           departments,
           categories,
+          hierarchy: getStoredHierarchy(),
+          ticketTypes: getStoredTicketTypes(),
           prioritiesList,
           statusesList,
           rolesList,

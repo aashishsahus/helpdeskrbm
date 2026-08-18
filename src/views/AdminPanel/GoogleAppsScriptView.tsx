@@ -249,6 +249,24 @@ function doPost(e) {
     // Ensure all database tabs exist
     setupHelpDeskSheets(ss);
 
+    // Format date in YYYY-MM-DD HH:mm format (e.g. 2026-08-18 00:00)
+    var formatSheetDate = function(dateVal) {
+      if (!dateVal) return "";
+      try {
+        var d = (typeof dateVal === "string" || typeof dateVal === "number") ? new Date(dateVal) : dateVal;
+        if (isNaN(d.getTime())) return dateVal.toString();
+        var pad = function(n) { return (n < 10 ? "0" : "") + n; };
+        var year = d.getFullYear();
+        var month = pad(d.getMonth() + 1);
+        var day = pad(d.getDate());
+        var hours = pad(d.getHours());
+        var minutes = pad(d.getMinutes());
+        return year + "-" + month + "-" + day + " " + hours + ":" + minutes;
+      } catch (e) {
+        return dateVal.toString();
+      }
+    };
+
     if (action === "testConnection") {
       return ContentService.createTextOutput(JSON.stringify({
         success: true,
@@ -304,14 +322,45 @@ function doPost(e) {
           if (seenTicketIds[tidStr.toLowerCase()]) continue;
           seenTicketIds[tidStr.toLowerCase()] = true;
 
+        var isNewFormat = (tData[0] && tData[0].length >= 21) || (tData[0] && tData[0][4] && tData[0][4].toString().toLowerCase().includes("type"));
+        if (isNewFormat) {
           resultTickets.push({
             id: tidStr,
             employeeId: row[1] ? row[1].toString() : "",
             employeeName: row[2] ? row[2].toString() : "",
             employeeEmail: row[3] ? row[3].toString() : "",
+            ticketType: row[4] ? row[4].toString() : "Support / How-To",
+            department: row[5] ? row[5].toString() : "",
+            location: row[6] ? row[6].toString() : "",
+            category: row[7] ? row[7].toString() : "",
+            module: row[8] ? row[8].toString() : "",
+            subCategory: row[9] ? row[9].toString() : "",
+            subject: row[10] ? row[10].toString() : "",
+            description: row[11] ? row[11].toString() : "",
+            priority: row[12] ? row[12].toString() : "Medium",
+            status: row[13] ? row[13].toString() : "Open",
+            assignedAgentName: row[14] ? row[14].toString() : "",
+            createdDate: row[15] ? row[15].toString() : new Date().toISOString(),
+            slaDueDate: row[16] ? row[16].toString() : "",
+            closedDate: row[17] ? row[17].toString() : "",
+            resolvedDate: row[17] ? row[17].toString() : "",
+            rating: row[18] ? Number(row[18]) : undefined,
+            feedback: row[19] ? row[19].toString() : "",
+            contactNumber: row[20] ? row[20].toString() : "",
+            slaStatus: "Within SLA",
+            isRealTicket: true
+          });
+        } else {
+          resultTickets.push({
+            id: tidStr,
+            employeeId: row[1] ? row[1].toString() : "",
+            employeeName: row[2] ? row[2].toString() : "",
+            employeeEmail: row[3] ? row[3].toString() : "",
+            ticketType: "Support / How-To",
             department: row[4] ? row[4].toString() : "",
             location: row[5] ? row[5].toString() : "",
             category: row[6] ? row[6].toString() : "",
+            module: "",
             subCategory: row[7] ? row[7].toString() : "",
             subject: row[8] ? row[8].toString() : "",
             description: row[9] ? row[9].toString() : "",
@@ -330,6 +379,7 @@ function doPost(e) {
           });
         }
       }
+    }
 
       var resultUsers = [];
       var seenUserIds = {};
@@ -384,10 +434,11 @@ function doPost(e) {
 
         var rowValues = [
           t.id || "", t.employeeId || "", t.employeeName || "", t.employeeEmail || "",
-          t.department || "", t.location || "", t.category || "", t.subCategory || "",
-          t.subject || "", t.description || "", t.priority || "", t.status || "Open",
-          t.assignedAgentName || "", t.createdDate || new Date().toISOString(),
-          t.slaDueDate || "", t.closedDate || t.resolvedDate || "",
+          t.ticketType || "Support / How-To",
+          t.department || "", t.location || "", t.category || "", t.module || "", t.subCategory || "",
+          t.subject || "", t.description || "", t.priority || "Medium", t.status || "Open",
+          t.assignedAgentName || "", formatSheetDate(t.createdDate || new Date()),
+          formatSheetDate(t.slaDueDate || ""), formatSheetDate(t.closedDate || t.resolvedDate || ""),
           t.rating || "", t.feedback || "", t.contactNumber || ""
         ];
 
@@ -753,6 +804,25 @@ function doPost(e) {
         .setMimeType(ContentService.MimeType.JSON);
     }
 
+    if (action === "updateHierarchy" || action === "updateTicketHierarchy") {
+      var hSheet = ss.getSheetByName("TicketHierarchy");
+      if (!hSheet) {
+        hSheet = ss.insertSheet("TicketHierarchy");
+      }
+      var hierarchy = contents.hierarchy || [];
+      if (hSheet) {
+        hSheet.clearContents();
+        hSheet.appendRow(["Hierarchy ID", "Ticket Type", "Category", "Module", "Sub-Category / Action Item", "Status"]);
+        hierarchy.forEach(function(h, idx) {
+          var num = idx + 1;
+          var hid = "HRY-" + (num < 10 ? "00" + num : (num < 100 ? "0" + num : num));
+          hSheet.appendRow([hid, h.type || "", h.category || "", h.module || "", h.subCategory || "", "Active"]);
+        });
+      }
+      return ContentService.createTextOutput(JSON.stringify({ success: true, message: "Ticket Hierarchy synced to Google Sheets" }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
     if (action === "updateDropdowns" || action === "updateMasterDropdowns") {
       var mSheet = ss.getSheetByName("MasterDropdowns") || ss.getSheetByName("DropdownOptions");
       if (mSheet) {
@@ -767,6 +837,9 @@ function doPost(e) {
           return (val || "").toString().toUpperCase().replace(/[^A-Z0-9]/g, "_").replace(/__+/g, "_").slice(0, 20);
         };
 
+        (contents.ticketTypes || []).forEach(function(t, idx) {
+          mSheet.appendRow([formatOptionId("TYP", idx), "Ticket Request Type", formatOptionCode(t), t, "Active", nowStr]);
+        });
         (contents.branches || []).forEach(function(b, idx) {
           mSheet.appendRow([formatOptionId("LOC", idx), "Branch / Location", formatOptionCode(b), b, "Active", nowStr]);
         });
@@ -792,11 +865,13 @@ function doPost(e) {
       var users = contents.users || [];
       var departments = contents.departments || [];
       var categories = contents.categories || [];
+      var hierarchy = contents.hierarchy || [];
 
       var tSheet = ss.getSheetByName("Tickets");
       var uSheet = ss.getSheetByName("Users");
       var dSheet = ss.getSheetByName("Departments");
       var cSheet = ss.getSheetByName("Categories");
+      var hSheet = ss.getSheetByName("TicketHierarchy");
       var mSheet = ss.getSheetByName("MasterDropdowns");
 
       if (tickets.length > 0 && tSheet) {
@@ -817,10 +892,11 @@ function doPost(e) {
 
           var tRow = [
             t.id || "", t.employeeId || "", t.employeeName || "", t.employeeEmail || "",
-            t.department || "", t.location || "", t.category || "", t.subCategory || "",
-            t.subject || "", t.description || "", t.priority || "", t.status || "Open",
-            t.assignedAgentName || "", t.createdDate || "", t.slaDueDate || "",
-            t.closedDate || t.resolvedDate || "",
+            t.ticketType || "Support / How-To",
+            t.department || "", t.location || "", t.category || "", t.module || "", t.subCategory || "",
+            t.subject || "", t.description || "", t.priority || "Medium", t.status || "Open",
+            t.assignedAgentName || "", formatSheetDate(t.createdDate || ""), formatSheetDate(t.slaDueDate || ""),
+            formatSheetDate(t.closedDate || t.resolvedDate || ""),
             t.rating || "", t.feedback || "", t.contactNumber || ""
           ];
 
@@ -874,10 +950,24 @@ function doPost(e) {
 
       if (categories.length > 0 && cSheet) {
         cSheet.clearContents();
-        cSheet.appendRow(["Category ID", "Category Name", "Target Department", "Sub-Categories", "Default Priority"]);
+        cSheet.appendRow(["Category ID", "Category Name", "Target Department", "Sub-Categories / Modules", "Default Priority"]);
         categories.forEach(function(c) {
           var subs = (c.subCategories && c.subCategories.join) ? c.subCategories.join(", ") : (c.subCategories || "");
           cSheet.appendRow([c.id || "", c.name || "", c.department || "", subs, c.defaultPriority || ""]);
+        });
+      }
+
+      if (hSheet || hierarchy.length > 0) {
+        if (!hSheet) {
+          hSheet = ss.insertSheet("TicketHierarchy");
+        }
+        hSheet.clearContents();
+        hSheet.appendRow(["Hierarchy ID", "Ticket Type", "Category", "Module", "Sub-Category / Action Item", "Status"]);
+        var hList = (hierarchy && hierarchy.length > 0) ? hierarchy : [];
+        hList.forEach(function(h, idx) {
+          var num = idx + 1;
+          var hid = "HRY-" + (num < 10 ? "00" + num : (num < 100 ? "0" + num : num));
+          hSheet.appendRow([hid, h.type || "", h.category || "", h.module || "", h.subCategory || "", "Active"]);
         });
       }
 
@@ -1037,15 +1127,15 @@ function getOrCreateTicketsFolder() {
 /** Setup Spreadsheet Tabs */
 function setupHelpDeskSheets(ss) {
   var targetSS = ss || SpreadsheetApp.getActiveSpreadsheet();
-  var tabs = ["Users", "Tickets", "ArchivedTickets", "ArchivedUsers", "RolePermissions", "TicketComments", "TicketAttachments", "TicketHistory", "Departments", "Categories", "MasterDropdowns", "SLARules", "Notifications", "KnowledgeBase", "AuditLogs", "Settings"];
+  var tabs = ["Users", "Tickets", "ArchivedTickets", "ArchivedUsers", "RolePermissions", "TicketComments", "TicketAttachments", "TicketHistory", "Departments", "Categories", "TicketHierarchy", "MasterDropdowns", "SLARules", "Notifications", "KnowledgeBase", "AuditLogs", "Settings"];
   
   tabs.forEach(function(tabName) {
     if (!targetSS.getSheetByName(tabName)) {
       var sheet = targetSS.insertSheet(tabName);
       if (tabName === "Tickets") {
-        sheet.appendRow(["Ticket ID", "Emp ID", "Emp Name", "Email", "Dept", "Location", "Category", "SubCategory", "Subject", "Description", "Priority", "Status", "Agent", "Created Date", "SLA Due", "Closed Date & Time", "Rating", "Feedback", "Contact"]);
+        sheet.appendRow(["Ticket ID", "Emp ID", "Emp Name", "Email", "Ticket Type", "Dept", "Location", "Category", "Module", "SubCategory", "Subject", "Description", "Priority", "Status", "Agent", "Created Date", "SLA Due", "Closed Date & Time", "Rating", "Feedback", "Contact"]);
       } else if (tabName === "ArchivedTickets") {
-        sheet.appendRow(["Archived At", "Archived By", "Reason", "Ticket ID", "Emp ID", "Emp Name", "Email", "Dept", "Location", "Category", "SubCategory", "Subject", "Description", "Priority", "Status", "Agent", "Created Date", "SLA Due", "Closed Date & Time", "Rating", "Feedback", "Contact"]);
+        sheet.appendRow(["Archived At", "Archived By", "Reason", "Ticket ID", "Emp ID", "Emp Name", "Email", "Ticket Type", "Dept", "Location", "Category", "Module", "SubCategory", "Subject", "Description", "Priority", "Status", "Agent", "Created Date", "SLA Due", "Closed Date & Time", "Rating", "Feedback", "Contact"]);
       } else if (tabName === "ArchivedUsers") {
         sheet.appendRow(["Archived At", "Archived By", "Reason", "User ID", "Emp ID", "Name", "Email", "Role", "Dept", "Designation", "Location", "Status"]);
       } else if (tabName === "RolePermissions") {
@@ -1060,6 +1150,8 @@ function setupHelpDeskSheets(ss) {
         sheet.appendRow(["Department ID", "Department Name", "Department Head", "Support Team"]);
       } else if (tabName === "Categories") {
         sheet.appendRow(["Category ID", "Category Name", "Target Department", "Sub-Categories", "Default Priority"]);
+      } else if (tabName === "TicketHierarchy") {
+        sheet.appendRow(["Hierarchy ID", "Ticket Type", "Category", "Module", "Sub-Category / Action Item", "Status"]);
       } else if (tabName === "MasterDropdowns" || tabName === "DropdownOptions") {
         sheet.appendRow(["Option ID", "Dropdown Type", "Option Code", "Option Value", "Status", "Updated At"]);
       } else if (tabName === "AuditLogs") {

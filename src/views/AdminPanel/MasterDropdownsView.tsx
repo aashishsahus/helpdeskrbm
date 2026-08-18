@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import {
   MapPin,
@@ -15,8 +15,20 @@ import {
   Briefcase,
   AlertCircle,
   Clock,
-  Layers
+  Layers,
+  Sparkles,
+  RotateCcw,
+  Tag
 } from 'lucide-react';
+import {
+  HierarchyItem,
+  getStoredHierarchy,
+  saveStoredHierarchy,
+  getStoredTicketTypes,
+  saveStoredTicketTypes,
+  DEFAULT_TICKET_HIERARCHY_DATA,
+  DEFAULT_TICKET_TYPES
+} from '../../data/ticketHierarchy';
 
 export const MasterDropdownsView: React.FC = () => {
   const {
@@ -61,6 +73,41 @@ export const MasterDropdownsView: React.FC = () => {
 
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+
+  // Hierarchy Data State
+  const [hierarchyItems, setHierarchyItems] = useState<HierarchyItem[]>(() => getStoredHierarchy());
+  const [ticketTypes, setTicketTypes] = useState<string[]>(() => getStoredTicketTypes());
+
+  // Save hierarchy whenever changed
+  const updateHierarchy = (newItems: HierarchyItem[]) => {
+    setHierarchyItems(newItems);
+    saveStoredHierarchy(newItems);
+  };
+
+  const updateTypes = (newTypes: string[]) => {
+    setTicketTypes(newTypes);
+    saveStoredTicketTypes(newTypes);
+  };
+
+  // Hierarchy Add Form State
+  const [newHierarchyType, setNewHierarchyType] = useState<string>('Modification Request');
+  const [newHierarchyCategory, setNewHierarchyCategory] = useState<string>(categories[0]?.name || 'Orbit');
+  const [newHierarchyModule, setNewHierarchyModule] = useState<string>('');
+  const [newHierarchySubCat, setNewHierarchySubCat] = useState<string>('');
+
+  // Hierarchy Filter State
+  const [hierarchyFilterType, setHierarchyFilterType] = useState<string>('All');
+  const [hierarchyFilterCat, setHierarchyFilterCat] = useState<string>('All');
+  const [hierarchyFilterModule, setHierarchyFilterModule] = useState<string>('All');
+
+  // Hierarchy Edit Modal State
+  const [editHierarchyModal, setEditHierarchyModal] = useState<{
+    index: number;
+    type: string;
+    category: string;
+    module: string;
+    subCategory: string;
+  } | null>(null);
 
   // Suggested teams
   const suggestedTeams = Array.from(
@@ -123,6 +170,56 @@ export const MasterDropdownsView: React.FC = () => {
     setSyncMessage(`Category "${addedName}" added successfully and synced!`);
   };
 
+  // Add Hierarchy Item Handler
+  const handleAddHierarchyItem = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newHierarchyModule.trim() || !newHierarchySubCat.trim()) return;
+
+    const newItem: HierarchyItem = {
+      type: newHierarchyType.trim(),
+      category: newHierarchyCategory.trim(),
+      module: newHierarchyModule.trim(),
+      subCategory: newHierarchySubCat.trim()
+    };
+
+    const updated = [newItem, ...hierarchyItems];
+    updateHierarchy(updated);
+    setNewHierarchySubCat('');
+    setSyncMessage(`Action Item "${newItem.subCategory}" added under ${newItem.category} → ${newItem.module}!`);
+  };
+
+  // Save Edited Hierarchy Item
+  const handleSaveEditHierarchy = () => {
+    if (!editHierarchyModal) return;
+    const updated = [...hierarchyItems];
+    updated[editHierarchyModal.index] = {
+      type: editHierarchyModal.type,
+      category: editHierarchyModal.category,
+      module: editHierarchyModal.module,
+      subCategory: editHierarchyModal.subCategory
+    };
+    updateHierarchy(updated);
+    setEditHierarchyModal(null);
+    setSyncMessage(`Hierarchy Item updated successfully!`);
+  };
+
+  // Delete Hierarchy Item
+  const handleDeleteHierarchyItem = (index: number) => {
+    const item = hierarchyItems[index];
+    const updated = hierarchyItems.filter((_, i) => i !== index);
+    updateHierarchy(updated);
+    setSyncMessage(`Deleted "${item?.subCategory}" from ${item?.category} → ${item?.module}`);
+  };
+
+  // Reset Hierarchy to Default
+  const handleResetHierarchy = () => {
+    if (window.confirm('Are you sure you want to reset all Request Types, Modules, and Action Items to original default mappings?')) {
+      updateHierarchy(DEFAULT_TICKET_HIERARCHY_DATA);
+      updateTypes(DEFAULT_TICKET_TYPES);
+      setSyncMessage('Ticket hierarchy reset to default structure successfully.');
+    }
+  };
+
   const handleManualSync = async () => {
     setIsSyncing(true);
     setSyncMessage(null);
@@ -138,8 +235,10 @@ export const MasterDropdownsView: React.FC = () => {
   };
 
   const [activeTab, setActiveTab] = useState<
-    'branches' | 'departments' | 'categories' | 'priorities' | 'statuses' | 'roles' | 'designations'
-  >('branches');
+    'hierarchy' | 'departments' | 'branches' | 'priorities' | 'statuses' | 'roles' | 'designations'
+  >('hierarchy');
+
+  const [hierarchySubView, setHierarchySubView] = useState<'matrix' | 'categories' | 'types'>('matrix');
 
   const [searchQuery, setSearchQuery] = useState('');
   const [newItemText, setNewItemText] = useState('');
@@ -155,9 +254,9 @@ export const MasterDropdownsView: React.FC = () => {
   const [catEditModal, setCatEditModal] = useState<{ id: string; name: string; department: string; subCategories: string; defaultPriority: string } | null>(null);
 
   const tabs = [
-    { id: 'branches', label: 'Branches / Locations', icon: MapPin, count: branches.length },
+    { id: 'hierarchy', label: 'Ticket Hierarchy & Categories', icon: Layers, count: hierarchyItems.length },
     { id: 'departments', label: 'Departments', icon: Building2, count: departments.length },
-    { id: 'categories', label: 'Categories & Subs', icon: Tags, count: categories.length },
+    { id: 'branches', label: 'Branches / Locations', icon: MapPin, count: branches.length },
     { id: 'priorities', label: 'Ticket Priorities', icon: AlertCircle, count: prioritiesList.length },
     { id: 'statuses', label: 'Ticket Statuses', icon: Clock, count: statusesList.length },
     { id: 'roles', label: 'User Roles', icon: Shield, count: rolesList.length },
@@ -169,6 +268,11 @@ export const MasterDropdownsView: React.FC = () => {
     if (!newItemText.trim()) return;
 
     switch (activeTab) {
+      case 'ticketTypes':
+        if (!ticketTypes.includes(newItemText.trim())) {
+          updateTypes([...ticketTypes, newItemText.trim()]);
+        }
+        break;
       case 'branches':
         addBranch(newItemText);
         break;
@@ -195,6 +299,11 @@ export const MasterDropdownsView: React.FC = () => {
     }
 
     switch (activeTab) {
+      case 'ticketTypes':
+        updateTypes(ticketTypes.map(t => (t === oldVal ? editValue.trim() : t)));
+        // Also update hierarchy entries referencing oldVal
+        updateHierarchy(hierarchyItems.map(item => item.type === oldVal ? { ...item, type: editValue.trim() } : item));
+        break;
       case 'branches':
         editBranch(oldVal, editValue);
         break;
@@ -225,6 +334,9 @@ export const MasterDropdownsView: React.FC = () => {
     if (!deleteConfirmModal) return;
     const { idOrName, label, tab } = deleteConfirmModal;
     switch (tab) {
+      case 'ticketTypes':
+        updateTypes(ticketTypes.filter(t => t !== idOrName));
+        break;
       case 'branches':
         deleteBranch(idOrName);
         break;
@@ -247,9 +359,28 @@ export const MasterDropdownsView: React.FC = () => {
         deleteCategory(idOrName);
         break;
     }
-    setSyncMessage(`"${label}" deleted successfully and synced to Google Sheet.`);
+    setSyncMessage(`"${label}" deleted successfully and synced.`);
     setDeleteConfirmModal(null);
   };
+
+  // Filtered Hierarchy Rows
+  const filteredHierarchy = hierarchyItems.filter((item, index) => {
+    const matchesSearch =
+      !searchQuery ||
+      item.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.module.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.subCategory.toLowerCase().includes(searchQuery.toLowerCase());
+
+    const matchesType = hierarchyFilterType === 'All' || item.type === hierarchyFilterType;
+    const matchesCat = hierarchyFilterCat === 'All' || item.category === hierarchyFilterCat;
+    const matchesModule = hierarchyFilterModule === 'All' || item.module === hierarchyFilterModule;
+
+    return matchesSearch && matchesType && matchesCat && matchesModule;
+  });
+
+  const uniqueHierarchyModules = Array.from(new Set(hierarchyItems.map(i => i.module)));
+  const uniqueHierarchyCategories = Array.from(new Set([...categories.map(c => c.name), ...hierarchyItems.map(i => i.category)]));
 
   return (
     <div className="p-8 space-y-6 flex-1 overflow-y-auto bg-[#F3F4F6]">
@@ -332,10 +463,535 @@ export const MasterDropdownsView: React.FC = () => {
       </div>
 
       {/* Main Panel Content */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Simple List Management (Branches, Priorities, Statuses, Roles, Designations) */}
-        {activeTab !== 'departments' && activeTab !== 'categories' && (
-          <>
+      <div className="space-y-6">
+        {/* Ticket Hierarchy & Categories Unified Tab Content */}
+        {activeTab === 'hierarchy' && (
+          <div className="space-y-5">
+            {/* Sub View Switcher */}
+            <div className="flex items-center gap-2 bg-white p-2 rounded-xl border border-gray-200 shadow-2xs w-fit">
+              <button
+                onClick={() => setHierarchySubView('matrix')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  hierarchySubView === 'matrix'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>4-Tier Hierarchy Matrix ({hierarchyItems.length})</span>
+              </button>
+
+              <button
+                onClick={() => setHierarchySubView('categories')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  hierarchySubView === 'categories'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                }`}
+              >
+                <Tags className="w-3.5 h-3.5" />
+                <span>Categories & Dept Mapping ({categories.length})</span>
+              </button>
+
+              <button
+                onClick={() => setHierarchySubView('types')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  hierarchySubView === 'types'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                }`}
+              >
+                <Tag className="w-3.5 h-3.5" />
+                <span>Ticket Request Types ({ticketTypes.length})</span>
+              </button>
+            </div>
+
+            {/* 1. Hierarchy Matrix Sub-View */}
+            {hierarchySubView === 'matrix' && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Add New Hierarchy Action Item Form */}
+                <form onSubmit={handleAddHierarchyItem} className="bg-white p-6 rounded-xl border border-gray-200 shadow-2xs space-y-4 text-xs h-fit">
+                  <div className="flex items-center justify-between border-b pb-2">
+                    <h3 className="font-bold text-sm text-gray-900 flex items-center gap-2">
+                      <Plus className="w-4 h-4 text-blue-600" /> Add Hierarchy Item
+                    </h3>
+                    <span className="text-[10px] bg-blue-50 text-blue-700 font-bold px-2 py-0.5 rounded">
+                      Structured Mapping
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Ticket Type *</label>
+                    <select
+                      value={newHierarchyType}
+                      onChange={e => setNewHierarchyType(e.target.value)}
+                      className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium"
+                    >
+                      {ticketTypes.map(t => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Category *</label>
+                    <select
+                      value={newHierarchyCategory}
+                      onChange={e => setNewHierarchyCategory(e.target.value)}
+                      className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium"
+                    >
+                      {uniqueHierarchyCategories.map(c => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Module Name *</label>
+                    <input
+                      required
+                      type="text"
+                      value={newHierarchyModule}
+                      onChange={e => setNewHierarchyModule(e.target.value)}
+                      placeholder="e.g. Invoice, Stock, Material, Customer, etc."
+                      list="module-datalist"
+                      className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                    />
+                    <datalist id="module-datalist">
+                      {uniqueHierarchyModules.map(m => (
+                        <option key={m} value={m} />
+                      ))}
+                    </datalist>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Sub-Category / Action Item *</label>
+                    <input
+                      required
+                      type="text"
+                      value={newHierarchySubCat}
+                      onChange={e => setNewHierarchySubCat(e.target.value)}
+                      placeholder="e.g. Change Material Name, Add Item, Stock Transfer..."
+                      className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition-all flex items-center justify-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" /> Save to Hierarchy Matrix
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleResetHierarchy}
+                    className="w-full py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 text-[11px]"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" /> Reset to Default RBM Hierarchy
+                  </button>
+                </form>
+
+                {/* Hierarchy Table & Filters */}
+                <div className="md:col-span-2 space-y-3">
+                  {/* Hierarchy In-View Quick Filter Bar */}
+                  <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-2xs flex items-center gap-2 flex-wrap text-xs">
+                    <span className="font-bold text-gray-600 text-[11px]">Filter Matrix:</span>
+                    <select
+                      value={hierarchyFilterType}
+                      onChange={e => setHierarchyFilterType(e.target.value)}
+                      className="px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg font-medium text-xs text-gray-800"
+                    >
+                      <option value="All">Type: All</option>
+                      {ticketTypes.map(t => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+
+                    <select
+                      value={hierarchyFilterCat}
+                      onChange={e => setHierarchyFilterCat(e.target.value)}
+                      className="px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg font-medium text-xs text-gray-800"
+                    >
+                      <option value="All">Category: All</option>
+                      {uniqueHierarchyCategories.map(c => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+
+                    <select
+                      value={hierarchyFilterModule}
+                      onChange={e => setHierarchyFilterModule(e.target.value)}
+                      className="px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg font-medium text-xs text-gray-800"
+                    >
+                      <option value="All">Module: All</option>
+                      {uniqueHierarchyModules.map(m => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+
+                    {(hierarchyFilterType !== 'All' || hierarchyFilterCat !== 'All' || hierarchyFilterModule !== 'All' || searchQuery) && (
+                      <button
+                        onClick={() => {
+                          setHierarchyFilterType('All');
+                          setHierarchyFilterCat('All');
+                          setHierarchyFilterModule('All');
+                          setSearchQuery('');
+                        }}
+                        className="text-[11px] text-blue-600 font-bold hover:underline ml-auto"
+                      >
+                        Clear Filters
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Hierarchy Table */}
+                  <div className="bg-white rounded-xl border border-gray-200 shadow-2xs overflow-hidden">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-gray-50 border-b font-bold text-gray-500 uppercase text-[10px]">
+                        <tr>
+                          <th className="p-3 w-8">#</th>
+                          <th className="p-3">Ticket Type</th>
+                          <th className="p-3">Category</th>
+                          <th className="p-3">Module</th>
+                          <th className="p-3">Sub-Category / Action Item</th>
+                          <th className="p-3 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {filteredHierarchy.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="p-8 text-center text-gray-400">
+                              No hierarchy mappings found matching filters.
+                            </td>
+                          </tr>
+                        ) : (
+                          filteredHierarchy.map((item, index) => {
+                            const originalIndex = hierarchyItems.indexOf(item);
+                            return (
+                              <tr key={index} className="hover:bg-gray-50 transition-colors">
+                                <td className="p-3 text-gray-400 font-mono text-[11px]">{index + 1}</td>
+                                <td className="p-3">
+                                  <span className="font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded text-[11px]">
+                                    {item.type}
+                                  </span>
+                                </td>
+                                <td className="p-3 font-bold text-gray-900">{item.category}</td>
+                                <td className="p-3 font-medium text-gray-700 bg-gray-50 px-2 py-1 rounded w-fit inline-block my-2">
+                                  {item.module}
+                                </td>
+                                <td className="p-3 font-semibold text-gray-900">{item.subCategory}</td>
+                                <td className="p-3 text-right">
+                                  <div className="flex items-center justify-end gap-1">
+                                    <button
+                                      onClick={() =>
+                                        setEditHierarchyModal({
+                                          index: originalIndex,
+                                          type: item.type,
+                                          category: item.category,
+                                          module: item.module,
+                                          subCategory: item.subCategory
+                                        })
+                                      }
+                                      className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                      title="Edit Hierarchy Mapping"
+                                    >
+                                      <Edit2 className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteHierarchyItem(originalIndex)}
+                                      className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                      title="Delete Action Item"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 2. Categories & Dept Mapping Sub-View */}
+            {hierarchySubView === 'categories' && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Add Category Form */}
+                <form onSubmit={handleAddCategory} className="bg-white p-6 rounded-xl border border-gray-200 shadow-2xs space-y-4 text-xs h-fit">
+                  <h3 className="font-bold text-sm text-gray-900 border-b pb-2 flex items-center gap-2">
+                    <Plus className="w-4 h-4 text-blue-600" /> Add New Category
+                  </h3>
+
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Category Name *</label>
+                    <input
+                      required
+                      type="text"
+                      value={newCatName}
+                      onChange={e => setNewCatName(e.target.value)}
+                      placeholder="e.g. Network & Firewall"
+                      className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Target Department</label>
+                    <select
+                      value={newCatDept}
+                      onChange={e => setNewCatDept(e.target.value)}
+                      className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                    >
+                      {departments.map(d => (
+                        <option key={d.id} value={d.name}>{d.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Sub Categories / Action Topics (Comma Separated)</label>
+                    <input
+                      type="text"
+                      value={newCatSubs}
+                      onChange={e => setNewCatSubs(e.target.value)}
+                      placeholder="e.g. WiFi, VPN, Router, DNS"
+                      className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Default Priority</label>
+                    <select
+                      value={newCatPriority}
+                      onChange={e => setNewCatPriority(e.target.value)}
+                      className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                    >
+                      {prioritiesList.map(p => (
+                        <option key={p} value={p}>{p}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition-all flex items-center justify-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" /> Save & Add Category
+                  </button>
+                </form>
+
+                {/* Categories Table */}
+                <div className="md:col-span-2 space-y-4">
+                  <div className="bg-white rounded-xl border border-gray-200 shadow-2xs overflow-hidden">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-gray-50 border-b font-bold text-gray-500 uppercase text-[10px]">
+                        <tr>
+                          <th className="p-3 w-28">Category ID</th>
+                          <th className="p-3">Category Name</th>
+                          <th className="p-3">Target Department</th>
+                          <th className="p-3">Sub Categories</th>
+                          <th className="p-3">Default Priority</th>
+                          <th className="p-3 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {categories
+                          .filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                          .map(c => (
+                            <tr key={c.id} className="hover:bg-gray-50">
+                              <td className="p-3">
+                                <span className="font-mono font-bold text-[11px] px-2 py-0.5 bg-blue-50 text-blue-700 rounded border border-blue-200">
+                                  {c.id}
+                                </span>
+                              </td>
+                              <td className="p-3 font-bold text-gray-900">{c.name}</td>
+                              <td className="p-3 text-gray-700">{c.department}</td>
+                              <td className="p-3">
+                                <div className="flex flex-wrap gap-1">
+                                  {c.subCategories.map((sub, idx) => (
+                                    <span key={idx} className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-[10px] rounded font-mono">
+                                      {sub}
+                                    </span>
+                                  ))}
+                                </div>
+                              </td>
+                              <td className="p-3 font-bold text-blue-600">{c.defaultPriority}</td>
+                              <td className="p-3 text-right">
+                                <div className="flex items-center justify-end gap-2">
+                                  <button
+                                    onClick={() =>
+                                      setCatEditModal({
+                                        id: c.id,
+                                        name: c.name,
+                                        department: c.department,
+                                        subCategories: c.subCategories.join(', '),
+                                        defaultPriority: c.defaultPriority
+                                      })
+                                    }
+                                    className="px-2 py-1 bg-blue-50 text-blue-600 hover:bg-blue-100 font-bold text-[11px] rounded flex items-center gap-1"
+                                  >
+                                    <Edit2 className="w-3 h-3" /> Edit
+                                  </button>
+                                  <button
+                                    onClick={() => setDeleteConfirmModal({ idOrName: c.id, label: c.name, tab: 'categories' })}
+                                    className="px-2 py-1 bg-red-50 text-red-600 hover:bg-red-100 font-bold text-[11px] rounded flex items-center gap-1"
+                                  >
+                                    <Trash2 className="w-3 h-3" /> Delete
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 3. Ticket Request Types Sub-View */}
+            {hierarchySubView === 'types' && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (newItemText.trim() && !ticketTypes.includes(newItemText.trim())) {
+                      updateTypes([...ticketTypes, newItemText.trim()]);
+                      setNewItemText('');
+                    }
+                  }}
+                  className="bg-white p-6 rounded-xl border border-gray-200 shadow-2xs space-y-4 text-xs h-fit"
+                >
+                  <h3 className="font-bold text-sm text-gray-900 border-b pb-2 flex items-center gap-2">
+                    <Plus className="w-4 h-4 text-blue-600" /> Add Request Type
+                  </h3>
+
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Type Name *</label>
+                    <input
+                      required
+                      type="text"
+                      value={newItemText}
+                      onChange={e => setNewItemText(e.target.value)}
+                      placeholder="e.g. Modification Request, New Request..."
+                      className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition-all flex items-center justify-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" /> Save Request Type
+                  </button>
+                </form>
+
+                <div className="md:col-span-2 space-y-3">
+                  <div className="bg-white rounded-xl border border-gray-200 shadow-2xs overflow-hidden">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-gray-50 border-b font-bold text-gray-500 uppercase text-[10px]">
+                        <tr>
+                          <th className="p-3 w-10">#</th>
+                          <th className="p-3 w-28">Type ID</th>
+                          <th className="p-3">Request Type Name</th>
+                          <th className="p-3 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {ticketTypes
+                          .filter(t => t.toLowerCase().includes(searchQuery.toLowerCase()))
+                          .map((item, idx) => {
+                            const optionNum = idx + 1;
+                            const optionId = `TYP-${optionNum < 10 ? '00' + optionNum : (optionNum < 100 ? '0' + optionNum : optionNum)}`;
+                            return (
+                              <tr key={item} className="hover:bg-gray-50 transition-colors">
+                                <td className="p-3 text-gray-400 font-mono text-[11px] w-10">{idx + 1}</td>
+                                <td className="p-3">
+                                  <span className="font-mono font-bold text-[11px] px-2 py-0.5 bg-blue-50 text-blue-700 rounded border border-blue-200">
+                                    {optionId}
+                                  </span>
+                                </td>
+                                <td className="p-3 font-semibold text-gray-900">
+                                  {editingItemKey === item ? (
+                                    <div className="flex items-center gap-2">
+                                      <input
+                                        type="text"
+                                        value={editValue}
+                                        onChange={e => setEditValue(e.target.value)}
+                                        className="px-2 py-1 border border-blue-500 rounded focus:outline-none text-xs w-full"
+                                        autoFocus
+                                      />
+                                    </div>
+                                  ) : (
+                                    <span>{item}</span>
+                                  )}
+                                </td>
+                                <td className="p-3 text-right">
+                                  {editingItemKey === item ? (
+                                    <div className="flex items-center justify-end gap-1">
+                                      <button
+                                        onClick={() => {
+                                          if (editValue.trim() && editValue !== item) {
+                                            updateTypes(ticketTypes.map(t => (t === item ? editValue.trim() : t)));
+                                            updateHierarchy(hierarchyItems.map(h => (h.type === item ? { ...h, type: editValue.trim() } : h)));
+                                          }
+                                          setEditingItemKey(null);
+                                          setEditValue('');
+                                        }}
+                                        className="p-1 text-green-600 hover:bg-green-50 rounded"
+                                        title="Save Changes"
+                                      >
+                                        <Check className="w-4 h-4" />
+                                      </button>
+                                      <button
+                                        onClick={() => setEditingItemKey(null)}
+                                        className="p-1 text-gray-400 hover:bg-gray-100 rounded"
+                                        title="Cancel"
+                                      >
+                                        <X className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center justify-end gap-1">
+                                      <button
+                                        onClick={() => {
+                                          setEditingItemKey(item);
+                                          setEditValue(item);
+                                        }}
+                                        className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                        title="Edit Name"
+                                      >
+                                        <Edit2 className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        onClick={() => setDeleteConfirmModal({ idOrName: item, label: item, tab: 'ticketTypes' })}
+                                        className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                        title="Delete Type"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Other Dropdowns (Branches, Priorities, Statuses, Roles, Designations) */}
+        {activeTab !== 'hierarchy' && activeTab !== 'departments' && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Add Option Form */}
             <form onSubmit={handleAddItem} className="bg-white p-6 rounded-xl border border-gray-200 shadow-2xs space-y-4 text-xs h-fit">
               <h3 className="font-bold text-sm text-gray-900 border-b pb-2 flex items-center gap-2">
@@ -473,12 +1129,12 @@ export const MasterDropdownsView: React.FC = () => {
                 </table>
               </div>
             </div>
-          </>
+          </div>
         )}
 
         {/* Departments Tab Content */}
         {activeTab === 'departments' && (
-          <>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Add Department Form */}
             <form onSubmit={handleAddDepartment} className="bg-white p-6 rounded-xl border border-gray-200 shadow-2xs space-y-4 text-xs h-fit">
               <h3 className="font-bold text-sm text-gray-900 border-b pb-2 flex items-center gap-2">
@@ -651,143 +1307,7 @@ export const MasterDropdownsView: React.FC = () => {
                 </table>
               </div>
             </div>
-          </>
-        )}
-
-        {/* Categories Tab Content */}
-        {activeTab === 'categories' && (
-          <>
-            {/* Add Category Form */}
-            <form onSubmit={handleAddCategory} className="bg-white p-6 rounded-xl border border-gray-200 shadow-2xs space-y-4 text-xs h-fit">
-              <h3 className="font-bold text-sm text-gray-900 border-b pb-2 flex items-center gap-2">
-                <Plus className="w-4 h-4 text-blue-600" />
-                Add New Category
-              </h3>
-
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Category Name *</label>
-                <input
-                  required
-                  type="text"
-                  value={newCatName}
-                  onChange={e => setNewCatName(e.target.value)}
-                  placeholder="e.g. Network & Firewall"
-                  className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Target Department</label>
-                <select
-                  value={newCatDept}
-                  onChange={e => setNewCatDept(e.target.value)}
-                  className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white"
-                >
-                  {departments.map(d => (
-                    <option key={d.id} value={d.name}>{d.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Sub Categories (Comma Separated)</label>
-                <input
-                  type="text"
-                  value={newCatSubs}
-                  onChange={e => setNewCatSubs(e.target.value)}
-                  placeholder="e.g. WiFi, VPN, Router, DNS"
-                  className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Default Priority</label>
-                <select
-                  value={newCatPriority}
-                  onChange={e => setNewCatPriority(e.target.value)}
-                  className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white"
-                >
-                  {prioritiesList.map(p => (
-                    <option key={p} value={p}>{p}</option>
-                  ))}
-                </select>
-              </div>
-
-              <button
-                type="submit"
-                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition-all flex items-center justify-center gap-2"
-              >
-                <Plus className="w-4 h-4" /> Save & Add Category
-              </button>
-            </form>
-
-            {/* Categories Table */}
-            <div className="md:col-span-2 space-y-4">
-              <div className="bg-white rounded-xl border border-gray-200 shadow-2xs overflow-hidden">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-gray-50 border-b font-bold text-gray-500 uppercase text-[10px]">
-                    <tr>
-                      <th className="p-3 w-28">Category ID</th>
-                      <th className="p-3">Category Name</th>
-                      <th className="p-3">Target Department</th>
-                      <th className="p-3">Sub Categories</th>
-                      <th className="p-3">Default Priority</th>
-                      <th className="p-3 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {categories
-                      .filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
-                      .map(c => (
-                        <tr key={c.id} className="hover:bg-gray-50">
-                          <td className="p-3">
-                            <span className="font-mono font-bold text-[11px] px-2 py-0.5 bg-blue-50 text-blue-700 rounded border border-blue-200">
-                              {c.id}
-                            </span>
-                          </td>
-                          <td className="p-3 font-bold text-gray-900">{c.name}</td>
-                          <td className="p-3 text-gray-700">{c.department}</td>
-                          <td className="p-3">
-                            <div className="flex flex-wrap gap-1">
-                              {c.subCategories.map((sub, idx) => (
-                                <span key={idx} className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-[10px] rounded font-mono">
-                                  {sub}
-                                </span>
-                              ))}
-                            </div>
-                          </td>
-                          <td className="p-3 font-bold text-blue-600">{c.defaultPriority}</td>
-                          <td className="p-3 text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                onClick={() =>
-                                  setCatEditModal({
-                                    id: c.id,
-                                    name: c.name,
-                                    department: c.department,
-                                    subCategories: c.subCategories.join(', '),
-                                    defaultPriority: c.defaultPriority
-                                  })
-                                }
-                                className="px-2 py-1 bg-blue-50 text-blue-600 hover:bg-blue-100 font-bold text-[11px] rounded flex items-center gap-1"
-                              >
-                                <Edit2 className="w-3 h-3" /> Edit
-                              </button>
-                              <button
-                                onClick={() => setDeleteConfirmModal({ idOrName: c.id, label: c.name, tab: 'categories' })}
-                                className="px-2 py-1 bg-red-50 text-red-600 hover:bg-red-100 font-bold text-[11px] rounded flex items-center gap-1"
-                              >
-                                <Trash2 className="w-3 h-3" /> Delete
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </>
+          </div>
         )}
       </div>
 
@@ -930,6 +1450,81 @@ export const MasterDropdownsView: React.FC = () => {
           </div>
         </div>
       )}
+      {/* Edit Hierarchy Item Modal */}
+      {editHierarchyModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 space-y-4 shadow-xl text-xs">
+            <h3 className="font-bold text-base text-gray-900 border-b pb-2 flex items-center gap-2">
+              <Edit2 className="w-4 h-4 text-blue-600" /> Edit Hierarchy Mapping
+            </h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Ticket Request Type *</label>
+                <select
+                  value={editHierarchyModal.type}
+                  onChange={e => setEditHierarchyModal({ ...editHierarchyModal, type: e.target.value })}
+                  className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium"
+                >
+                  {ticketTypes.map(t => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Category *</label>
+                <select
+                  value={editHierarchyModal.category}
+                  onChange={e => setEditHierarchyModal({ ...editHierarchyModal, category: e.target.value })}
+                  className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium"
+                >
+                  {uniqueHierarchyCategories.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Module Name *</label>
+                <input
+                  type="text"
+                  value={editHierarchyModal.module}
+                  onChange={e => setEditHierarchyModal({ ...editHierarchyModal, module: e.target.value })}
+                  className="w-full p-2 border rounded-lg"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Sub-Category / Action Item *</label>
+                <input
+                  type="text"
+                  value={editHierarchyModal.subCategory}
+                  onChange={e => setEditHierarchyModal({ ...editHierarchyModal, subCategory: e.target.value })}
+                  className="w-full p-2 border rounded-lg"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => setEditHierarchyModal(null)}
+                className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-lg"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEditHierarchy}
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow"
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Delete Confirmation Modal */}
       {deleteConfirmModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">

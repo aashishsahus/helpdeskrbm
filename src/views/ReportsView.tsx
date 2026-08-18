@@ -30,9 +30,15 @@ import {
 } from 'lucide-react';
 import { Ticket } from '../types';
 import { printExecutiveReport, downloadReportCSV } from '../utils/printReport';
+import { DateRangeFilter } from '../components/DateRangeFilter';
+import { DateRangeFilterType, isDateInRange } from '../utils/dateUtils';
 
 export const ReportsView: React.FC = () => {
   const { tickets, users, departments, categories, slaRules, settings } = useApp();
+
+  const [dateFilter, setDateFilter] = useState<DateRangeFilterType>('all');
+  const [customStart, setCustomStart] = useState<string>('');
+  const [customEnd, setCustomEnd] = useState<string>('');
 
   const [activeReportType, setActiveReportType] = useState<string>('Ticket Summary');
   const [exporting, setExporting] = useState(false);
@@ -44,6 +50,11 @@ export const ReportsView: React.FC = () => {
     ? configuredDriveFolderId
     : `https://drive.google.com/drive/folders/${configuredDriveFolderId}`;
 
+  // Filter tickets by selected date range
+  const filteredTickets = useMemo(() => {
+    return tickets.filter(t => isDateInRange(t.createdDate, dateFilter, customStart, customEnd));
+  }, [tickets, dateFilter, customStart, customEnd]);
+
   const reportConfig = [
     {
       id: 'Ticket Summary',
@@ -51,6 +62,13 @@ export const ReportsView: React.FC = () => {
       description: 'Overall volume, open vs resolved status, and breach rates',
       icon: BarChart3,
       badgeColor: 'bg-blue-50 text-blue-700 border-blue-200'
+    },
+    {
+      id: 'Hierarchy & Module Report',
+      label: 'Hierarchy & Modules',
+      description: '4-tier analysis by Ticket Type, Category, ERP Module, and Sub-Category',
+      icon: Layers,
+      badgeColor: 'bg-purple-50 text-purple-700 border-purple-200'
     },
     {
       id: 'Department Report',
@@ -111,10 +129,10 @@ export const ReportsView: React.FC = () => {
   ];
 
   // Global KPI Metrics
-  const totalTickets = tickets.length;
-  const openTickets = tickets.filter(t => t.status === 'Open' || t.status === 'In Progress').length;
-  const resolvedTickets = tickets.filter(t => t.status === 'Resolved' || t.status === 'Closed').length;
-  const breachedTickets = tickets.filter(t => t.slaStatus === 'Breached').length;
+  const totalTickets = filteredTickets.length;
+  const openTickets = filteredTickets.filter(t => t.status === 'Open' || t.status === 'In Progress').length;
+  const resolvedTickets = filteredTickets.filter(t => t.status === 'Resolved' || t.status === 'Closed').length;
+  const breachedTickets = filteredTickets.filter(t => t.slaStatus === 'Breached').length;
   const resolutionRate = totalTickets > 0 ? Math.round((resolvedTickets / totalTickets) * 100) : 100;
   const slaComplianceRate = totalTickets > 0 ? Math.round(((totalTickets - breachedTickets) / totalTickets) * 100) : 100;
 
@@ -133,10 +151,41 @@ export const ReportsView: React.FC = () => {
         ];
         break;
 
+      case 'Hierarchy & Modules':
+      case 'Hierarchy & Module Report':
+        headers = ['Ticket Type', 'Category', 'Module', 'Sub-Category / Action Item', 'Dept', 'Total Tickets', 'Open', 'Resolved', 'Breached', 'Resolution %'];
+        // Group by ticketType + category + module + subCategory
+        const hierarchyGroups: { [key: string]: { type: string; cat: string; mod: string; sub: string; dept: string; total: number; open: number; resolved: number; breached: number } } = {};
+        filteredTickets.forEach(t => {
+          const key = `${t.ticketType || 'Standard'}||${t.category}||${t.module || '-'}||${t.subCategory || '-'}`;
+          if (!hierarchyGroups[key]) {
+            hierarchyGroups[key] = {
+              type: t.ticketType || 'Standard',
+              cat: t.category,
+              mod: t.module || 'General',
+              sub: t.subCategory || 'General Support',
+              dept: t.department,
+              total: 0,
+              open: 0,
+              resolved: 0,
+              breached: 0
+            };
+          }
+          hierarchyGroups[key].total += 1;
+          if (t.status === 'Open' || t.status === 'In Progress' || t.status === 'Pending') hierarchyGroups[key].open += 1;
+          if (t.status === 'Resolved' || t.status === 'Closed') hierarchyGroups[key].resolved += 1;
+          if (t.slaStatus === 'Breached') hierarchyGroups[key].breached += 1;
+        });
+        rows = Object.values(hierarchyGroups).map(g => {
+          const pct = g.total > 0 ? Math.round((g.resolved / g.total) * 100) : 0;
+          return [g.type, g.cat, g.mod, g.sub, g.dept, g.total, g.open, g.resolved, g.breached, `${pct}%`];
+        });
+        break;
+
       case 'Department Report':
         headers = ['Department Name', 'Total Volume', 'Open Tickets', 'Resolved Tickets', 'Resolution Rate'];
         rows = departments.map(d => {
-          const deptTickets = tickets.filter(t => t.department === d.name);
+          const deptTickets = filteredTickets.filter(t => t.department === d.name);
           const open = deptTickets.filter(t => t.status === 'Open' || t.status === 'In Progress').length;
           const res = deptTickets.filter(t => t.status === 'Resolved' || t.status === 'Closed').length;
           const pct = deptTickets.length > 0 ? Math.round((res / deptTickets.length) * 100) : 100;
@@ -145,10 +194,11 @@ export const ReportsView: React.FC = () => {
         break;
 
       case 'Category Report':
-        headers = ['Category Name', 'Target Department', 'Total Volume', 'Default SLA Target', 'Sub-Categories Supported'];
+        headers = ['Category Name', 'Target Department', 'Total Volume', 'Default SLA Target', 'Active Modules / Sub-Categories'];
         rows = categories.map(c => {
-          const catTickets = tickets.filter(t => t.category === c.name);
-          return [c.name, c.department, catTickets.length, `${c.defaultSLAHours} Hours`, c.subCategories.join(', ')];
+          const catTickets = filteredTickets.filter(t => t.category === c.name);
+          const activeModules = Array.from(new Set(catTickets.map(t => t.module).filter(Boolean))).join(', ') || 'Standard';
+          return [c.name, c.department, catTickets.length, `${c.defaultSLAHours} Hours`, `${c.subCategories.slice(0, 3).join(', ')} (Modules: ${activeModules})`];
         });
         break;
 
@@ -157,7 +207,7 @@ export const ReportsView: React.FC = () => {
         rows = users
           .filter(u => u.role === 'Support Agent' || u.role === 'Support Manager' || u.role === 'Super Admin')
           .map(agent => {
-            const assigned = tickets.filter(t => t.assignedAgentId === agent.id || t.assignedAgentName === agent.name);
+            const assigned = filteredTickets.filter(t => t.assignedAgentId === agent.id || t.assignedAgentName === agent.name);
             const resolved = assigned.filter(t => t.status === 'Resolved' || t.status === 'Closed');
             const breached = assigned.filter(t => t.slaStatus === 'Breached');
             const slaPct = assigned.length > 0 ? Math.round(((assigned.length - breached.length) / assigned.length) * 100) : 100;
@@ -171,20 +221,20 @@ export const ReportsView: React.FC = () => {
 
       case 'CSAT & Feedback':
         headers = ['Rating Band', 'Experience Level', 'Feedback Submissions', 'Share of Total', 'Benchmark Status'];
-        const totalRatings = tickets.filter(t => t.rating && t.rating > 0).length;
+        const totalRatings = filteredTickets.filter(t => t.rating && t.rating > 0).length;
         rows = [
-          ['5 Stars', 'Excellent Satisfaction', tickets.filter(t => t.rating === 5).length, `${totalRatings > 0 ? ((tickets.filter(t => t.rating === 5).length / totalRatings) * 100).toFixed(0) : 0}%`, 'Outstanding'],
-          ['4 Stars', 'Good / Expected Service', tickets.filter(t => t.rating === 4).length, `${totalRatings > 0 ? ((tickets.filter(t => t.rating === 4).length / totalRatings) * 100).toFixed(0) : 0}%`, 'Compliant'],
-          ['3 Stars', 'Average Performance', tickets.filter(t => t.rating === 3).length, `${totalRatings > 0 ? ((tickets.filter(t => t.rating === 3).length / totalRatings) * 100).toFixed(0) : 0}%`, 'Acceptable'],
-          ['2 Stars', 'Needs Improvement', tickets.filter(t => t.rating === 2).length, `${totalRatings > 0 ? ((tickets.filter(t => t.rating === 2).length / totalRatings) * 100).toFixed(0) : 0}%`, 'Review Required'],
-          ['1 Star', 'Unsatisfied / Escalated', tickets.filter(t => t.rating === 1).length, `${totalRatings > 0 ? ((tickets.filter(t => t.rating === 1).length / totalRatings) * 100).toFixed(0) : 0}%`, 'Critical Intervention']
+          ['5 Stars', 'Excellent Satisfaction', filteredTickets.filter(t => t.rating === 5).length, `${totalRatings > 0 ? ((filteredTickets.filter(t => t.rating === 5).length / totalRatings) * 100).toFixed(0) : 0}%`, 'Outstanding'],
+          ['4 Stars', 'Good / Expected Service', filteredTickets.filter(t => t.rating === 4).length, `${totalRatings > 0 ? ((filteredTickets.filter(t => t.rating === 4).length / totalRatings) * 100).toFixed(0) : 0}%`, 'Compliant'],
+          ['3 Stars', 'Average Performance', filteredTickets.filter(t => t.rating === 3).length, `${totalRatings > 0 ? ((filteredTickets.filter(t => t.rating === 3).length / totalRatings) * 100).toFixed(0) : 0}%`, 'Acceptable'],
+          ['2 Stars', 'Needs Improvement', filteredTickets.filter(t => t.rating === 2).length, `${totalRatings > 0 ? ((filteredTickets.filter(t => t.rating === 2).length / totalRatings) * 100).toFixed(0) : 0}%`, 'Review Required'],
+          ['1 Star', 'Unsatisfied / Escalated', filteredTickets.filter(t => t.rating === 1).length, `${totalRatings > 0 ? ((filteredTickets.filter(t => t.rating === 1).length / totalRatings) * 100).toFixed(0) : 0}%`, 'Critical Intervention']
         ];
         break;
 
       case 'SLA Compliance':
         headers = ['SLA Target Rule', 'Priority Tier', 'SLA Target Window', 'Active Tickets', 'Compliant', 'Breached Count', 'Compliance Rate'];
         rows = slaRules.map(rule => {
-          const ruleTickets = tickets.filter(t => t.department === rule.department && t.priority === rule.priority);
+          const ruleTickets = filteredTickets.filter(t => t.department === rule.department && t.priority === rule.priority);
           const breached = ruleTickets.filter(t => t.slaStatus === 'Breached');
           const compliant = ruleTickets.length - breached.length;
           const rate = ruleTickets.length > 0 ? Math.round((compliant / ruleTickets.length) * 100) : 100;
@@ -193,10 +243,19 @@ export const ReportsView: React.FC = () => {
         break;
 
       case 'Pending Queue':
-        headers = ['Ticket ID', 'Requester Employee', 'Department', 'Subject', 'Priority', 'Status', 'Created Date'];
-        rows = tickets
+        headers = ['Ticket ID', 'Requester Employee', 'Ticket Type', 'Category & Module', 'Sub-Category / Action Item', 'Priority', 'Status', 'Created Date'];
+        rows = filteredTickets
           .filter(t => t.status === 'Open' || t.status === 'Pending' || t.status === 'In Progress')
-          .map(t => [t.id, t.employeeName, t.department, t.subject, t.priority, t.status, new Date(t.createdDate).toLocaleDateString()]);
+          .map(t => [
+            t.id,
+            t.employeeName,
+            t.ticketType || 'Standard',
+            `${t.category}${t.module ? ` (${t.module})` : ''}`,
+            t.subCategory || '-',
+            t.priority,
+            t.status,
+            new Date(t.createdDate).toLocaleDateString()
+          ]);
         break;
 
       case 'Resolution Time':
@@ -531,16 +590,27 @@ export const ReportsView: React.FC = () => {
             </div>
           </div>
 
-          {/* Quick Table Search */}
-          <div className="flex items-center gap-2">
-            <div className="relative w-full sm:w-56">
+          {/* Date Range Filter and Quick Table Search */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <DateRangeFilter
+              value={dateFilter}
+              onChange={(f, s, e) => {
+                setDateFilter(f);
+                if (s !== undefined) setCustomStart(s);
+                if (e !== undefined) setCustomEnd(e);
+              }}
+              customStartDate={customStart}
+              customEndDate={customEnd}
+            />
+
+            <div className="relative w-full sm:w-52">
               <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 placeholder="Filter preview data..."
-                className="w-full pl-8 pr-7 py-1 bg-gray-50 border border-gray-200 rounded-lg text-xs font-medium outline-none focus:bg-white focus:border-emerald-500 transition-all"
+                className="w-full pl-8 pr-7 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium outline-none focus:bg-white focus:border-emerald-500 transition-all"
               />
               {searchQuery && (
                 <button
