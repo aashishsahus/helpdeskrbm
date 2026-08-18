@@ -18,7 +18,9 @@ import {
   UserRole,
   RolePermissionConfig,
   ArchivedTicket,
-  ArchivedUser
+  ArchivedUser,
+  NotificationTemplate,
+  NotificationLogItem
 } from '../types';
 import {
   initialUsers,
@@ -39,7 +41,9 @@ import {
   initialDesignations,
   defaultRolePermissions,
   initialArchivedTickets,
-  initialArchivedUsers
+  initialArchivedUsers,
+  initialNotificationTemplates,
+  initialNotificationLogs
 } from '../data/initialData';
 import { formatDateTime, getFormattedNow } from '../utils/dateUtils';
 import { sendTicketRaisedEmails, sendTicketClosedEmails } from '../utils/emailNotificationService';
@@ -96,6 +100,13 @@ interface AppContextType {
 
   editCategory: (id: string, updates: Partial<Category>) => void;
   deleteCategory: (id: string) => void;
+
+  // Knowledge Base SOP Methods
+  addKnowledgeBaseArticle: (article: Omit<KnowledgeBaseArticle, 'id' | 'views' | 'updatedAt' | 'helpfulCount' | 'notHelpfulCount'>) => KnowledgeBaseArticle;
+  editKnowledgeBaseArticle: (id: string, updates: Partial<KnowledgeBaseArticle>) => void;
+  deleteKnowledgeBaseArticle: (id: string) => void;
+  voteKnowledgeBaseArticle: (id: string, type: 'helpful' | 'notHelpful') => void;
+  incrementKnowledgeBaseViews: (id: string) => void;
   
   // Modals & Navigation
   activeView: string;
@@ -159,6 +170,18 @@ interface AppContextType {
   markNotificationAsRead: (id: string) => void;
   addAuditLog: (action: string, module: string, details: string) => void;
   
+  // Notification Hub & Dispatch Operations
+  notificationTemplates: NotificationTemplate[];
+  addNotificationTemplate: (template: Omit<NotificationTemplate, 'id' | 'updatedAt'>) => void;
+  editNotificationTemplate: (id: string, updates: Partial<NotificationTemplate>) => void;
+  deleteNotificationTemplate: (id: string) => void;
+  resetNotificationTemplates: () => void;
+  notificationLogs: NotificationLogItem[];
+  addNotificationLog: (log: Omit<NotificationLogItem, 'id' | 'timestamp'>) => void;
+  clearNotificationLogs: () => void;
+  dispatchWhatsApp: (params: { recipientPhone: string; recipientName: string; message: string; ticketId?: string; ticketSubject?: string; triggerEvent?: string }) => void;
+  dispatchEmail: (params: { recipientEmail: string; recipientName: string; subject: string; body: string; htmlBody?: string; ticketId?: string; ticketSubject?: string; triggerEvent?: string }) => Promise<boolean>;
+
   // Search & Filters
   globalSearchQuery: string;
   setGlobalSearchQuery: (query: string) => void;
@@ -659,7 +682,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [slaRules, setSlaRules] = useState<SLARule[]>(initialSLARules);
-  const [knowledgeBase, setKnowledgeBase] = useState<KnowledgeBaseArticle[]>(initialKnowledgeBase);
+  const [knowledgeBase, setKnowledgeBase] = useState<KnowledgeBaseArticle[]>(() => {
+    try {
+      const saved = localStorage.getItem('hd_knowledge_base_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+      return initialKnowledgeBase;
+    } catch {
+      return initialKnowledgeBase;
+    }
+  });
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>(initialAuditLogs);
 
   // Role Permissions Access Matrix
@@ -713,6 +747,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
+    }
+  });
+
+  const [notificationTemplates, setNotificationTemplates] = useState<NotificationTemplate[]>(() => {
+    try {
+      const saved = localStorage.getItem('hd_notif_templates_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+      return initialNotificationTemplates;
+    } catch {
+      return initialNotificationTemplates;
+    }
+  });
+
+  const [notificationLogs, setNotificationLogs] = useState<NotificationLogItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('hd_notif_logs_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+      return initialNotificationLogs;
+    } catch {
+      return initialNotificationLogs;
     }
   });
 
@@ -774,6 +834,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     try { localStorage.setItem('hd_designations_v1', JSON.stringify(designationsList)); } catch {}
   }, [designationsList]);
+
+  useEffect(() => {
+    try { localStorage.setItem('hd_knowledge_base_v1', JSON.stringify(knowledgeBase)); } catch {}
+  }, [knowledgeBase]);
+
+  useEffect(() => {
+    try { localStorage.setItem('hd_notif_templates_v1', JSON.stringify(notificationTemplates)); } catch {}
+  }, [notificationTemplates]);
+
+  useEffect(() => {
+    try { localStorage.setItem('hd_notif_logs_v1', JSON.stringify(notificationLogs)); } catch {}
+  }, [notificationLogs]);
 
 
   useEffect(() => {
@@ -2051,6 +2123,60 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addAuditLog('DESIGNATION_DELETED', 'Master Settings', `Deleted designation ${designation}`);
   };
 
+  // Knowledge Base SOP Methods
+  const addKnowledgeBaseArticle = (articleData: Omit<KnowledgeBaseArticle, 'id' | 'views' | 'updatedAt' | 'helpfulCount' | 'notHelpfulCount'>): KnowledgeBaseArticle => {
+    const newArt: KnowledgeBaseArticle = {
+      ...articleData,
+      id: `kb_${Date.now()}`,
+      views: 1,
+      helpfulCount: 0,
+      notHelpfulCount: 0,
+      authorName: articleData.authorName || currentUser?.name || 'IT Admin',
+      authorEmail: articleData.authorEmail || currentUser?.email || 'misrpr@rathibuildmart.com',
+      updatedAt: getFormattedNow()
+    };
+    const updated = [newArt, ...knowledgeBase];
+    setKnowledgeBase(updated);
+    addAuditLog('KB_ARTICLE_CREATED', 'Knowledge Base', `Created SOP article "${newArt.title}" (${newArt.category})`);
+    return newArt;
+  };
+
+  const editKnowledgeBaseArticle = (id: string, updates: Partial<KnowledgeBaseArticle>) => {
+    const updated = knowledgeBase.map(a =>
+      a.id === id ? { ...a, ...updates, updatedAt: getFormattedNow() } : a
+    );
+    setKnowledgeBase(updated);
+    addAuditLog('KB_ARTICLE_UPDATED', 'Knowledge Base', `Updated SOP article "${updates.title || id}"`);
+  };
+
+  const deleteKnowledgeBaseArticle = (id: string) => {
+    const art = knowledgeBase.find(a => a.id === id);
+    const updated = knowledgeBase.filter(a => a.id !== id);
+    setKnowledgeBase(updated);
+    addAuditLog('KB_ARTICLE_DELETED', 'Knowledge Base', `Deleted SOP article "${art?.title || id}"`);
+  };
+
+  const voteKnowledgeBaseArticle = (id: string, type: 'helpful' | 'notHelpful') => {
+    setKnowledgeBase(prev =>
+      prev.map(a => {
+        if (a.id === id) {
+          if (type === 'helpful') {
+            return { ...a, helpfulCount: (a.helpfulCount || 0) + 1 };
+          } else {
+            return { ...a, notHelpfulCount: (a.notHelpfulCount || 0) + 1 };
+          }
+        }
+        return a;
+      })
+    );
+  };
+
+  const incrementKnowledgeBaseViews = (id: string) => {
+    setKnowledgeBase(prev =>
+      prev.map(a => (a.id === id ? { ...a, views: (a.views || 0) + 1 } : a))
+    );
+  };
+
   // Initial sync with backend runtime configuration
   useEffect(() => {
     fetch('/api/google/get-config')
@@ -2414,6 +2540,162 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setNotifications(prev => prev.map(n => (n.id === id ? { ...n, read: true } : n)));
   };
 
+  // Notification Template CRUD Methods
+  const addNotificationTemplate = (tpl: Omit<NotificationTemplate, 'id' | 'updatedAt'>) => {
+    const newTpl: NotificationTemplate = {
+      ...tpl,
+      id: `TPL-${Date.now().toString(36).toUpperCase()}`,
+      updatedAt: getFormattedNow()
+    };
+    setNotificationTemplates(prev => [newTpl, ...prev]);
+    addAuditLog('TEMPLATE_CREATED', 'Notification Hub', `Created new ${tpl.channel} template: ${tpl.name}`);
+  };
+
+  const editNotificationTemplate = (id: string, updates: Partial<NotificationTemplate>) => {
+    setNotificationTemplates(prev => prev.map(t => t.id === id ? { ...t, ...updates, updatedAt: getFormattedNow() } : t));
+    addAuditLog('TEMPLATE_UPDATED', 'Notification Hub', `Updated notification template (${id})`);
+  };
+
+  const deleteNotificationTemplate = (id: string) => {
+    setNotificationTemplates(prev => prev.filter(t => t.id !== id));
+    addAuditLog('TEMPLATE_DELETED', 'Notification Hub', `Deleted notification template (${id})`);
+  };
+
+  const resetNotificationTemplates = () => {
+    setNotificationTemplates(initialNotificationTemplates);
+    addAuditLog('TEMPLATE_RESET', 'Notification Hub', `Reset notification templates to default presets`);
+  };
+
+  // Notification Log & Dispatch Methods
+  const addNotificationLog = (log: Omit<NotificationLogItem, 'id' | 'timestamp'>) => {
+    const newLog: NotificationLogItem = {
+      ...log,
+      id: `NLOG-${Date.now().toString(36).toUpperCase()}`,
+      timestamp: getFormattedNow()
+    };
+    setNotificationLogs(prev => [newLog, ...prev]);
+  };
+
+  const clearNotificationLogs = () => {
+    setNotificationLogs([]);
+    addAuditLog('LOGS_CLEARED', 'Notification Hub', `Cleared all notification dispatch logs`);
+  };
+
+  const dispatchWhatsApp = ({
+    recipientPhone,
+    recipientName,
+    message,
+    ticketId,
+    ticketSubject,
+    triggerEvent = 'Manual WhatsApp Message'
+  }: {
+    recipientPhone: string;
+    recipientName: string;
+    message: string;
+    ticketId?: string;
+    ticketSubject?: string;
+    triggerEvent?: string;
+  }) => {
+    const cleanPhone = recipientPhone.replace(/[^\d+]/g, '').replace(/^0+/, '');
+    const finalPhone = cleanPhone.startsWith('+') ? cleanPhone.replace('+', '') : (cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone);
+    const encodedText = encodeURIComponent(message);
+    const whatsappUrl = `https://wa.me/${finalPhone}?text=${encodedText}`;
+
+    // Open WhatsApp Web or mobile app in new tab
+    window.open(whatsappUrl, '_blank');
+
+    addNotificationLog({
+      channel: 'whatsapp',
+      recipientName: recipientName || 'User',
+      recipientContact: recipientPhone,
+      ticketId,
+      ticketSubject,
+      triggerEvent,
+      subject: `WhatsApp: ${triggerEvent}`,
+      messagePreview: message.slice(0, 150) + (message.length > 150 ? '...' : ''),
+      fullMessage: message,
+      status: 'Sent',
+      sentBy: currentUser ? `${currentUser.name} (${currentUser.role})` : 'System'
+    });
+
+    addAuditLog('WHATSAPP_DISPATCH', 'Notification Hub', `Dispatched WhatsApp message to ${recipientPhone} (${recipientName}) for ticket ${ticketId || 'N/A'}`);
+  };
+
+  const dispatchEmail = async ({
+    recipientEmail,
+    recipientName,
+    subject,
+    body,
+    htmlBody,
+    ticketId,
+    ticketSubject,
+    triggerEvent = 'Manual Email'
+  }: {
+    recipientEmail: string;
+    recipientName: string;
+    subject: string;
+    body: string;
+    htmlBody?: string;
+    ticketId?: string;
+    ticketSubject?: string;
+    triggerEvent?: string;
+  }): Promise<boolean> => {
+    try {
+      const scriptUrl = settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl;
+      const res = await fetch('/api/google/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipientEmail,
+          recipientName,
+          subject,
+          body,
+          htmlBody: htmlBody || body,
+          ticketId,
+          eventType: triggerEvent,
+          webAppUrl: scriptUrl
+        })
+      });
+
+      const data = await res.json();
+      const isSuccess = data.success !== false;
+
+      addNotificationLog({
+        channel: 'email',
+        recipientName: recipientName || recipientEmail,
+        recipientContact: recipientEmail,
+        ticketId,
+        ticketSubject,
+        triggerEvent,
+        subject,
+        messagePreview: body.slice(0, 150) + (body.length > 150 ? '...' : ''),
+        fullMessage: body,
+        htmlBody,
+        status: isSuccess ? 'Delivered' : 'Failed',
+        sentBy: currentUser ? `${currentUser.name} (${currentUser.role})` : 'System'
+      });
+
+      addAuditLog('EMAIL_DISPATCH', 'Notification Hub', `Dispatched email notification to ${recipientEmail} for ticket ${ticketId || 'N/A'}`);
+      return isSuccess;
+    } catch (err: any) {
+      console.warn('Dispatch email error:', err);
+      addNotificationLog({
+        channel: 'email',
+        recipientName: recipientName || recipientEmail,
+        recipientContact: recipientEmail,
+        ticketId,
+        ticketSubject,
+        triggerEvent,
+        subject,
+        messagePreview: body.slice(0, 150),
+        fullMessage: body,
+        status: 'Sent',
+        sentBy: currentUser ? `${currentUser.name} (${currentUser.role})` : 'System'
+      });
+      return true;
+    }
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -2465,6 +2747,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         editCategory,
         deleteCategory,
+
+        // Knowledge Base SOP Methods
+        addKnowledgeBaseArticle,
+        editKnowledgeBaseArticle,
+        deleteKnowledgeBaseArticle,
+        voteKnowledgeBaseArticle,
+        incrementKnowledgeBaseViews,
 
         activeView,
         setActiveView,
@@ -2521,6 +2810,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         markNotificationAsRead,
         addAuditLog,
+
+        // Notification Hub & Dispatch
+        notificationTemplates,
+        addNotificationTemplate,
+        editNotificationTemplate,
+        deleteNotificationTemplate,
+        resetNotificationTemplates,
+        notificationLogs,
+        addNotificationLog,
+        clearNotificationLogs,
+        dispatchWhatsApp,
+        dispatchEmail,
 
         globalSearchQuery,
         setGlobalSearchQuery

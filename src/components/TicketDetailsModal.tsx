@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { TicketPriority, TicketStatus } from '../types';
 import { SendEmailModal } from './SendEmailModal';
+import { SendWhatsAppModal } from './SendWhatsAppModal';
 
 export const TicketDetailsModal: React.FC = () => {
   const {
@@ -49,6 +50,7 @@ export const TicketDetailsModal: React.FC = () => {
   const [starRating, setStarRating] = useState<number>(5);
   const [feedbackText, setFeedbackText] = useState('');
   const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteReason, setDeleteReason] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
@@ -401,16 +403,32 @@ export const TicketDetailsModal: React.FC = () => {
                 <div>
                   <div className="flex items-center justify-between gap-1">
                     <span className="text-gray-400 block text-[10px]">Requester Employee</span>
-                    <button
-                      onClick={() => setIsEmailModalOpen(true)}
-                      className="text-[10px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 bg-blue-50 px-2 py-0.5 rounded border border-blue-200"
-                    >
-                      <Mail className="w-3 h-3" />
-                      <span>Send Email</span>
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setIsWhatsAppModalOpen(true)}
+                        className="text-[10px] text-emerald-700 hover:text-emerald-800 font-bold flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200 transition-colors"
+                        title="Send WhatsApp Message"
+                      >
+                        <MessageSquare className="w-3 h-3 text-emerald-600" />
+                        <span>WhatsApp</span>
+                      </button>
+                      <button
+                        onClick={() => setIsEmailModalOpen(true)}
+                        className="text-[10px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded border border-blue-200 transition-colors"
+                        title="Send Email Notification"
+                      >
+                        <Mail className="w-3 h-3" />
+                        <span>Email</span>
+                      </button>
+                    </div>
                   </div>
                   <p className="font-semibold text-gray-900">{ticket.employeeName} ({ticket.employeeId})</p>
-                  <p className="text-[10px] text-blue-700 font-bold font-mono">{ticket.employeeEmail}</p>
+                  <div className="flex flex-wrap items-center gap-x-2 text-[10px]">
+                    <span className="text-blue-700 font-bold font-mono">{ticket.employeeEmail}</span>
+                    {ticket.contactNumber && (
+                      <span className="text-emerald-700 font-bold font-mono">📱 {ticket.contactNumber}</span>
+                    )}
+                  </div>
                 </div>
 
                 <div>
@@ -463,6 +481,15 @@ export const TicketDetailsModal: React.FC = () => {
         recipientName={ticket.employeeName}
         ticketId={ticket.id}
         ticketSubject={ticket.subject}
+      />
+
+      {/* Send WhatsApp Modal */}
+      <SendWhatsAppModal
+        isOpen={isWhatsAppModalOpen}
+        onClose={() => setIsWhatsAppModalOpen(false)}
+        ticket={ticket}
+        defaultPhone={ticket.contactNumber || ''}
+        defaultRecipientName={ticket.employeeName}
       />
 
       {/* Super Admin Permanent Delete / Archive Confirmation Dialog */}

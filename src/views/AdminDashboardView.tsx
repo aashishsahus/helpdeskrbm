@@ -26,9 +26,10 @@ import {
 } from 'lucide-react';
 
 export const AdminDashboardView: React.FC = () => {
-  const { tickets, users, departments, categories, slaRules } = useApp();
+  const { tickets, users, departments, categories, slaRules, setSelectedTicketId, currentUser } = useApp();
 
   const [dateFilter, setDateFilter] = useState<'thisMonth' | 'lastMonth' | 'all'>('all');
+  const [ticketStatusFilter, setTicketStatusFilter] = useState<string>('All');
 
   // Metrics
   const totalTickets = tickets.length;
@@ -76,14 +77,17 @@ export const AdminDashboardView: React.FC = () => {
       {/* Admin Title & Date Filter Bar */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-            Enterprise Executive Help Desk Dashboard
-            <span className="text-xs px-2.5 py-0.5 bg-purple-100 text-purple-700 font-bold rounded-full border border-purple-200">
-              Admin Analytics
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+              Enterprise Help Desk Command Center
+            </h1>
+            <span className="text-xs px-2.5 py-0.5 bg-emerald-100 text-emerald-800 font-extrabold rounded-full border border-emerald-300 flex items-center gap-1">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              {currentUser?.role === 'Super Admin' ? 'Super Admin: All Company Data (Global)' : 'Admin: Enterprise Scope'}
             </span>
-          </h1>
-          <p className="text-xs text-gray-500">
-            Global ticket volume trends, SLA compliance metrics, and support performance indicators.
+          </div>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Global ticket volume trends, department SLA compliance, resource workload, and enterprise-wide ticket streaming.
           </p>
         </div>
 
@@ -251,6 +255,102 @@ export const AdminDashboardView: React.FC = () => {
               </BarChart>
             </ResponsiveContainer>
           </div>
+        </div>
+      </div>
+
+      {/* Live Enterprise Ticket Stream (All Departments) */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50 flex-wrap gap-3">
+          <div>
+            <h2 className="font-bold text-gray-900 text-sm flex items-center gap-2">
+              <Ticket className="w-4 h-4 text-purple-600" />
+              Live Enterprise Ticket Feed (All Departments)
+            </h2>
+            <p className="text-[11px] text-gray-400">
+              Showing real-time tickets logged across all employees, departments, and branch locations.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-1.5 bg-gray-100 p-1 rounded-xl text-xs font-semibold">
+            {['All', 'Open', 'In Progress', 'Pending', 'Resolved'].map(st => (
+              <button
+                key={st}
+                onClick={() => setTicketStatusFilter(st)}
+                className={`px-3 py-1 rounded-lg transition-all text-xs ${
+                  ticketStatusFilter === st
+                    ? 'bg-white text-gray-900 shadow-xs font-bold'
+                    : 'text-gray-500 hover:text-gray-900'
+                }`}
+              >
+                {st}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr className="text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100 bg-white">
+                <th className="px-6 py-3 w-28">Ticket ID</th>
+                <th className="px-6 py-3">Requester & Dept</th>
+                <th className="px-6 py-3">Subject & Category</th>
+                <th className="px-6 py-3 w-28">Priority</th>
+                <th className="px-6 py-3 w-32">Status</th>
+                <th className="px-6 py-3 w-36">Assigned Agent</th>
+                <th className="px-6 py-3 w-32">Logged Time</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {tickets
+                .filter(t => ticketStatusFilter === 'All' || t.status === ticketStatusFilter)
+                .slice(0, 10)
+                .map(t => (
+                  <tr
+                    key={t.id}
+                    onClick={() => setSelectedTicketId(t.id)}
+                    className="hover:bg-purple-50/30 transition-colors cursor-pointer"
+                  >
+                    <td className="px-6 py-3 font-mono font-bold text-purple-600">{t.id}</td>
+                    <td className="px-6 py-3">
+                      <p className="font-semibold text-gray-900">{t.employeeName}</p>
+                      <p className="text-[10px] text-gray-400">{t.department} • {t.location || 'HQ'}</p>
+                    </td>
+                    <td className="px-6 py-3">
+                      <p className="font-medium text-gray-800 line-clamp-1">{t.subject}</p>
+                      <p className="text-[10px] text-gray-400 font-mono">{t.category} → {t.subCategory}</p>
+                    </td>
+                    <td className="px-6 py-3">
+                      <span className={`inline-block px-2 py-0.5 text-[10px] rounded uppercase font-bold ${
+                        t.priority === 'Critical' ? 'bg-red-100 text-red-700' :
+                        t.priority === 'High' ? 'bg-orange-100 text-orange-700' :
+                        t.priority === 'Medium' ? 'bg-blue-100 text-blue-700' :
+                        'bg-gray-100 text-gray-700'
+                      }`}>
+                        {t.priority}
+                      </span>
+                    </td>
+                    <td className="px-6 py-3">
+                      <span className={`px-2 py-0.5 rounded text-[11px] font-semibold ${
+                        t.status === 'Open' ? 'text-blue-600 bg-blue-50' :
+                        t.status === 'In Progress' ? 'text-orange-600 bg-orange-50' :
+                        t.status === 'Pending' ? 'text-amber-600 bg-amber-50' :
+                        t.status === 'Resolved' ? 'text-emerald-600 bg-emerald-50' :
+                        'text-gray-600 bg-gray-100'
+                      }`}>
+                        {t.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-3 text-gray-600 font-medium">
+                      {t.assignedAgentName || <span className="text-gray-400 italic font-normal">Unassigned</span>}
+                    </td>
+                    <td className="px-6 py-3 text-gray-400 font-mono text-[11px]">
+                      {new Date(t.createdDate).toLocaleDateString()}
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

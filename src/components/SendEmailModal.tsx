@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Mail, Send, X, CheckCircle2, Copy, Sparkles, ExternalLink, Ticket } from 'lucide-react';
+import { Mail, Send, X, CheckCircle2, Copy, Sparkles, ExternalLink, Ticket as TicketIcon } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 interface SendEmailModalProps {
@@ -19,23 +19,73 @@ export const SendEmailModal: React.FC<SendEmailModalProps> = ({
   ticketId,
   ticketSubject
 }) => {
-  const { settings, addAuditLog } = useApp();
+  const { notificationTemplates, dispatchEmail, tickets } = useApp();
 
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [sending, setSending] = useState(false);
   const [sentSuccess, setSentSuccess] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  const emailTemplates = notificationTemplates.filter(t => t.channel === 'email');
+  const relatedTicket = ticketId ? tickets.find(t => t.id === ticketId) : undefined;
+
+  const formatVariables = (templateText: string) => {
+    let text = templateText;
+    if (relatedTicket) {
+      text = text
+        .replace(/{ticket_id}/g, relatedTicket.id)
+        .replace(/{subject}/g, relatedTicket.subject)
+        .replace(/{employee_name}/g, recipientName || relatedTicket.employeeName)
+        .replace(/{employee_email}/g, relatedTicket.employeeEmail)
+        .replace(/{department}/g, relatedTicket.department)
+        .replace(/{location}/g, relatedTicket.location)
+        .replace(/{category}/g, relatedTicket.category)
+        .replace(/{sub_category}/g, relatedTicket.subCategory)
+        .replace(/{priority}/g, relatedTicket.priority)
+        .replace(/{status}/g, relatedTicket.status)
+        .replace(/{assigned_agent}/g, relatedTicket.assignedAgentName || 'IT Support Team')
+        .replace(/{sla_due}/g, relatedTicket.slaDueDate || 'Within 24 Hours')
+        .replace(/{description}/g, relatedTicket.description)
+        .replace(/{resolution_notes}/g, relatedTicket.resolutionNotes || 'Issue diagnosed and resolved successfully.')
+        .replace(/{latest_comment}/g, 'Our technician has updated the work notes on your ticket.')
+        .replace(/{portal_url}/g, window.location.origin);
+    } else {
+      text = text
+        .replace(/{employee_name}/g, recipientName || 'Valued User')
+        .replace(/{ticket_id}/g, ticketId || 'HD-TICKET')
+        .replace(/{subject}/g, ticketSubject || 'Support Request')
+        .replace(/{portal_url}/g, window.location.origin);
+    }
+    return text;
+  };
 
   useEffect(() => {
     if (isOpen) {
       setSentSuccess(false);
       setSending(false);
-      const defaultSubj = ticketId
-        ? `[${ticketId}] ${ticketSubject ? `Regarding: ${ticketSubject}` : 'Update on your Help Desk Ticket'}`
-        : `Update regarding your Rathi Buildmart Help Desk Request`;
-      
-      const defaultBody = `Dear ${recipientName || 'Valued User'},
+
+      // Pick default template or format default message
+      let defaultTpl = emailTemplates.find(t => t.triggerEvent === 'status_updated') || emailTemplates[0];
+      if (relatedTicket) {
+        if (relatedTicket.status === 'Resolved' || relatedTicket.status === 'Closed') {
+          defaultTpl = emailTemplates.find(t => t.triggerEvent === 'ticket_closed') || defaultTpl;
+        } else if (relatedTicket.status === 'Open') {
+          defaultTpl = emailTemplates.find(t => t.triggerEvent === 'ticket_created') || defaultTpl;
+        }
+      }
+
+      if (defaultTpl) {
+        setSelectedTemplateId(defaultTpl.id);
+        setSubject(formatVariables(defaultTpl.subject || `[${ticketId || 'HelpDesk'}] Support Notification`));
+        setBody(formatVariables(defaultTpl.body));
+      } else {
+        const defaultSubj = ticketId
+          ? `[${ticketId}] ${ticketSubject ? `Regarding: ${ticketSubject}` : 'Update on your Help Desk Ticket'}`
+          : `Update regarding your Rathi Buildmart Help Desk Request`;
+        
+        const defaultBody = `Dear ${recipientName || 'Valued User'},
 
 We are reaching out regarding your Help Desk ticket ${ticketId ? `(${ticketId})` : ''}.
 
@@ -44,20 +94,20 @@ Please let us know if you have any questions or if you would like to rate our su
 Best regards,
 Rathi Buildmart IT Operations & Support Team`;
 
-      setSubject(defaultSubj);
-      setBody(defaultBody);
+        setSubject(defaultSubj);
+        setBody(defaultBody);
+      }
     }
   }, [isOpen, recipientEmail, recipientName, ticketId, ticketSubject]);
 
   if (!isOpen) return null;
 
-  const handleTemplateSelect = (type: 'feedback' | 'update' | 'custom') => {
-    if (type === 'feedback') {
-      setSubject(`[${ticketId || 'HelpDesk'}] Please Rate Your Support Experience`);
-      setBody(`Dear ${recipientName || 'Employee'},\n\nYour support ticket ${ticketId || ''} (${ticketSubject || 'Request'}) has been resolved.\n\nWe value your feedback! Please log in to your Help Desk portal to rate our service and share your comments.\n\nThank you,\nIT Support Team`);
-    } else if (type === 'update') {
-      setSubject(`[${ticketId || 'HelpDesk'}] Status Update on your request`);
-      setBody(`Dear ${recipientName || 'Employee'},\n\nWe wanted to inform you that your ticket ${ticketId || ''} is currently being processed by our support team.\n\nIf you have any additional details or files to share, please reply or update the ticket in your portal.\n\nBest regards,\nSupport Desk`);
+  const handleTemplateSelect = (tplId: string) => {
+    setSelectedTemplateId(tplId);
+    const tpl = emailTemplates.find(t => t.id === tplId);
+    if (tpl) {
+      setSubject(formatVariables(tpl.subject || `[${ticketId || 'HelpDesk'}] Notification`));
+      setBody(formatVariables(tpl.body));
     }
   };
 
@@ -67,31 +117,26 @@ Rathi Buildmart IT Operations & Support Team`;
 
     setSending(true);
     try {
-      const scriptUrl = settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl;
-      await fetch('/api/google/send-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          recipientEmail,
-          recipientName,
-          subject,
-          body,
-          ticketId,
-          webAppUrl: scriptUrl
-        })
+      await dispatchEmail({
+        recipientEmail: recipientEmail.trim(),
+        recipientName: recipientName.trim(),
+        subject: subject.trim(),
+        body: body.trim(),
+        ticketId,
+        ticketSubject,
+        triggerEvent: selectedTemplateId ? (emailTemplates.find(t => t.id === selectedTemplateId)?.name || 'Direct Email') : 'Direct Email'
       });
 
-      addAuditLog('EMAIL_SENT', 'Support Queue', `Sent email notification to ${recipientEmail} for ticket ${ticketId || 'general'}`);
       setSentSuccess(true);
       setTimeout(() => {
         onClose();
-      }, 1800);
+      }, 1500);
     } catch (err) {
       console.error(err);
       setSentSuccess(true);
       setTimeout(() => {
         onClose();
-      }, 1800);
+      }, 1500);
     } finally {
       setSending(false);
     }
@@ -119,7 +164,7 @@ Rathi Buildmart IT Operations & Support Team`;
                 Send Direct Email Notification
               </h2>
               <p className="text-[11px] text-emerald-200/80">
-                Contact requester directly & send feedback requests
+                Contact requester directly & log delivery into history report
               </p>
             </div>
           </div>
@@ -139,7 +184,7 @@ Rathi Buildmart IT Operations & Support Team`;
             </div>
             <h3 className="font-bold text-base text-gray-900">Email Dispatched Successfully!</h3>
             <p className="text-xs text-gray-500 max-w-md mx-auto">
-              An official email message has been dispatched to <strong>{recipientEmail}</strong>.
+              An official email message has been dispatched to <strong>{recipientEmail}</strong> and recorded in delivery history.
             </p>
           </div>
         ) : (
@@ -180,29 +225,23 @@ Rathi Buildmart IT Operations & Support Team`;
               </div>
             </div>
 
-            {/* Quick Templates */}
+            {/* Quick Templates Selector */}
             <div>
               <label className="block text-[11px] font-bold text-gray-700 mb-1 flex items-center gap-1">
-                <Sparkles className="w-3.5 h-3.5 text-amber-500" /> Quick Email Preset Templates
+                <Sparkles className="w-3.5 h-3.5 text-amber-500" /> Select Email Template Preset
               </label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleTemplateSelect('feedback')}
-                  className="p-2 border border-amber-200 hover:border-amber-400 bg-amber-50/50 hover:bg-amber-50 text-left rounded-xl transition-all"
-                >
-                  <span className="font-bold text-[11px] text-amber-900 block">⭐ Request Rating & Feedback</span>
-                  <span className="text-[10px] text-amber-700 block truncate">Ask employee to rate ticket resolution</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleTemplateSelect('update')}
-                  className="p-2 border border-blue-200 hover:border-blue-400 bg-blue-50/50 hover:bg-blue-50 text-left rounded-xl transition-all"
-                >
-                  <span className="font-bold text-[11px] text-blue-900 block">📩 Ticket Progress Update</span>
-                  <span className="text-[10px] text-blue-700 block truncate">Notify employee about ongoing status</span>
-                </button>
-              </div>
+              <select
+                value={selectedTemplateId}
+                onChange={e => handleTemplateSelect(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs font-medium focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white"
+              >
+                <option value="">-- Custom Email --</option>
+                {emailTemplates.map(tpl => (
+                  <option key={tpl.id} value={tpl.id}>
+                    {tpl.name}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {/* Subject Input */}
@@ -230,22 +269,27 @@ Rathi Buildmart IT Operations & Support Team`;
             </div>
 
             {/* Action buttons */}
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 text-xs font-bold text-gray-600 hover:bg-gray-100 rounded-xl transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={sending}
-                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl flex items-center gap-2 shadow-md transition-all"
-              >
-                <Send className="w-3.5 h-3.5" />
-                <span>{sending ? 'Sending Email...' : 'Send Direct Email'}</span>
-              </button>
+            <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+              <span className="text-[11px] text-gray-400">
+                Dispatches via Apps Script & SMTP
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 text-xs font-bold text-gray-600 hover:bg-gray-100 rounded-xl transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={sending}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl flex items-center gap-2 shadow-md transition-all"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>{sending ? 'Sending Email...' : 'Send Direct Email'}</span>
+                </button>
+              </div>
             </div>
           </form>
         )}
@@ -253,3 +297,4 @@ Rathi Buildmart IT Operations & Support Team`;
     </div>
   );
 };
+

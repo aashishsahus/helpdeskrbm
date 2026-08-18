@@ -3,11 +3,27 @@ import { useApp } from '../../context/AppContext';
 import { Building2, Plus, Edit2, Trash2 } from 'lucide-react';
 
 export const DepartmentManagement: React.FC = () => {
-  const { departments, addDepartment, editDepartment, deleteDepartment } = useApp();
+  const { departments, addDepartment, editDepartment, deleteDepartment, users } = useApp();
+
+  const suggestedTeams = Array.from(
+    new Set([
+      'Core IT Team',
+      'People Ops Team',
+      'Finance Desk',
+      'Supply Desk',
+      'Sales Operations',
+      'Facilities Team',
+      'L1 Helpdesk Support',
+      'Operations Helpdesk',
+      ...departments.map(d => d.supportTeam).filter(Boolean)
+    ])
+  );
 
   const [name, setName] = useState('');
   const [headName, setHeadName] = useState('');
+  const [customHead, setCustomHead] = useState(false);
   const [supportTeam, setSupportTeam] = useState('');
+  const [customTeam, setCustomTeam] = useState(false);
 
   const [editModal, setEditModal] = useState<{ id: string; name: string; headName: string; supportTeam: string } | null>(null);
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<{ id: string; name: string } | null>(null);
@@ -16,9 +32,9 @@ export const DepartmentManagement: React.FC = () => {
     e.preventDefault();
     if (!name.trim()) return;
     addDepartment({
-      name,
-      headName: headName || 'Unassigned',
-      supportTeam: supportTeam || 'Default Team'
+      name: name.trim(),
+      headName: headName.trim() || 'Unassigned',
+      supportTeam: supportTeam.trim() || 'Default Team'
     });
     setName('');
     setHeadName('');
@@ -50,25 +66,100 @@ export const DepartmentManagement: React.FC = () => {
           </div>
 
           <div>
-            <label className="block font-bold text-gray-700 mb-1">Department Head</label>
-            <input
-              type="text"
-              value={headName}
-              onChange={e => setHeadName(e.target.value)}
-              placeholder="e.g. Marcus Brody"
-              className="w-full p-2 border rounded-lg"
-            />
+            <label className="block font-bold text-gray-700 mb-1">Department Head (Select User)</label>
+            {!customHead ? (
+              <div className="space-y-1.5">
+                <select
+                  value={headName}
+                  onChange={e => {
+                    if (e.target.value === '__custom__') {
+                      setCustomHead(true);
+                      setHeadName('');
+                    } else {
+                      setHeadName(e.target.value);
+                    }
+                  }}
+                  className="w-full p-2 border rounded-lg bg-white"
+                >
+                  <option value="">-- Select Registered User as Head --</option>
+                  <option value="Unassigned">Unassigned / Pending</option>
+                  <optgroup label="Registered Employees & Admins">
+                    {users.map(u => (
+                      <option key={u.id} value={u.name}>
+                        {u.name} — {u.role} ({u.department || 'All'})
+                      </option>
+                    ))}
+                  </optgroup>
+                  <option value="__custom__">✏️ + Enter Custom Name...</option>
+                </select>
+              </div>
+            ) : (
+              <div className="flex gap-1.5">
+                <input
+                  type="text"
+                  value={headName}
+                  onChange={e => setHeadName(e.target.value)}
+                  placeholder="Enter custom head name"
+                  className="flex-1 p-2 border rounded-lg"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCustomHead(false);
+                    setHeadName('');
+                  }}
+                  className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-[11px] font-bold rounded-lg border"
+                >
+                  List
+                </button>
+              </div>
+            )}
           </div>
 
           <div>
             <label className="block font-bold text-gray-700 mb-1">Support Desk Team</label>
-            <input
-              type="text"
-              value={supportTeam}
-              onChange={e => setSupportTeam(e.target.value)}
-              placeholder="e.g. InfoSec Response Team"
-              className="w-full p-2 border rounded-lg"
-            />
+            {!customTeam ? (
+              <div className="space-y-1.5">
+                <select
+                  value={supportTeam}
+                  onChange={e => {
+                    if (e.target.value === '__custom__') {
+                      setCustomTeam(true);
+                      setSupportTeam('');
+                    } else {
+                      setSupportTeam(e.target.value);
+                    }
+                  }}
+                  className="w-full p-2 border rounded-lg bg-white"
+                >
+                  <option value="">-- Select Support Team --</option>
+                  {suggestedTeams.map((team, idx) => (
+                    <option key={idx} value={team}>{team}</option>
+                  ))}
+                  <option value="__custom__">✏️ + Enter Custom Support Team...</option>
+                </select>
+              </div>
+            ) : (
+              <div className="flex gap-1.5">
+                <input
+                  type="text"
+                  value={supportTeam}
+                  onChange={e => setSupportTeam(e.target.value)}
+                  placeholder="Enter custom support team"
+                  className="flex-1 p-2 border rounded-lg"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCustomTeam(false);
+                    setSupportTeam('');
+                  }}
+                  className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-[11px] font-bold rounded-lg border"
+                >
+                  List
+                </button>
+              </div>
+            )}
           </div>
 
           <button
@@ -144,22 +235,40 @@ export const DepartmentManagement: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block font-bold text-gray-700 mb-1">Department Head</label>
-                <input
-                  type="text"
+                <label className="block font-bold text-gray-700 mb-1">Department Head (Select User)</label>
+                <select
                   value={editModal.headName}
                   onChange={e => setEditModal({ ...editModal, headName: e.target.value })}
-                  className="w-full p-2 border rounded-lg"
-                />
+                  className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium"
+                >
+                  <option value="Unassigned">Unassigned / Pending</option>
+                  <optgroup label="Registered Employees & Admins">
+                    {users.map(u => (
+                      <option key={u.id} value={u.name}>
+                        {u.name} — {u.role} ({u.department || 'All'})
+                      </option>
+                    ))}
+                  </optgroup>
+                  {editModal.headName && !users.some(u => u.name === editModal.headName) && editModal.headName !== 'Unassigned' && (
+                    <option value={editModal.headName}>{editModal.headName} (Current)</option>
+                  )}
+                </select>
               </div>
               <div>
                 <label className="block font-bold text-gray-700 mb-1">Support Desk Team</label>
-                <input
-                  type="text"
+                <select
                   value={editModal.supportTeam}
                   onChange={e => setEditModal({ ...editModal, supportTeam: e.target.value })}
-                  className="w-full p-2 border rounded-lg"
-                />
+                  className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium"
+                >
+                  <option value="Default Team">Default Team</option>
+                  {suggestedTeams.map((team, idx) => (
+                    <option key={idx} value={team}>{team}</option>
+                  ))}
+                  {editModal.supportTeam && !suggestedTeams.includes(editModal.supportTeam) && editModal.supportTeam !== 'Default Team' && (
+                    <option value={editModal.supportTeam}>{editModal.supportTeam} (Current)</option>
+                  )}
+                </select>
               </div>
             </div>
             <div className="flex justify-end gap-2 pt-2">

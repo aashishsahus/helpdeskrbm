@@ -12,7 +12,9 @@ import {
   TicketHistory,
   RolePermissionConfig,
   ArchivedTicket,
-  ArchivedUser
+  ArchivedUser,
+  NotificationTemplate,
+  NotificationLogItem
 } from '../types';
 
 export const initialUsers: User[] = [
@@ -540,6 +542,296 @@ export const initialArchivedUsers: ArchivedUser[] = [
     archivedBy: 'Misr Pr (Super Admin)',
     archivedByEmail: 'misrpr@rathibuildmart.com',
     archiveReason: 'Internship contract concluded'
+  }
+];
+
+export const initialNotificationTemplates: NotificationTemplate[] = [
+  {
+    id: 'TPL-EMAIL-CREATED',
+    name: 'Ticket Confirmation (Email to Employee)',
+    channel: 'email',
+    triggerEvent: 'ticket_created',
+    recipientType: 'employee',
+    enabled: true,
+    subject: '[HelpDesk Confirmation] Ticket {ticket_id} Registered: {subject}',
+    body: `Dear {employee_name},
+
+Your support ticket {ticket_id} ("{subject}") has been successfully registered in our queue.
+
+Ticket Details:
+- Ticket ID: {ticket_id}
+- Category: {category} > {sub_category}
+- Priority: {priority}
+- Department: {department} ({location})
+- Assigned Specialist: {assigned_agent}
+- SLA Target Due: {sla_due}
+
+Our support team is actively reviewing your request. You will receive further notifications as progress is made.
+
+Best regards,
+Rathi Buildmart IT Operations & HelpDesk Team`,
+    htmlBody: ``,
+    updatedAt: '2026-08-18 10:00:00'
+  },
+  {
+    id: 'TPL-EMAIL-ASSIGNED',
+    name: 'New Ticket Assignment Alert (Email to Agent)',
+    channel: 'email',
+    triggerEvent: 'ticket_assigned',
+    recipientType: 'agent',
+    enabled: true,
+    subject: '[Action Required] Ticket {ticket_id} Assigned to You ({priority})',
+    body: `Hello {assigned_agent},
+
+A new support request has been assigned to your queue:
+
+Ticket ID: {ticket_id}
+Subject: {subject}
+Raised By: {employee_name} ({employee_email}, Phone: {employee_phone})
+Priority: {priority}
+SLA Due: {sla_due}
+Description:
+{description}
+
+Please log in to the HelpDesk portal to acknowledge and begin work.
+
+Best regards,
+HelpDesk Management System`,
+    updatedAt: '2026-08-18 10:00:00'
+  },
+  {
+    id: 'TPL-EMAIL-STATUS',
+    name: 'Status Update Notification (Email to Employee)',
+    channel: 'email',
+    triggerEvent: 'status_updated',
+    recipientType: 'employee',
+    enabled: true,
+    subject: '[HelpDesk Update] Ticket {ticket_id} status changed to {status}',
+    body: `Dear {employee_name},
+
+The status of your support ticket {ticket_id} ("{subject}") has been updated to: {status}.
+
+Handled By: {assigned_agent}
+Latest Update: {latest_comment}
+
+You can track your ticket progress in real-time on your HelpDesk portal.
+
+Best regards,
+Rathi Buildmart HelpDesk`,
+    updatedAt: '2026-08-18 10:00:00'
+  },
+  {
+    id: 'TPL-EMAIL-CLOSED',
+    name: 'Ticket Resolved & Closed (Email to Employee)',
+    channel: 'email',
+    triggerEvent: 'ticket_closed',
+    recipientType: 'employee',
+    enabled: true,
+    subject: '[HelpDesk Resolved] Ticket {ticket_id} has been Completed',
+    body: `Dear {employee_name},
+
+Your support request {ticket_id} ("{subject}") has been resolved and marked as {status}.
+
+Handled By: {assigned_agent}
+Resolution Notes: {resolution_notes}
+
+⭐ Please take a moment to rate your support experience in the HelpDesk portal.
+
+Best regards,
+Rathi Buildmart Support Desk`,
+    updatedAt: '2026-08-18 10:00:00'
+  },
+  {
+    id: 'TPL-WA-CREATED',
+    name: 'Ticket Registered Confirmation (WhatsApp)',
+    channel: 'whatsapp',
+    triggerEvent: 'ticket_created',
+    recipientType: 'employee',
+    enabled: true,
+    body: `*🏢 RATHI BUILDMART HELPDESK*
+━━━━━━━━━━━━━━━━━━━━
+Namaste *{employee_name}*,
+
+Aapka support ticket successfully register ho gaya hai:
+
+📌 *Ticket ID:* {ticket_id}
+📝 *Subject:* {subject}
+🏷️ *Category:* {category}
+⚡ *Priority:* {priority}
+👤 *Assigned Agent:* {assigned_agent}
+⏳ *SLA Resolution Target:* {sla_due}
+
+Humari team jald hi aapki request par action legi. Ticket track karne ke liye portal visit karein:
+🔗 https://ais-pre-og6oceunixmom6wlssthgr-101533959483.asia-east1.run.app`,
+    updatedAt: '2026-08-18 10:00:00'
+  },
+  {
+    id: 'TPL-WA-ASSIGNED',
+    name: 'Urgent Ticket Assigned Alert (WhatsApp to Agent)',
+    channel: 'whatsapp',
+    triggerEvent: 'ticket_assigned',
+    recipientType: 'agent',
+    enabled: true,
+    body: `*🚨 NEW TICKET ASSIGNMENT ALERT*
+━━━━━━━━━━━━━━━━━━━━
+Hello *{assigned_agent}*,
+
+Naya ticket aapko assign kiya gaya hai:
+
+📌 *Ticket ID:* {ticket_id}
+📝 *Subject:* {subject}
+⚡ *Priority:* *{priority}*
+👤 *Employee:* {employee_name} ({employee_phone})
+🏢 *Dept/Branch:* {department} ({location})
+⏱️ *SLA Target:* {sla_due}
+
+Kripya portal par jakar jald action lein:
+🔗 https://ais-pre-og6oceunixmom6wlssthgr-101533959483.asia-east1.run.app`,
+    updatedAt: '2026-08-18 10:00:00'
+  },
+  {
+    id: 'TPL-WA-STATUS',
+    name: 'Status Update Progress Alert (WhatsApp)',
+    channel: 'whatsapp',
+    triggerEvent: 'status_updated',
+    recipientType: 'employee',
+    enabled: true,
+    body: `*🔄 TICKET STATUS UPDATE*
+━━━━━━━━━━━━━━━━━━━━
+Namaste *{employee_name}*,
+
+Aapke ticket *{ticket_id}* ka status update hua hai:
+
+📌 *Ticket ID:* {ticket_id}
+📝 *Subject:* {subject}
+📊 *New Status:* *{status}*
+👤 *Handled By:* {assigned_agent}
+💬 *Update Note:* {latest_comment}
+
+Best regards,
+*Rathi Buildmart Support Desk*`,
+    updatedAt: '2026-08-18 10:00:00'
+  },
+  {
+    id: 'TPL-WA-RESOLVED',
+    name: 'Ticket Resolved & Rating Feedback (WhatsApp)',
+    channel: 'whatsapp',
+    triggerEvent: 'ticket_closed',
+    recipientType: 'employee',
+    enabled: true,
+    body: `*✅ TICKET RESOLVED & COMPLETED*
+━━━━━━━━━━━━━━━━━━━━
+Namaste *{employee_name}*,
+
+Aapka ticket *{ticket_id}* solve ho gaya hai!
+
+📌 *Ticket ID:* {ticket_id}
+📝 *Subject:* {subject}
+👤 *Resolved By:* {assigned_agent}
+📝 *Resolution Notes:* {resolution_notes}
+
+⭐ *Aapka feedback humare liye anmol hai!*
+Kripya portal par jakar service rating (1-5 Star) dein:
+🔗 https://ais-pre-og6oceunixmom6wlssthgr-101533959483.asia-east1.run.app
+
+Dhanyawad,
+*Rathi Buildmart IT Team*`,
+    updatedAt: '2026-08-18 10:00:00'
+  },
+  {
+    id: 'TPL-WA-SLA-BREACH',
+    name: 'SLA Breach Urgent Warning (WhatsApp to Manager)',
+    channel: 'whatsapp',
+    triggerEvent: 'sla_breach',
+    recipientType: 'admin',
+    enabled: true,
+    body: `*⚠️ CRITICAL SLA BREACH WARNING*
+━━━━━━━━━━━━━━━━━━━━
+Attention *Support Team Lead*,
+
+Ticket *{ticket_id}* ka SLA breach ho chuka hai ya breach hone wala hai:
+
+📌 *Ticket ID:* {ticket_id}
+📝 *Subject:* {subject}
+⚡ *Priority:* {priority}
+👤 *Assigned Agent:* {assigned_agent}
+⏱️ *Overdue Since / Due:* {sla_due}
+
+Immediate escalation required!`,
+    updatedAt: '2026-08-18 10:00:00'
+  }
+];
+
+export const initialNotificationLogs: NotificationLogItem[] = [
+  {
+    id: 'NLOG-1001',
+    channel: 'email',
+    recipientName: 'Misr Pr',
+    recipientContact: 'misrpr@rathibuildmart.com',
+    ticketId: 'HD-000101',
+    ticketSubject: 'ERP Access Credentials Reset for Raipur Branch',
+    triggerEvent: 'Ticket Created',
+    subject: '[HelpDesk Confirmation] Ticket HD-000101 Registered: ERP Access Credentials',
+    messagePreview: 'Dear Misr Pr, Your support ticket HD-000101 has been registered in our queue.',
+    status: 'Delivered',
+    timestamp: '2026-08-18 09:30:15',
+    sentBy: 'System Automation'
+  },
+  {
+    id: 'NLOG-1002',
+    channel: 'whatsapp',
+    recipientName: 'Aashish',
+    recipientContact: '+91 98765 43210',
+    ticketId: 'HD-000101',
+    ticketSubject: 'ERP Access Credentials Reset for Raipur Branch',
+    triggerEvent: 'Ticket Assigned',
+    subject: 'WhatsApp Assignment Alert',
+    messagePreview: '🚨 NEW TICKET ASSIGNMENT ALERT: Hello Aashish, Ticket HD-000101 assigned to you...',
+    status: 'Sent',
+    timestamp: '2026-08-18 09:30:18',
+    sentBy: 'System Automation'
+  },
+  {
+    id: 'NLOG-1003',
+    channel: 'email',
+    recipientName: 'Dhaneshwari',
+    recipientContact: 'accountsrpr@rathibuildmart.com',
+    ticketId: 'HD-000102',
+    ticketSubject: 'Printer Network Offline in Accounts Department',
+    triggerEvent: 'Status Changed to In Progress',
+    subject: '[HelpDesk Update] Ticket HD-000102 status changed to In Progress',
+    messagePreview: 'Dear Dhaneshwari, The status of your support ticket HD-000102 has been updated to: In Progress.',
+    status: 'Delivered',
+    timestamp: '2026-08-18 10:15:40',
+    sentBy: 'Aashish (Support Agent)'
+  },
+  {
+    id: 'NLOG-1004',
+    channel: 'whatsapp',
+    recipientName: 'Lekhram',
+    recipientContact: '+91 98271 23456',
+    ticketId: 'HD-000103',
+    ticketSubject: 'Tally Server Connection Timeout',
+    triggerEvent: 'Ticket Resolved',
+    subject: 'WhatsApp Resolved & Feedback',
+    messagePreview: '✅ TICKET RESOLVED & COMPLETED: Namaste Lekhram, Aapka ticket HD-000103 solve ho gaya hai...',
+    status: 'Delivered',
+    timestamp: '2026-08-18 11:45:10',
+    sentBy: 'Misr Pr (Admin)'
+  },
+  {
+    id: 'NLOG-1005',
+    channel: 'email',
+    recipientName: 'Sarwaswati',
+    recipientContact: 'accountsrpr@rathibuildmart.com',
+    ticketId: 'HD-000104',
+    ticketSubject: 'Biometric Attendance Device Sync Error',
+    triggerEvent: 'Ticket Closed',
+    subject: '[HelpDesk Resolved] Ticket HD-000104 has been Completed',
+    messagePreview: 'Dear Sarwaswati, Your support request HD-000104 has been resolved and closed.',
+    status: 'Delivered',
+    timestamp: '2026-08-18 12:20:05',
+    sentBy: 'System Automation'
   }
 ];
 

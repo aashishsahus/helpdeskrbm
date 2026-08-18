@@ -113,13 +113,13 @@ export const FeedbackDashboardView: React.FC = () => {
   const totalResolvedCount = timeframeFilteredTickets.filter(t => t.status === 'Resolved' || t.status === 'Closed').length;
 
   const averageRating = useMemo(() => {
-    if (totalFeedbackCount === 0) return 5.0;
+    if (totalFeedbackCount === 0) return '0.0';
     const sum = ratedTickets.reduce((acc, t) => acc + (t.rating || 0), 0);
     return (sum / totalFeedbackCount).toFixed(1);
   }, [ratedTickets, totalFeedbackCount]);
 
   const csatPercentage = useMemo(() => {
-    if (totalFeedbackCount === 0) return 100;
+    if (totalFeedbackCount === 0) return 0;
     const positiveCount = ratedTickets.filter(t => (t.rating || 0) >= 4).length;
     return Math.round((positiveCount / totalFeedbackCount) * 100);
   }, [ratedTickets, totalFeedbackCount]);
@@ -139,11 +139,11 @@ export const FeedbackDashboardView: React.FC = () => {
   const agentPerformance = useMemo(() => {
     const agentMap: Record<string, { name: string; dept: string; email: string; ratings: number[] }> = {};
 
-    users.filter(u => u.role === 'Support Agent' || u.role === 'Support Manager' || u.role === 'Super Admin').forEach(u => {
+    users.filter(u => u.role === 'Support Agent' || u.role === 'Support Manager' || u.role === 'Super Admin' || u.role === 'Admin').forEach(u => {
       agentMap[u.id] = { name: u.name, dept: u.department, email: u.email, ratings: [] };
     });
 
-    tickets.forEach(t => {
+    timeframeFilteredTickets.forEach(t => {
       if (t.rating && t.assignedAgentId && agentMap[t.assignedAgentId]) {
         agentMap[t.assignedAgentId].ratings.push(t.rating);
       }
@@ -153,11 +153,11 @@ export const FeedbackDashboardView: React.FC = () => {
       .map(agent => {
         const count = agent.ratings.length;
         const avg = count > 0 ? (agent.ratings.reduce((a, b) => a + b, 0) / count).toFixed(1) : 'N/A';
-        const csat = count > 0 ? Math.round((agent.ratings.filter(r => r >= 4).length / count) * 100) : 100;
+        const csat = count > 0 ? Math.round((agent.ratings.filter(r => r >= 4).length / count) * 100) : 0;
         return { ...agent, count, avg, csat };
       })
-      .sort((a, b) => b.count - a.count);
-  }, [tickets, users]);
+      .sort((a, b) => b.count - a.count || b.csat - a.csat);
+  }, [timeframeFilteredTickets, users]);
 
   const handleOpenEmailModal = (email: string, name: string, ticketId?: string, subject?: string) => {
     setSelectedRecipient({
@@ -424,13 +424,25 @@ export const FeedbackDashboardView: React.FC = () => {
                     <td className="p-2.5 text-gray-600">{agent.dept || 'IT Operations'}</td>
                     <td className="p-2.5 font-mono font-bold text-center">{agent.count}</td>
                     <td className="p-2.5 text-center">
-                      <span className="font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 inline-flex items-center gap-1">
-                        <Star className="w-3 h-3 fill-current text-amber-500" />
-                        {agent.avg}
-                      </span>
+                      {agent.count > 0 ? (
+                        <span className="font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 inline-flex items-center gap-1">
+                          <Star className="w-3 h-3 fill-current text-amber-500" />
+                          {agent.avg}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 font-semibold bg-gray-50 px-2 py-0.5 rounded border border-gray-200 inline-flex items-center gap-1">
+                          N/A
+                        </span>
+                      )}
                     </td>
-                    <td className="p-2.5 text-center font-mono font-bold text-emerald-600">
-                      {agent.csat}%
+                    <td className="p-2.5 text-center font-mono font-bold">
+                      {agent.count > 0 ? (
+                        <span className={agent.csat >= 80 ? 'text-emerald-600' : agent.csat >= 60 ? 'text-amber-600' : 'text-red-600'}>
+                          {agent.csat}%
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 font-normal">0%</span>
+                      )}
                     </td>
                     <td className="p-2.5 text-right">
                       <button

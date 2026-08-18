@@ -33,11 +33,14 @@ export const EmployeeDashboardView: React.FC = () => {
     ? tickets.filter(t => isTicketRaisedByUser(t, currentUser))
     : [];
 
+  const totalMyTickets = myTickets.length;
   const openCount = myTickets.filter(t => t.status === 'Open').length;
-  const pendingCount = myTickets.filter(t => t.status === 'Pending').length;
   const inProgressCount = myTickets.filter(t => t.status === 'In Progress').length;
+  const pendingCount = myTickets.filter(t => t.status === 'Pending').length;
   const resolvedCount = myTickets.filter(t => t.status === 'Resolved').length;
   const closedCount = myTickets.filter(t => t.status === 'Closed').length;
+  const completedCount = resolvedCount + closedCount;
+  const myResolutionRate = totalMyTickets > 0 ? Math.round((completedCount / totalMyTickets) * 100) : 100;
 
   const filteredTickets = myTickets.filter(t => {
     const matchesSearch =
@@ -106,25 +109,25 @@ export const EmployeeDashboardView: React.FC = () => {
         </button>
       </div>
 
-      {/* Top KPI Cards (Technical Dashboard style) */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-2xs">
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">My Open</p>
+      {/* Top KPI Cards (Personalized Employee View) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+        <div className="bg-white p-4.5 rounded-xl border border-gray-200 shadow-2xs">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Total Raised</p>
           <div className="flex items-end justify-between">
-            <span className="text-2xl font-bold text-blue-600">{openCount}</span>
-            <span className="text-[10px] px-2 py-0.5 bg-blue-50 text-blue-600 font-bold rounded">Active</span>
+            <span className="text-2xl font-bold text-gray-900">{totalMyTickets}</span>
+            <span className="text-[10px] px-2 py-0.5 bg-gray-100 text-gray-700 font-bold rounded">My Tickets</span>
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-2xs">
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">In Progress</p>
+        <div className="bg-white p-4.5 rounded-xl border border-gray-200 shadow-2xs">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">In Progress / Open</p>
           <div className="flex items-end justify-between">
-            <span className="text-2xl font-bold text-orange-600">{inProgressCount}</span>
-            <span className="text-[10px] px-2 py-0.5 bg-orange-50 text-orange-600 font-bold rounded">Working</span>
+            <span className="text-2xl font-bold text-blue-600">{openCount + inProgressCount}</span>
+            <span className="text-[10px] px-2 py-0.5 bg-blue-50 text-blue-600 font-bold rounded">Working</span>
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-2xs">
+        <div className="bg-white p-4.5 rounded-xl border border-gray-200 shadow-2xs">
           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Pending Action</p>
           <div className="flex items-end justify-between">
             <span className="text-2xl font-bold text-amber-600">{pendingCount}</span>
@@ -132,19 +135,19 @@ export const EmployeeDashboardView: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-2xs">
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Resolved</p>
+        <div className="bg-white p-4.5 rounded-xl border border-gray-200 shadow-2xs">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Resolved & Closed</p>
           <div className="flex items-end justify-between">
-            <span className="text-2xl font-bold text-green-600">{resolvedCount}</span>
-            <span className="text-[10px] px-2 py-0.5 bg-green-50 text-green-600 font-bold rounded">Completed</span>
+            <span className="text-2xl font-bold text-emerald-600">{completedCount}</span>
+            <span className="text-[10px] px-2 py-0.5 bg-emerald-50 text-emerald-600 font-bold rounded">Completed</span>
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-2xs">
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Closed</p>
+        <div className="bg-white p-4.5 rounded-xl border border-gray-200 shadow-2xs">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Resolution Rate</p>
           <div className="flex items-end justify-between">
-            <span className="text-2xl font-bold text-gray-600">{closedCount}</span>
-            <span className="text-[10px] px-2 py-0.5 bg-gray-100 text-gray-600 font-bold rounded">Archived</span>
+            <span className="text-2xl font-bold text-emerald-700">{myResolutionRate}%</span>
+            <span className="text-[10px] px-2 py-0.5 bg-emerald-100 text-emerald-800 font-bold rounded">Success</span>
           </div>
         </div>
       </div>

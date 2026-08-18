@@ -26,6 +26,7 @@ import { SystemSettingsView } from './views/AdminPanel/SystemSettingsView';
 import { MasterDropdownsView } from './views/AdminPanel/MasterDropdownsView';
 import { RolePermissionsView } from './views/AdminPanel/RolePermissionsView';
 import { ArchivedVaultView } from './views/AdminPanel/ArchivedVaultView';
+import { EmailWhatsAppHubView } from './views/AdminPanel/EmailWhatsAppHubView';
 
 import { LoginModal } from './components/LoginModal';
 import { LoginPage } from './views/LoginPage';
@@ -70,6 +71,11 @@ const MainLayout: React.FC = () => {
       case 'knowledge-base':
       case 'knowledge_base':
         return <KnowledgeBaseView />;
+
+      case 'email-whatsapp':
+      case 'email_whatsapp':
+      case 'notification_hub':
+        return <EmailWhatsAppHubView />;
 
       case 'reports':
         return <ReportsView />;

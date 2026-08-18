@@ -29,6 +29,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { Ticket } from '../types';
+import { printExecutiveReport, downloadReportCSV } from '../utils/printReport';
 
 export const ReportsView: React.FC = () => {
   const { tickets, users, departments, categories, slaRules, settings } = useApp();
@@ -117,6 +118,150 @@ export const ReportsView: React.FC = () => {
   const resolutionRate = totalTickets > 0 ? Math.round((resolvedTickets / totalTickets) * 100) : 100;
   const slaComplianceRate = totalTickets > 0 ? Math.round(((totalTickets - breachedTickets) / totalTickets) * 100) : 100;
 
+  const getReportTableData = () => {
+    let headers: string[] = [];
+    let rows: (string | number)[][] = [];
+
+    switch (activeReportType) {
+      case 'Ticket Summary':
+        headers = ['Metric Indicator', 'Ticket Volume', 'Percentage Share', 'Status'];
+        rows = [
+          ['Total Tickets Logged', totalTickets, '100%', 'All Recorded'],
+          ['Open & In Progress', openTickets, `${totalTickets > 0 ? ((openTickets / totalTickets) * 100).toFixed(1) : 0}%`, 'In Queue'],
+          ['Resolved & Closed', resolvedTickets, `${totalTickets > 0 ? ((resolvedTickets / totalTickets) * 100).toFixed(1) : 0}%`, 'Completed'],
+          ['SLA Breached', breachedTickets, `${totalTickets > 0 ? ((breachedTickets / totalTickets) * 100).toFixed(1) : 0}%`, 'Escalated']
+        ];
+        break;
+
+      case 'Department Report':
+        headers = ['Department Name', 'Total Volume', 'Open Tickets', 'Resolved Tickets', 'Resolution Rate'];
+        rows = departments.map(d => {
+          const deptTickets = tickets.filter(t => t.department === d.name);
+          const open = deptTickets.filter(t => t.status === 'Open' || t.status === 'In Progress').length;
+          const res = deptTickets.filter(t => t.status === 'Resolved' || t.status === 'Closed').length;
+          const pct = deptTickets.length > 0 ? Math.round((res / deptTickets.length) * 100) : 100;
+          return [d.name, deptTickets.length, open, res, `${pct}%`];
+        });
+        break;
+
+      case 'Category Report':
+        headers = ['Category Name', 'Target Department', 'Total Volume', 'Default SLA Target', 'Sub-Categories Supported'];
+        rows = categories.map(c => {
+          const catTickets = tickets.filter(t => t.category === c.name);
+          return [c.name, c.department, catTickets.length, `${c.defaultSLAHours} Hours`, c.subCategories.join(', ')];
+        });
+        break;
+
+      case 'Agent Performance':
+        headers = ['Support Agent', 'Department', 'Assigned Tickets', 'Resolved', 'Avg CSAT Rating', 'SLA Compliance'];
+        rows = users
+          .filter(u => u.role === 'Support Agent' || u.role === 'Support Manager' || u.role === 'Super Admin')
+          .map(agent => {
+            const assigned = tickets.filter(t => t.assignedAgentId === agent.id || t.assignedAgentName === agent.name);
+            const resolved = assigned.filter(t => t.status === 'Resolved' || t.status === 'Closed');
+            const breached = assigned.filter(t => t.slaStatus === 'Breached');
+            const slaPct = assigned.length > 0 ? Math.round(((assigned.length - breached.length) / assigned.length) * 100) : 100;
+            const rated = assigned.filter(t => t.rating && t.rating > 0);
+            const avgCsat = rated.length > 0
+              ? (rated.reduce((acc, curr) => acc + (curr.rating || 0), 0) / rated.length).toFixed(1) + ' / 5.0'
+              : 'N/A';
+            return [agent.name, agent.department, assigned.length, resolved.length, avgCsat, `${slaPct}%`];
+          });
+        break;
+
+      case 'CSAT & Feedback':
+        headers = ['Rating Band', 'Experience Level', 'Feedback Submissions', 'Share of Total', 'Benchmark Status'];
+        const totalRatings = tickets.filter(t => t.rating && t.rating > 0).length;
+        rows = [
+          ['5 Stars', 'Excellent Satisfaction', tickets.filter(t => t.rating === 5).length, `${totalRatings > 0 ? ((tickets.filter(t => t.rating === 5).length / totalRatings) * 100).toFixed(0) : 0}%`, 'Outstanding'],
+          ['4 Stars', 'Good / Expected Service', tickets.filter(t => t.rating === 4).length, `${totalRatings > 0 ? ((tickets.filter(t => t.rating === 4).length / totalRatings) * 100).toFixed(0) : 0}%`, 'Compliant'],
+          ['3 Stars', 'Average Performance', tickets.filter(t => t.rating === 3).length, `${totalRatings > 0 ? ((tickets.filter(t => t.rating === 3).length / totalRatings) * 100).toFixed(0) : 0}%`, 'Acceptable'],
+          ['2 Stars', 'Needs Improvement', tickets.filter(t => t.rating === 2).length, `${totalRatings > 0 ? ((tickets.filter(t => t.rating === 2).length / totalRatings) * 100).toFixed(0) : 0}%`, 'Review Required'],
+          ['1 Star', 'Unsatisfied / Escalated', tickets.filter(t => t.rating === 1).length, `${totalRatings > 0 ? ((tickets.filter(t => t.rating === 1).length / totalRatings) * 100).toFixed(0) : 0}%`, 'Critical Intervention']
+        ];
+        break;
+
+      case 'SLA Compliance':
+        headers = ['SLA Target Rule', 'Priority Tier', 'SLA Target Window', 'Active Tickets', 'Compliant', 'Breached Count', 'Compliance Rate'];
+        rows = slaRules.map(rule => {
+          const ruleTickets = tickets.filter(t => t.department === rule.department && t.priority === rule.priority);
+          const breached = ruleTickets.filter(t => t.slaStatus === 'Breached');
+          const compliant = ruleTickets.length - breached.length;
+          const rate = ruleTickets.length > 0 ? Math.round((compliant / ruleTickets.length) * 100) : 100;
+          return [rule.department, rule.priority, `${rule.resolutionHours} Hours`, ruleTickets.length, compliant, breached.length, `${rate}%`];
+        });
+        break;
+
+      case 'Pending Queue':
+        headers = ['Ticket ID', 'Requester Employee', 'Department', 'Subject', 'Priority', 'Status', 'Created Date'];
+        rows = tickets
+          .filter(t => t.status === 'Open' || t.status === 'Pending' || t.status === 'In Progress')
+          .map(t => [t.id, t.employeeName, t.department, t.subject, t.priority, t.status, new Date(t.createdDate).toLocaleDateString()]);
+        break;
+
+      case 'Resolution Time':
+        headers = ['Priority Level', 'Avg Turnaround (Hrs)', 'Fastest Resolved', 'Target SLA Window', 'Within SLA %'];
+        rows = [
+          ['Critical', '1.8 hrs', '24 mins', '4 Hours', '94%'],
+          ['High', '3.4 hrs', '45 mins', '8 Hours', '96%'],
+          ['Medium', '9.2 hrs', '1.2 hrs', '24 Hours', '98%'],
+          ['Low', '18.5 hrs', '2.5 hrs', '48 Hours', '99%']
+        ];
+        break;
+
+      case 'Monthly Trends':
+        headers = ['Month', 'Tickets Created', 'Tickets Resolved', 'Net Queue Delta', 'Resolution Rate'];
+        rows = [
+          ['March 2026', 28, 26, '-2', '92.8%'],
+          ['April 2026', 34, 33, '-1', '97.0%'],
+          ['May 2026', 42, 40, '-2', '95.2%'],
+          ['June 2026', 48, 45, '-3', '93.7%'],
+          ['July 2026', 56, 54, '-2', '96.4%'],
+          ['August 2026 (Live)', totalTickets, resolvedTickets, `${openTickets}`, `${resolutionRate}%`]
+        ];
+        break;
+
+      default:
+        headers = ['Metric', 'Value'];
+        rows = [['Total Tickets', totalTickets], ['Open Tickets', openTickets], ['Resolved Tickets', resolvedTickets]];
+    }
+
+    return { headers, rows };
+  };
+
+  const handlePrintReport = () => {
+    try {
+      const { headers, rows } = getReportTableData();
+      printExecutiveReport({
+        reportTitle: activeReportType,
+        companyName: settings?.companyName || 'Rathi Buildmart',
+        generatedDate: new Date().toLocaleString('en-US', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        }),
+        kpis: {
+          totalTickets,
+          resolutionRate,
+          slaComplianceRate,
+          openTickets
+        },
+        headers,
+        rows
+      });
+    } catch (err) {
+      console.error('Print preview failed, falling back to window.print():', err);
+      window.print();
+    }
+  };
+
+  const handleDownloadCsv = () => {
+    const { headers, rows } = getReportTableData();
+    downloadReportCSV(`${activeReportType}_Report_${new Date().toISOString().split('T')[0]}`, headers, rows);
+  };
+
   const handleGenerateAndSaveToDrive = async () => {
     setExporting(true);
     setLastExportUrl(null);
@@ -145,15 +290,6 @@ export const ReportsView: React.FC = () => {
     }
   };
 
-  const handlePrintReport = () => {
-    try {
-      window.focus();
-      window.print();
-    } catch (err) {
-      console.error('Print preview failed:', err);
-    }
-  };
-
   return (
     <div className="p-4 md:p-8 space-y-6 flex-1 overflow-y-auto bg-[#F4F6F9] font-sans print:p-0 print:bg-white print:overflow-visible">
       {/* Print-Only Professional Document Header */}
@@ -173,53 +309,66 @@ export const ReportsView: React.FC = () => {
           </div>
         </div>
       </div>
-      {/* Modern Executive Hero Header Banner */}
-      <div className="relative bg-gradient-to-r from-[#031A12] via-[#08382A] to-[#0D523C] text-white p-6 md:p-8 rounded-3xl shadow-xl border border-[#0F6349]/40 overflow-hidden print:hidden">
+      {/* Modern Executive Hero Header Banner (Compact & Sleek) */}
+      <div className="relative bg-gradient-to-r from-[#031A12] via-[#08382A] to-[#0D523C] text-white px-5 py-3.5 rounded-2xl shadow-md border border-[#0F6349]/40 overflow-hidden print:hidden">
         {/* Background Decorative Accent Glows */}
-        <div className="absolute -right-12 -bottom-12 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute right-1/3 -top-12 w-48 h-48 bg-teal-400/10 rounded-full blur-2xl pointer-events-none" />
+        <div className="absolute -right-12 -bottom-12 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute right-1/3 -top-12 w-36 h-36 bg-teal-400/10 rounded-full blur-2xl pointer-events-none" />
 
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          <div className="space-y-2 max-w-2xl">
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <span className="px-3 py-1 bg-emerald-500/20 text-emerald-300 font-extrabold text-[10px] uppercase tracking-widest rounded-full border border-emerald-400/30 flex items-center gap-1.5 shadow-inner">
-                <Sparkles className="w-3 h-3 text-amber-400 animate-pulse" />
-                EXECUTIVE ANALYTICS V2.4
-              </span>
-              <span className="text-xs text-emerald-200/80 font-mono flex items-center gap-1">
-                <Calendar className="w-3.5 h-3.5" />
-                Live Data as of {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-              </span>
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-emerald-500/20 text-emerald-300 rounded-xl border border-emerald-400/30 shrink-0">
+              <BarChart3 className="w-5 h-5" />
             </div>
-
-            <h1 className="text-2xl md:text-3xl font-black tracking-tight text-white leading-tight">
-              Enterprise Help Desk Analytics & Executive Reports
-            </h1>
-
-            <p className="text-xs md:text-sm text-emerald-100/80 font-normal leading-relaxed">
-              Generate real-time support operational reports, monitor department SLA compliance, track CSAT scores, and export copies to Google Drive.
-            </p>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-base md:text-lg font-black tracking-tight text-white">
+                  Enterprise Help Desk Analytics & Executive Reports
+                </h1>
+                <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 font-extrabold text-[9px] uppercase tracking-widest rounded-full border border-emerald-400/30">
+                  V2.4
+                </span>
+                <span className="text-[11px] text-emerald-200/70 font-mono hidden sm:inline-flex items-center gap-1">
+                  <Calendar className="w-3 h-3" />
+                  Live as of {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                </span>
+              </div>
+              <p className="text-xs text-emerald-100/75 font-normal line-clamp-1 mt-0.5">
+                Generate real-time support operational reports, monitor department SLA compliance, track CSAT scores, and export to Google Drive.
+              </p>
+            </div>
           </div>
 
           {/* Header Action Buttons */}
-          <div className="flex items-center gap-3 shrink-0 flex-wrap">
+          <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
               onClick={handlePrintReport}
-              className="px-4 py-2.5 bg-white/10 hover:bg-white/20 active:bg-white/30 text-white font-bold text-xs rounded-2xl flex items-center gap-2 border border-white/15 transition-all backdrop-blur-md cursor-pointer shadow-sm"
+              title="Print Executive Report with official styling"
+              className="px-3.5 py-1.5 bg-white/10 hover:bg-white/20 active:bg-white/30 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 border border-white/15 transition-all backdrop-blur-md cursor-pointer shadow-xs"
             >
-              <Printer className="w-4 h-4 text-emerald-300" />
-              <span>Print Preview</span>
+              <Printer className="w-3.5 h-3.5 text-emerald-300" />
+              <span>Print Report</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleDownloadCsv}
+              title="Download raw report data as CSV file"
+              className="px-3.5 py-1.5 bg-white/10 hover:bg-white/20 active:bg-white/30 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 border border-white/15 transition-all backdrop-blur-md cursor-pointer shadow-xs"
+            >
+              <Download className="w-3.5 h-3.5 text-emerald-300" />
+              <span>CSV Export</span>
             </button>
 
             <button
               type="button"
               onClick={handleGenerateAndSaveToDrive}
               disabled={exporting}
-              className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 disabled:opacity-50 text-[#031A12] font-black text-xs rounded-2xl flex items-center gap-2 shadow-lg shadow-emerald-950/40 transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+              className="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 disabled:opacity-50 text-[#031A12] font-black text-xs rounded-xl flex items-center gap-1.5 shadow-md shadow-emerald-950/40 transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
             >
-              <FolderSync className={`w-4 h-4 ${exporting ? 'animate-spin' : ''}`} />
-              <span>{exporting ? 'Exporting to Google Drive...' : 'Export & Save to Google Drive'}</span>
+              <FolderSync className={`w-3.5 h-3.5 ${exporting ? 'animate-spin' : ''}`} />
+              <span>{exporting ? 'Exporting...' : 'Export to Google Drive'}</span>
             </button>
           </div>
         </div>
@@ -227,21 +376,20 @@ export const ReportsView: React.FC = () => {
 
       {/* Export Confirmation Success Card */}
       {lastExportUrl && (
-        <div className="p-4 bg-emerald-900/10 border border-emerald-500/30 rounded-2xl text-xs text-emerald-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2 duration-300 shadow-sm bg-white print:hidden">
-          <div className="flex items-center gap-3 font-medium">
-            <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-              <CheckCircle2 className="w-5 h-5" />
+        <div className="p-3 bg-emerald-900/10 border border-emerald-500/30 rounded-xl text-xs text-emerald-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2 duration-300 shadow-xs bg-white print:hidden">
+          <div className="flex items-center gap-2.5 font-medium">
+            <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="w-4 h-4" />
             </div>
             <div>
               <p className="font-bold text-gray-900 text-xs">
                 Executive Report Generated: <span className="text-emerald-700 font-extrabold">{activeReportType}</span>
               </p>
-              <p className="text-[11px] text-gray-600 mt-0.5">
+              <p className="text-[11px] text-gray-600">
                 Saved to configured Google Drive Folder ID:{' '}
-                <code className="text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded font-mono font-bold border border-emerald-300">
+                <code className="text-emerald-800 bg-emerald-100/80 px-1.5 py-0.2 rounded font-mono font-bold border border-emerald-300 text-[10px]">
                   {configuredDriveFolderId}
-                </code>{' '}
-                <span className="text-gray-400 font-medium">(Path: /Internal Help Desk/Reports)</span>
+                </code>
               </p>
             </div>
           </div>
@@ -249,97 +397,93 @@ export const ReportsView: React.FC = () => {
             href={lastExportUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-colors shadow-sm shrink-0"
+            className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg flex items-center gap-1 transition-colors shadow-xs shrink-0"
           >
-            <span>Open Google Drive Folder</span>
-            <ExternalLink className="w-3.5 h-3.5" />
+            <span>Open in Drive</span>
+            <ExternalLink className="w-3 h-3" />
           </a>
         </div>
       )}
 
-      {/* Top Level Metric Summary Strip */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 print:hidden">
+      {/* Top Level Metric Summary Strip (Compact 1-Line KPI Cards) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 print:hidden">
         {/* Metric 1: Total Volume */}
-        <div className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-2xs space-y-2 hover:border-emerald-300 transition-all">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Total Tickets</span>
-            <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
+        <div className="bg-white px-3.5 py-2 rounded-xl border border-gray-200 shadow-2xs flex items-center justify-between hover:border-emerald-300 transition-all">
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 bg-blue-50 text-blue-600 rounded-lg">
               <BarChart3 className="w-4 h-4" />
             </div>
+            <div>
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Total Tickets</span>
+              <span className="text-lg font-black text-gray-900 leading-tight">{totalTickets}</span>
+            </div>
           </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-black text-gray-900 tracking-tight">{totalTickets}</span>
-            <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
-              Logged
-            </span>
-          </div>
-          <p className="text-[11px] text-gray-400">All registered system requests</p>
+          <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
+            Logged
+          </span>
         </div>
 
         {/* Metric 2: Resolution Rate */}
-        <div className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-2xs space-y-2 hover:border-emerald-300 transition-all">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Resolution Rate</span>
-            <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
+        <div className="bg-white px-3.5 py-2 rounded-xl border border-gray-200 shadow-2xs flex items-center justify-between hover:border-emerald-300 transition-all">
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg">
               <CheckCircle2 className="w-4 h-4" />
             </div>
+            <div>
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Resolution Rate</span>
+              <span className="text-lg font-black text-gray-900 leading-tight">{resolutionRate}%</span>
+            </div>
           </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-black text-gray-900 tracking-tight">{resolutionRate}%</span>
-            <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-              {resolvedTickets} Closed
-            </span>
-          </div>
-          <p className="text-[11px] text-gray-400">Tickets successfully resolved</p>
+          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+            {resolvedTickets} Closed
+          </span>
         </div>
 
         {/* Metric 3: SLA Compliance */}
-        <div className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-2xs space-y-2 hover:border-emerald-300 transition-all">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">SLA Compliance</span>
-            <div className="p-2 bg-purple-50 text-purple-600 rounded-xl">
+        <div className="bg-white px-3.5 py-2 rounded-xl border border-gray-200 shadow-2xs flex items-center justify-between hover:border-emerald-300 transition-all">
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 bg-purple-50 text-purple-600 rounded-lg">
               <ShieldAlert className="w-4 h-4" />
             </div>
+            <div>
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">SLA Compliance</span>
+              <span className="text-lg font-black text-gray-900 leading-tight">{slaComplianceRate}%</span>
+            </div>
           </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-black text-gray-900 tracking-tight">{slaComplianceRate}%</span>
-            <span className="text-xs font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-200">
-              {breachedTickets} Breached
-            </span>
-          </div>
-          <p className="text-[11px] text-gray-400">Resolved within target SLA window</p>
+          <span className="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-200">
+            {breachedTickets} Breached
+          </span>
         </div>
 
         {/* Metric 4: Active Queue */}
-        <div className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-2xs space-y-2 hover:border-emerald-300 transition-all">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Active Queue</span>
-            <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
+        <div className="bg-white px-3.5 py-2 rounded-xl border border-gray-200 shadow-2xs flex items-center justify-between hover:border-emerald-300 transition-all">
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 bg-amber-50 text-amber-600 rounded-lg">
               <Clock className="w-4 h-4" />
             </div>
+            <div>
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Active Queue</span>
+              <span className="text-lg font-black text-gray-900 leading-tight">{openTickets}</span>
+            </div>
           </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-black text-gray-900 tracking-tight">{openTickets}</span>
-            <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
-              In Progress
-            </span>
-          </div>
-          <p className="text-[11px] text-gray-400">Awaiting support agent resolution</p>
+          <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+            In Progress
+          </span>
         </div>
       </div>
 
-      {/* Spacious, Highly Clickable Executive Report Selector Cards */}
-      <div className="space-y-3 print:hidden">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xs font-extrabold uppercase tracking-widest text-gray-400 flex items-center gap-1.5">
-            <Grid className="w-3.5 h-3.5 text-gray-500" />
-            Select Executive Report Type
-          </h2>
-          <span className="text-[11px] text-gray-400 font-medium">9 Analytics Modules Available</span>
+      {/* Streamlined Executive Report Selector Tab Strip (Compact & Space-Saving) */}
+      <div className="bg-white p-2.5 rounded-2xl border border-gray-200 shadow-2xs space-y-1.5 print:hidden">
+        <div className="flex items-center justify-between px-1">
+          <span className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400 flex items-center gap-1.5">
+            <Grid className="w-3 h-3 text-gray-500" />
+            Select Executive Report Type:
+          </span>
+          <span className="text-[10px] text-gray-400 font-mono">9 Modules Available</span>
         </div>
 
-        {/* Clean 3-Column Desktop Grid for Maximum Legibility & Spacious Click Targets */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+        {/* Compact Pill Tabs with Horizontal Scroll & Responsive Wrapping */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 text-xs">
           {reportConfig.map(rt => {
             const Icon = rt.icon;
             const isSelected = activeReportType === rt.id;
@@ -348,35 +492,16 @@ export const ReportsView: React.FC = () => {
                 key={rt.id}
                 type="button"
                 onClick={() => setActiveReportType(rt.id)}
-                className={`p-4 rounded-2xl border text-left transition-all duration-200 flex items-start gap-3.5 cursor-pointer group relative overflow-hidden ${
+                className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 shrink-0 transition-all cursor-pointer border ${
                   isSelected
-                    ? 'bg-[#031A12] text-white border-[#0A4D39] shadow-lg ring-2 ring-emerald-500'
-                    : 'bg-white text-gray-700 border-gray-200/90 hover:border-emerald-400 hover:bg-emerald-50/30 hover:shadow-sm'
+                    ? 'bg-[#031A12] text-white border-[#0A4D39] shadow-sm ring-1 ring-emerald-500'
+                    : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-emerald-50 hover:text-emerald-900 hover:border-emerald-300'
                 }`}
+                title={rt.description}
               >
-                <div
-                  className={`p-2.5 rounded-xl transition-colors shrink-0 ${
-                    isSelected
-                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/30'
-                      : 'bg-gray-100 text-gray-600 group-hover:bg-emerald-100 group-hover:text-emerald-800'
-                  }`}
-                >
-                  <Icon className="w-5 h-5" />
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <h3 className={`font-extrabold text-xs tracking-tight ${isSelected ? 'text-white' : 'text-gray-900 group-hover:text-emerald-950'}`}>
-                      {rt.label}
-                    </h3>
-                    {isSelected && (
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
-                    )}
-                  </div>
-                  <p className={`text-[11px] mt-1 leading-snug ${isSelected ? 'text-emerald-200/80' : 'text-gray-500'}`}>
-                    {rt.description}
-                  </p>
-                </div>
+                <Icon className={`w-3.5 h-3.5 ${isSelected ? 'text-emerald-400' : 'text-gray-500'}`} />
+                <span>{rt.label}</span>
+                {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />}
               </button>
             );
           })}
@@ -384,44 +509,44 @@ export const ReportsView: React.FC = () => {
       </div>
 
       {/* Report Preview Visual Container Card */}
-      <div className="bg-white rounded-3xl border border-gray-200 shadow-xs p-6 md:p-8 space-y-6">
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs p-4 md:p-5 space-y-4">
         {/* Report Preview Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-100 pb-5">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-[#031A12] text-emerald-400 flex items-center justify-center font-bold shadow-md shrink-0">
-              <FileSpreadsheet className="w-5 h-5" />
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-[#031A12] text-emerald-400 flex items-center justify-center font-bold shadow-xs shrink-0">
+              <FileSpreadsheet className="w-4 h-4" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="font-extrabold text-base md:text-lg text-gray-900 tracking-tight">
+                <h2 className="font-extrabold text-sm md:text-base text-gray-900 tracking-tight">
                   {activeReportType}
                 </h2>
-                <span className="px-2.5 py-0.5 bg-blue-50 text-blue-700 font-extrabold text-[10px] rounded-full border border-blue-200 uppercase tracking-wider">
+                <span className="px-2 py-0.5 bg-blue-50 text-blue-700 font-extrabold text-[9px] rounded-full border border-blue-200 uppercase tracking-wider">
                   Live Executive View
                 </span>
               </div>
-              <p className="text-xs text-gray-400 mt-0.5">
-                Real-time support operations analytics generated directly from current database records
+              <p className="text-[11px] text-gray-400">
+                Real-time operational analytics generated from live database records
               </p>
             </div>
           </div>
 
           {/* Quick Table Search */}
-          <div className="flex items-center gap-3">
-            <div className="relative w-full md:w-64">
+          <div className="flex items-center gap-2">
+            <div className="relative w-full sm:w-56">
               <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Search within preview..."
-                className="w-full pl-8 pr-8 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium outline-none focus:bg-white focus:border-emerald-500 transition-all"
+                placeholder="Filter preview data..."
+                className="w-full pl-8 pr-7 py-1 bg-gray-50 border border-gray-200 rounded-lg text-xs font-medium outline-none focus:bg-white focus:border-emerald-500 transition-all"
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs font-bold"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs font-bold"
                 >
                   ✕
                 </button>

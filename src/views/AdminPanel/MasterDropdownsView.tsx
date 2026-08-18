@@ -46,18 +46,82 @@ export const MasterDropdownsView: React.FC = () => {
     deleteDesignation,
 
     departments,
+    addDepartment,
     editDepartment,
     deleteDepartment,
 
     categories,
+    addCategory,
     editCategory,
     deleteCategory,
     syncWithGoogleSheets,
-    settings
+    settings,
+    users
   } = useApp();
 
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+
+  // Suggested teams
+  const suggestedTeams = Array.from(
+    new Set([
+      'Core IT Team',
+      'People Ops Team',
+      'Finance Desk',
+      'Supply Desk',
+      'Sales Operations',
+      'Facilities Team',
+      'L1 Helpdesk Support',
+      'Operations Helpdesk',
+      ...departments.map(d => d.supportTeam).filter(Boolean)
+    ])
+  );
+
+  // New Department Form State
+  const [newDeptName, setNewDeptName] = useState('');
+  const [newDeptHead, setNewDeptHead] = useState('');
+  const [customDeptHead, setCustomDeptHead] = useState(false);
+  const [newDeptSupportTeam, setNewDeptSupportTeam] = useState('');
+  const [customSupportTeam, setCustomSupportTeam] = useState(false);
+
+  // New Category Form State
+  const [newCatName, setNewCatName] = useState('');
+  const [newCatDept, setNewCatDept] = useState(departments[0]?.name || 'IT Support');
+  const [newCatSubs, setNewCatSubs] = useState('');
+  const [newCatPriority, setNewCatPriority] = useState<string>('Medium');
+
+  const handleAddDepartment = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newDeptName.trim()) return;
+    addDepartment({
+      name: newDeptName.trim(),
+      headName: newDeptHead.trim() || 'Unassigned',
+      supportTeam: newDeptSupportTeam.trim() || 'Default Team'
+    });
+    const addedName = newDeptName.trim();
+    setNewDeptName('');
+    setNewDeptHead('');
+    setNewDeptSupportTeam('');
+    setSyncMessage(`Department "${addedName}" added successfully and synced!`);
+  };
+
+  const handleAddCategory = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCatName.trim()) return;
+    const subs = newCatSubs.split(',').map(s => s.trim()).filter(Boolean);
+    addCategory({
+      name: newCatName.trim(),
+      department: newCatDept || departments[0]?.name || 'IT Support',
+      subCategories: subs.length > 0 ? subs : ['General'],
+      defaultPriority: (newCatPriority as any) || 'Medium',
+      defaultSLAHours: 8,
+      defaultSupportTeam: 'Default Team'
+    });
+    const addedName = newCatName.trim();
+    setNewCatName('');
+    setNewCatSubs('');
+    setSyncMessage(`Category "${addedName}" added successfully and synced!`);
+  };
 
   const handleManualSync = async () => {
     setIsSyncing(true);
@@ -414,122 +478,316 @@ export const MasterDropdownsView: React.FC = () => {
 
         {/* Departments Tab Content */}
         {activeTab === 'departments' && (
-          <div className="md:col-span-3 space-y-4">
-            <div className="bg-white rounded-xl border border-gray-200 shadow-2xs overflow-hidden">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-gray-50 border-b font-bold text-gray-500 uppercase text-[10px]">
-                  <tr>
-                    <th className="p-3 w-28">Dept ID</th>
-                    <th className="p-3">Department Name</th>
-                    <th className="p-3">Department Head</th>
-                    <th className="p-3">Support Team</th>
-                    <th className="p-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {departments
-                    .filter(d => d.name.toLowerCase().includes(searchQuery.toLowerCase()))
-                    .map(d => (
-                      <tr key={d.id} className="hover:bg-gray-50">
-                        <td className="p-3">
-                          <span className="font-mono font-bold text-[11px] px-2 py-0.5 bg-blue-50 text-blue-700 rounded border border-blue-200">
-                            {d.id}
-                          </span>
-                        </td>
-                        <td className="p-3 font-bold text-gray-900">{d.name}</td>
-                        <td className="p-3 text-gray-700">{d.headName}</td>
-                        <td className="p-3 text-blue-700 font-semibold">{d.supportTeam}</td>
-                        <td className="p-3 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => setDeptEditModal({ id: d.id, name: d.name, headName: d.headName, supportTeam: d.supportTeam })}
-                              className="px-2 py-1 bg-blue-50 text-blue-600 hover:bg-blue-100 font-bold text-[11px] rounded flex items-center gap-1"
-                            >
-                              <Edit2 className="w-3 h-3" /> Edit
-                            </button>
-                            <button
-                              onClick={() => setDeleteConfirmModal({ idOrName: d.id, label: d.name, tab: 'departments' })}
-                              className="px-2 py-1 bg-red-50 text-red-600 hover:bg-red-100 font-bold text-[11px] rounded flex items-center gap-1"
-                            >
-                              <Trash2 className="w-3 h-3" /> Delete
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
+          <>
+            {/* Add Department Form */}
+            <form onSubmit={handleAddDepartment} className="bg-white p-6 rounded-xl border border-gray-200 shadow-2xs space-y-4 text-xs h-fit">
+              <h3 className="font-bold text-sm text-gray-900 border-b pb-2 flex items-center gap-2">
+                <Plus className="w-4 h-4 text-blue-600" />
+                Add New Department
+              </h3>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Department Name *</label>
+                <input
+                  required
+                  type="text"
+                  value={newDeptName}
+                  onChange={e => setNewDeptName(e.target.value)}
+                  placeholder="e.g. Accounts & Taxation"
+                  className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Department Head (Select User)</label>
+                {!customDeptHead ? (
+                  <div className="space-y-1.5">
+                    <select
+                      value={newDeptHead}
+                      onChange={e => {
+                        if (e.target.value === '__custom__') {
+                          setCustomDeptHead(true);
+                          setNewDeptHead('');
+                        } else {
+                          setNewDeptHead(e.target.value);
+                        }
+                      }}
+                      className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium"
+                    >
+                      <option value="">-- Select Registered User as Head --</option>
+                      <option value="Unassigned">Unassigned / Pending</option>
+                      <optgroup label="Registered Employees & Admins">
+                        {users.map(u => (
+                          <option key={u.id} value={u.name}>
+                            {u.name} — {u.role} ({u.department || 'All'})
+                          </option>
+                        ))}
+                      </optgroup>
+                      <option value="__custom__">✏️ + Enter Custom Name...</option>
+                    </select>
+                  </div>
+                ) : (
+                  <div className="flex gap-1.5">
+                    <input
+                      type="text"
+                      value={newDeptHead}
+                      onChange={e => setNewDeptHead(e.target.value)}
+                      placeholder="Enter custom head name"
+                      className="flex-1 p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomDeptHead(false);
+                        setNewDeptHead('');
+                      }}
+                      className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-[11px] font-bold rounded-lg border"
+                    >
+                      List
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Support Desk Team</label>
+                {!customSupportTeam ? (
+                  <div className="space-y-1.5">
+                    <select
+                      value={newDeptSupportTeam}
+                      onChange={e => {
+                        if (e.target.value === '__custom__') {
+                          setCustomSupportTeam(true);
+                          setNewDeptSupportTeam('');
+                        } else {
+                          setNewDeptSupportTeam(e.target.value);
+                        }
+                      }}
+                      className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium"
+                    >
+                      <option value="">-- Select Support Team --</option>
+                      {suggestedTeams.map((team, idx) => (
+                        <option key={idx} value={team}>{team}</option>
+                      ))}
+                      <option value="__custom__">✏️ + Enter Custom Support Team...</option>
+                    </select>
+                  </div>
+                ) : (
+                  <div className="flex gap-1.5">
+                    <input
+                      type="text"
+                      value={newDeptSupportTeam}
+                      onChange={e => setNewDeptSupportTeam(e.target.value)}
+                      placeholder="Enter custom support team name"
+                      className="flex-1 p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomSupportTeam(false);
+                        setNewDeptSupportTeam('');
+                      }}
+                      className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-[11px] font-bold rounded-lg border"
+                    >
+                      List
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition-all flex items-center justify-center gap-2"
+              >
+                <Plus className="w-4 h-4" /> Save & Add Department
+              </button>
+            </form>
+
+            {/* Departments Table */}
+            <div className="md:col-span-2 space-y-4">
+              <div className="bg-white rounded-xl border border-gray-200 shadow-2xs overflow-hidden">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-gray-50 border-b font-bold text-gray-500 uppercase text-[10px]">
+                    <tr>
+                      <th className="p-3 w-28">Dept ID</th>
+                      <th className="p-3">Department Name</th>
+                      <th className="p-3">Department Head</th>
+                      <th className="p-3">Support Team</th>
+                      <th className="p-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {departments
+                      .filter(d => d.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                      .map(d => (
+                        <tr key={d.id} className="hover:bg-gray-50">
+                          <td className="p-3">
+                            <span className="font-mono font-bold text-[11px] px-2 py-0.5 bg-blue-50 text-blue-700 rounded border border-blue-200">
+                              {d.id}
+                            </span>
+                          </td>
+                          <td className="p-3 font-bold text-gray-900">{d.name}</td>
+                          <td className="p-3 text-gray-700">{d.headName}</td>
+                          <td className="p-3 text-blue-700 font-semibold">{d.supportTeam}</td>
+                          <td className="p-3 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => setDeptEditModal({ id: d.id, name: d.name, headName: d.headName, supportTeam: d.supportTeam })}
+                                className="px-2 py-1 bg-blue-50 text-blue-600 hover:bg-blue-100 font-bold text-[11px] rounded flex items-center gap-1"
+                              >
+                                <Edit2 className="w-3 h-3" /> Edit
+                              </button>
+                              <button
+                                onClick={() => setDeleteConfirmModal({ idOrName: d.id, label: d.name, tab: 'departments' })}
+                                className="px-2 py-1 bg-red-50 text-red-600 hover:bg-red-100 font-bold text-[11px] rounded flex items-center gap-1"
+                              >
+                                <Trash2 className="w-3 h-3" /> Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+          </>
         )}
 
         {/* Categories Tab Content */}
         {activeTab === 'categories' && (
-          <div className="md:col-span-3 space-y-4">
-            <div className="bg-white rounded-xl border border-gray-200 shadow-2xs overflow-hidden">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-gray-50 border-b font-bold text-gray-500 uppercase text-[10px]">
-                  <tr>
-                    <th className="p-3 w-28">Category ID</th>
-                    <th className="p-3">Category Name</th>
-                    <th className="p-3">Target Department</th>
-                    <th className="p-3">Sub Categories</th>
-                    <th className="p-3">Default Priority</th>
-                    <th className="p-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {categories
-                    .filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
-                    .map(c => (
-                      <tr key={c.id} className="hover:bg-gray-50">
-                        <td className="p-3">
-                          <span className="font-mono font-bold text-[11px] px-2 py-0.5 bg-blue-50 text-blue-700 rounded border border-blue-200">
-                            {c.id}
-                          </span>
-                        </td>
-                        <td className="p-3 font-bold text-gray-900">{c.name}</td>
-                        <td className="p-3 text-gray-700">{c.department}</td>
-                        <td className="p-3">
-                          <div className="flex flex-wrap gap-1">
-                            {c.subCategories.map((sub, idx) => (
-                              <span key={idx} className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-[10px] rounded font-mono">
-                                {sub}
-                              </span>
-                            ))}
-                          </div>
-                        </td>
-                        <td className="p-3 font-bold text-blue-600">{c.defaultPriority}</td>
-                        <td className="p-3 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() =>
-                                setCatEditModal({
-                                  id: c.id,
-                                  name: c.name,
-                                  department: c.department,
-                                  subCategories: c.subCategories.join(', '),
-                                  defaultPriority: c.defaultPriority
-                                })
-                              }
-                              className="px-2 py-1 bg-blue-50 text-blue-600 hover:bg-blue-100 font-bold text-[11px] rounded flex items-center gap-1"
-                            >
-                              <Edit2 className="w-3 h-3" /> Edit
-                            </button>
-                            <button
-                              onClick={() => setDeleteConfirmModal({ idOrName: c.id, label: c.name, tab: 'categories' })}
-                              className="px-2 py-1 bg-red-50 text-red-600 hover:bg-red-100 font-bold text-[11px] rounded flex items-center gap-1"
-                            >
-                              <Trash2 className="w-3 h-3" /> Delete
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
+          <>
+            {/* Add Category Form */}
+            <form onSubmit={handleAddCategory} className="bg-white p-6 rounded-xl border border-gray-200 shadow-2xs space-y-4 text-xs h-fit">
+              <h3 className="font-bold text-sm text-gray-900 border-b pb-2 flex items-center gap-2">
+                <Plus className="w-4 h-4 text-blue-600" />
+                Add New Category
+              </h3>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Category Name *</label>
+                <input
+                  required
+                  type="text"
+                  value={newCatName}
+                  onChange={e => setNewCatName(e.target.value)}
+                  placeholder="e.g. Network & Firewall"
+                  className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Target Department</label>
+                <select
+                  value={newCatDept}
+                  onChange={e => setNewCatDept(e.target.value)}
+                  className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                >
+                  {departments.map(d => (
+                    <option key={d.id} value={d.name}>{d.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Sub Categories (Comma Separated)</label>
+                <input
+                  type="text"
+                  value={newCatSubs}
+                  onChange={e => setNewCatSubs(e.target.value)}
+                  placeholder="e.g. WiFi, VPN, Router, DNS"
+                  className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Default Priority</label>
+                <select
+                  value={newCatPriority}
+                  onChange={e => setNewCatPriority(e.target.value)}
+                  className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                >
+                  {prioritiesList.map(p => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition-all flex items-center justify-center gap-2"
+              >
+                <Plus className="w-4 h-4" /> Save & Add Category
+              </button>
+            </form>
+
+            {/* Categories Table */}
+            <div className="md:col-span-2 space-y-4">
+              <div className="bg-white rounded-xl border border-gray-200 shadow-2xs overflow-hidden">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-gray-50 border-b font-bold text-gray-500 uppercase text-[10px]">
+                    <tr>
+                      <th className="p-3 w-28">Category ID</th>
+                      <th className="p-3">Category Name</th>
+                      <th className="p-3">Target Department</th>
+                      <th className="p-3">Sub Categories</th>
+                      <th className="p-3">Default Priority</th>
+                      <th className="p-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {categories
+                      .filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                      .map(c => (
+                        <tr key={c.id} className="hover:bg-gray-50">
+                          <td className="p-3">
+                            <span className="font-mono font-bold text-[11px] px-2 py-0.5 bg-blue-50 text-blue-700 rounded border border-blue-200">
+                              {c.id}
+                            </span>
+                          </td>
+                          <td className="p-3 font-bold text-gray-900">{c.name}</td>
+                          <td className="p-3 text-gray-700">{c.department}</td>
+                          <td className="p-3">
+                            <div className="flex flex-wrap gap-1">
+                              {c.subCategories.map((sub, idx) => (
+                                <span key={idx} className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-[10px] rounded font-mono">
+                                  {sub}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                          <td className="p-3 font-bold text-blue-600">{c.defaultPriority}</td>
+                          <td className="p-3 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() =>
+                                  setCatEditModal({
+                                    id: c.id,
+                                    name: c.name,
+                                    department: c.department,
+                                    subCategories: c.subCategories.join(', '),
+                                    defaultPriority: c.defaultPriority
+                                  })
+                                }
+                                className="px-2 py-1 bg-blue-50 text-blue-600 hover:bg-blue-100 font-bold text-[11px] rounded flex items-center gap-1"
+                              >
+                                <Edit2 className="w-3 h-3" /> Edit
+                              </button>
+                              <button
+                                onClick={() => setDeleteConfirmModal({ idOrName: c.id, label: c.name, tab: 'categories' })}
+                                className="px-2 py-1 bg-red-50 text-red-600 hover:bg-red-100 font-bold text-[11px] rounded flex items-center gap-1"
+                              >
+                                <Trash2 className="w-3 h-3" /> Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+          </>
         )}
       </div>
 
@@ -549,22 +807,40 @@ export const MasterDropdownsView: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block font-bold text-gray-700 mb-1">Department Head</label>
-                <input
-                  type="text"
+                <label className="block font-bold text-gray-700 mb-1">Department Head (Select User)</label>
+                <select
                   value={deptEditModal.headName}
                   onChange={e => setDeptEditModal({ ...deptEditModal, headName: e.target.value })}
-                  className="w-full p-2 border rounded-lg"
-                />
+                  className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium"
+                >
+                  <option value="Unassigned">Unassigned / Pending</option>
+                  <optgroup label="Registered Employees & Admins">
+                    {users.map(u => (
+                      <option key={u.id} value={u.name}>
+                        {u.name} — {u.role} ({u.department || 'All'})
+                      </option>
+                    ))}
+                  </optgroup>
+                  {deptEditModal.headName && !users.some(u => u.name === deptEditModal.headName) && deptEditModal.headName !== 'Unassigned' && (
+                    <option value={deptEditModal.headName}>{deptEditModal.headName} (Current)</option>
+                  )}
+                </select>
               </div>
               <div>
                 <label className="block font-bold text-gray-700 mb-1">Support Desk Team</label>
-                <input
-                  type="text"
+                <select
                   value={deptEditModal.supportTeam}
                   onChange={e => setDeptEditModal({ ...deptEditModal, supportTeam: e.target.value })}
-                  className="w-full p-2 border rounded-lg"
-                />
+                  className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium"
+                >
+                  <option value="Default Team">Default Team</option>
+                  {suggestedTeams.map((team, idx) => (
+                    <option key={idx} value={team}>{team}</option>
+                  ))}
+                  {deptEditModal.supportTeam && !suggestedTeams.includes(deptEditModal.supportTeam) && deptEditModal.supportTeam !== 'Default Team' && (
+                    <option value={deptEditModal.supportTeam}>{deptEditModal.supportTeam} (Current)</option>
+                  )}
+                </select>
               </div>
             </div>
             <div className="flex justify-end gap-2 pt-2">

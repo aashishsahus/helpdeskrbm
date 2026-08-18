@@ -73,6 +73,7 @@ export interface Ticket {
   resolutionTimeMinutes?: number;
   rating?: number;
   feedback?: string;
+  resolutionNotes?: string;
   attachments?: TicketAttachment[];
   isDemoTicket?: boolean;
   isRealTicket?: boolean;
@@ -167,12 +168,19 @@ export interface KnowledgeBaseArticle {
   id: string;
   title: string;
   category: string;
+  department?: string;
   tags: string[];
   summary: string;
   content: string;
   driveUrl?: string;
+  docUrl?: string;
+  externalLink?: string;
   fileType?: string;
   views: number;
+  helpfulCount?: number;
+  notHelpfulCount?: number;
+  authorName?: string;
+  authorEmail?: string;
   updatedAt: string;
 }
 
@@ -200,10 +208,42 @@ export interface SheetSyncLogItem {
   message?: string;
 }
 
+export interface NotificationTemplate {
+  id: string;
+  name: string;
+  channel: 'email' | 'whatsapp';
+  triggerEvent: 'ticket_created' | 'ticket_assigned' | 'status_updated' | 'ticket_closed' | 'sla_breach' | 'feedback_request' | 'custom_alert';
+  subject?: string; // For Email
+  body: string; // Plain text or WhatsApp format
+  htmlBody?: string; // HTML for Email
+  enabled: boolean;
+  recipientType: 'employee' | 'agent' | 'admin' | 'both';
+  updatedAt: string;
+}
+
+export interface NotificationLogItem {
+  id: string;
+  channel: 'email' | 'whatsapp';
+  recipientName: string;
+  recipientContact: string; // Email address or WhatsApp phone number
+  ticketId?: string;
+  ticketSubject?: string;
+  triggerEvent: string;
+  subject?: string;
+  messagePreview: string;
+  fullMessage?: string;
+  htmlBody?: string;
+  status: 'Sent' | 'Delivered' | 'Failed' | 'Pending';
+  timestamp: string;
+  sentBy?: string;
+  errorMessage?: string;
+}
+
 export interface SystemSettings {
   systemName?: string;
   companyName: string;
   supportEmail?: string;
+  supportPhone?: string;
   logoUrl: string;
   spreadsheetId: string;
   driveFolderId: string;
@@ -213,6 +253,10 @@ export interface SystemSettings {
   autoAssignEnabled: boolean;
   autoAssignmentEnabled?: boolean;
   emailNotificationsEnabled: boolean;
+  whatsappNotificationsEnabled?: boolean;
+  whatsappGateway?: 'whatsapp_web' | 'meta_cloud_api' | 'twilio' | 'ultramsg' | 'green_api';
+  whatsappApiKey?: string;
+  whatsappPhoneNumberId?: string;
   slaEnforcementEnabled: boolean;
   slaBreachAlertsEnabled?: boolean;
   driveFolderStructureCreated: boolean;
