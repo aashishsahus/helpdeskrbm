@@ -67,7 +67,25 @@ export const TicketDetailsModal: React.FC = () => {
 
   const ticketComments = comments.filter(c => c.ticketId === ticket.id);
   const ticketHistoryList = history.filter(h => h.ticketId === ticket.id);
-  const agentsList = users.filter(u => u.role === 'Support Agent' || u.role === 'Support Manager');
+
+  // Match currently assigned user by id, employeeId, or name
+  const currentAssignedUser = users.find(u =>
+    (ticket.assignedAgentId && (u.id === ticket.assignedAgentId || u.employeeId === ticket.assignedAgentId || u.name.toLowerCase() === ticket.assignedAgentId.toLowerCase())) ||
+    (ticket.assignedAgentName && (u.name.toLowerCase() === ticket.assignedAgentName.toLowerCase() || u.id === ticket.assignedAgentName || u.employeeId === ticket.assignedAgentName))
+  );
+
+  // Determine the effective value for select input
+  const currentSelectValue = currentAssignedUser ? currentAssignedUser.id : (ticket.assignedAgentId || ticket.assignedAgentName || '');
+
+  // Full list of assignable staff (Active users, Support Agents, Managers, Admins, Super Admins)
+  const assignableUsers = users.filter(u =>
+    u.status === 'Active' ||
+    u.role === 'Support Agent' ||
+    u.role === 'Support Manager' ||
+    u.role === 'Admin' ||
+    u.role === 'Super Admin' ||
+    (currentAssignedUser && u.id === currentAssignedUser.id)
+  );
 
   const isStaff = currentUser ? currentUser.role !== 'Employee' : false;
 
@@ -397,16 +415,37 @@ export const TicketDetailsModal: React.FC = () => {
 
                 {/* Assign Agent */}
                 <div>
-                  <label className="text-[10px] text-gray-500 font-semibold block mb-1">Assign Agent</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[10px] text-gray-500 font-semibold block">Assign Agent / Specialist</label>
+                    {ticket.assignedAgentName && (
+                      <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                        {ticket.assignedAgentName}
+                      </span>
+                    )}
+                  </div>
                   <select
-                    value={ticket.assignedAgentId || ''}
+                    value={currentSelectValue}
                     onChange={e => assignTicket(ticket.id, e.target.value)}
-                    className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-semibold text-gray-800 focus:bg-white"
+                    className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-semibold text-gray-800 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none"
                   >
                     <option value="">-- Unassigned --</option>
-                    {agentsList.map(a => (
-                      <option key={a.id} value={a.id}>{a.name} ({a.department})</option>
-                    ))}
+                    <optgroup label="IT Support & Support Agents">
+                      {assignableUsers
+                        .filter(u => u.role === 'Support Agent' || u.role === 'Support Manager' || u.department === 'IT Operations')
+                        .map(a => (
+                          <option key={a.id} value={a.id}>{a.name} ({a.department} - {a.role})</option>
+                        ))}
+                    </optgroup>
+                    <optgroup label="Administrators & Department Staff">
+                      {assignableUsers
+                        .filter(u => !(u.role === 'Support Agent' || u.role === 'Support Manager' || u.department === 'IT Operations'))
+                        .map(a => (
+                          <option key={a.id} value={a.id}>{a.name} ({a.department} - {a.role})</option>
+                        ))}
+                    </optgroup>
+                    {ticket.assignedAgentName && !currentAssignedUser && (
+                      <option value={ticket.assignedAgentName}>{ticket.assignedAgentName} (Sheet Assigned)</option>
+                    )}
                   </select>
                 </div>
 
@@ -488,7 +527,7 @@ export const TicketDetailsModal: React.FC = () => {
 
                 <div>
                   <span className="text-gray-400 block text-[10px]">Assigned Agent</span>
-                  <p className="font-semibold text-blue-700">{ticket.assignedAgentName || 'Unassigned'}</p>
+                  <p className="font-semibold text-blue-700">{ticket.assignedAgentName || (currentAssignedUser ? currentAssignedUser.name : 'Unassigned')}</p>
                 </div>
 
                 <div>

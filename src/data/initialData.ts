@@ -35,6 +35,36 @@ export const initialUsers: User[] = [
     password: 'admin123'
   },
   {
+    id: 'u_khemaraj',
+    employeeId: 'EMP-1022',
+    name: 'Khemaraj Sahu',
+    email: 'itops@rathibuildmart.com',
+    role: 'Support Agent',
+    department: 'IT Operations',
+    designation: 'IT Support Executive',
+    location: 'RPR',
+    status: 'Active',
+    mobile: '+91 98765 43211',
+    joiningDate: '2023-01-15',
+    pin: '1022',
+    password: '123456'
+  },
+  {
+    id: 'u_rahul',
+    employeeId: 'EMP-1023',
+    name: 'Rahul Sahu',
+    email: 'crmho@rathibuildmart.com',
+    role: 'Employee',
+    department: 'IT Operations',
+    designation: 'CRM / IT Operations',
+    location: 'RPR',
+    status: 'Active',
+    mobile: '+91 98765 43212',
+    joiningDate: '2023-03-01',
+    pin: '1023',
+    password: '123456'
+  },
+  {
     id: 'u_ashish',
     employeeId: 'EMP-1010',
     name: 'Aashish',
@@ -69,7 +99,9 @@ export const initialUsers: User[] = [
     department: 'Accounts',
     designation: 'Accountant',
     location: 'RPR',
-    status: 'Active'
+    status: 'Active',
+    pin: '1012',
+    password: '123456'
   },
   {
     id: 'u_sarwaswati',
@@ -80,7 +112,9 @@ export const initialUsers: User[] = [
     department: 'Accounts',
     designation: 'Accounts Executive',
     location: 'RPR',
-    status: 'Active'
+    status: 'Active',
+    pin: '1013',
+    password: '123456'
   },
   {
     id: 'u_ghanshyam',
@@ -91,7 +125,9 @@ export const initialUsers: User[] = [
     department: 'Accounts',
     designation: 'Accounts Officer',
     location: 'RPR',
-    status: 'Active'
+    status: 'Active',
+    pin: '1014',
+    password: '123456'
   },
   {
     id: 'u_samiksha',
@@ -102,7 +138,9 @@ export const initialUsers: User[] = [
     department: 'Sales',
     designation: 'Sales Supervisor',
     location: 'RPR',
-    status: 'Active'
+    status: 'Active',
+    pin: '1015',
+    password: '123456'
   },
   {
     id: 'u_akisha',
@@ -113,7 +151,9 @@ export const initialUsers: User[] = [
     department: 'Sales',
     designation: 'Sales Executive',
     location: 'RPR',
-    status: 'Active'
+    status: 'Active',
+    pin: '1016',
+    password: '123456'
   },
   {
     id: 'u_khelandas',
@@ -124,7 +164,9 @@ export const initialUsers: User[] = [
     department: 'Sales',
     designation: 'Sales Executive',
     location: 'RPR',
-    status: 'Active'
+    status: 'Active',
+    pin: '1017',
+    password: '123456'
   },
   {
     id: 'u_bhupendra',
@@ -135,7 +177,9 @@ export const initialUsers: User[] = [
     department: 'Purchase',
     designation: 'Procurement Officer',
     location: 'RPR',
-    status: 'Active'
+    status: 'Active',
+    pin: '1018',
+    password: '123456'
   }
 ];
 
@@ -339,55 +383,45 @@ export const initialNotifications: NotificationItem[] = [
 export const initialKnowledgeBase: KnowledgeBaseArticle[] = [
   {
     id: 'kb1',
-    title: 'How to Reset Your Corporate Email Password',
-    category: 'Email & Security',
-    tags: ['password', 'email', 'mfa', 'security'],
-    summary: 'Self-service step-by-step guide to reset your Microsoft 365 or Google Workspace email password.',
-    content: `### Self-Service Password Reset Guide\n\n1. Go to https://password.company.com in your web browser.\n2. Enter your Employee ID (e.g. EMP-1001) or full corporate email address.\n3. Verify your identity using the Okta / Microsoft Authenticator app on your registered mobile device.\n4. Type your new password conforming to the security policy (12+ characters, uppercase, number, special character).\n5. Click Confirm. Your new password will sync across Wi-Fi, VPN, and Email within 2 minutes.`,
-    views: 342,
-    updatedAt: '2026-08-01T10:00:00Z'
+    title: 'Orbit ERP Invoice & Quotation SOP',
+    category: 'Orbit',
+    tags: ['orbit', 'erp', 'invoice', 'quotation', 'billing'],
+    summary: 'Standard Operating Procedure for generating, modifying, and approving Orbit ERP invoices.',
+    content: `### Orbit ERP Invoice SOP\n\n1. Log in to Orbit ERP with your authorized credentials.\n2. Navigate to **Sales & Distribution -> Invoicing**.\n3. Verify customer GSTIN, dispatch location, and pricing slab.\n4. Add material items and confirm tax breakdown (CGST/SGST/IGST).\n5. Click Save & Submit for invoice verification.\n6. For discrepancies or modifications, submit an IT HelpDesk Ticket under **Category: Orbit -> Sub-Category: Invoice** with screenshot attachment.`,
+    views: 120,
+    updatedAt: '2026-08-15 10:00:00'
   },
   {
     id: 'kb2',
-    title: 'Connecting to Corporate VPN (GlobalProtect)',
-    category: 'Network',
-    tags: ['vpn', 'remote', 'network', 'globalprotect'],
-    summary: 'Setup instructions for connecting to the corporate VPN when working remotely.',
-    content: `### GlobalProtect VPN Connection Steps\n\n1. Open GlobalProtect app on your workstation.\n2. Enter Portal Address: \`vpn.company.com\`\n3. Click Connect and authenticate with your single sign-on credentials.\n4. Approve the push notification on your mobile MFA app.\n5. Once connected, the shield icon in your menu bar will turn green.`,
-    views: 521,
-    updatedAt: '2026-08-05T14:30:00Z'
+    title: 'FMS Gate Entry & Inward Material Process',
+    category: 'FMS',
+    tags: ['fms', 'gate entry', 'inward', 'material', 'logistics'],
+    summary: 'Step-by-step workflow for FMS gate inward entry and dispatch verification.',
+    content: `### FMS Material Inward Procedure\n\n1. Open the FMS portal at security/gate terminal.\n2. Scan or enter the vehicle registration number and transporter LR.\n3. Match challan quantity with actual weighbridge gross weight.\n4. Complete inward stamp entry and submit for unloader verification.\n5. If quantity mismatch occurs, raise an urgent HelpDesk ticket under **FMS -> Material -> Change QTY**.`,
+    views: 85,
+    updatedAt: '2026-08-15 11:30:00'
   },
   {
     id: 'kb3',
-    title: 'Requesting a New Laptop or IT Hardware Upgrade',
-    category: 'Procurement & Hardware',
-    tags: ['laptop', 'hardware', 'procurement', 'upgrade'],
-    summary: 'Policy and workflow for hardware refresh and new equipment requisitions.',
-    content: `### IT Hardware Requisition SOP\n\n- Standard refresh cycle for laptops is 36 months.\n- Early replacement requires department manager approval.\n- Submit an Internal Help Desk ticket under Category: **Procurement -> Hardware Upgrade**.\n- Attach signed manager approval email as PDF or DOCX.`,
-    views: 189,
-    updatedAt: '2026-08-02T11:15:00Z'
+    title: 'Google Workspace & Official Email Guidelines',
+    category: 'Software',
+    tags: ['email', 'google workspace', 'gmail', 'security'],
+    summary: 'Guidelines for corporate email usage, security policies, and password management.',
+    content: `### Google Workspace Guidelines\n\n- All official communication must use @rathibuildmart.com corporate email addresses.\n- Enable 2-Step Verification on your Google Account.\n- Never share your password or PIN with anyone.\n- For password resets, contact the IT HelpDesk Super Admin or use the self-service profile update in HelpDesk Settings.`,
+    views: 64,
+    updatedAt: '2026-08-15 14:00:00'
   }
 ];
 
 export const initialAuditLogs: AuditLogItem[] = [
   {
     id: 'al1',
-    actorName: 'Michael Scott',
-    actorEmail: 'michael.scott@company.com',
-    action: 'USER_CREATED',
-    module: 'User Management',
-    details: 'Created new user Sarah Connor (EMP-1001) assigned to Sales.',
-    timestamp: '2026-08-01T09:00:00Z',
-    ip: '192.168.1.100'
-  },
-  {
-    id: 'al1',
     actorName: 'Misr Pr',
     actorEmail: 'misrpr@rathibuildmart.com',
     action: 'SETTINGS_CONFIGURED',
     module: 'System Settings',
-    details: 'Google Sheets and Apps Script Live Endpoint linked.',
-    timestamp: '2026-08-12T00:00:00Z',
+    details: 'Google Sheets and Apps Script Live Endpoint linked for RBM Help Desk.',
+    timestamp: '2026-08-12 00:00:00',
     ip: '192.168.1.1'
   }
 ];
@@ -576,55 +610,9 @@ export const defaultRolePermissions: RolePermissionConfig[] = [
   }
 ];
 
-export const initialArchivedTickets: ArchivedTicket[] = [
-  {
-    id: 'HD-000088',
-    employeeId: 'EMP-1008',
-    employeeName: 'Sample Archived Ticket',
-    employeeEmail: 'sample@rathibuildmart.com',
-    department: 'IT Operations',
-    location: 'RPR',
-    category: 'Hardware Issue',
-    subCategory: 'Monitor / Display',
-    subject: 'Old monitor replacement request (Closed & Archived)',
-    description: 'Replaced damaged display unit. Ticket archived after 90 days retention.',
-    priority: 'Low',
-    status: 'Closed',
-    assignedAgentId: 'u_ashish',
-    assignedAgentName: 'Aashish',
-    createdDate: '2026-06-01 10:00:00',
-    updatedDate: '2026-06-05 16:30:00',
-    slaDueDate: '2026-06-07 10:00:00',
-    slaStatus: 'Safe',
-    contactNumber: '+91 98765 00000',
-    resolvedDate: '2026-06-05 16:30:00',
-    closedDate: '2026-06-05 16:30:00',
-    rating: 5,
-    feedback: 'Promptly solved.',
-    archivedAt: '2026-08-01 12:00:00',
-    archivedBy: 'Misr Pr (Super Admin)',
-    archivedByEmail: 'misrpr@rathibuildmart.com',
-    archiveReason: 'Periodic archive of resolved tickets'
-  }
-];
+export const initialArchivedTickets: ArchivedTicket[] = [];
 
-export const initialArchivedUsers: ArchivedUser[] = [
-  {
-    id: 'u_archived_sample',
-    employeeId: 'EMP-0999',
-    name: 'Former Staff Member',
-    email: 'former.staff@rathibuildmart.com',
-    role: 'Employee',
-    department: 'Sales',
-    designation: 'Sales Intern',
-    location: 'RPR',
-    status: 'Disabled',
-    archivedAt: '2026-08-01 10:00:00',
-    archivedBy: 'Misr Pr (Super Admin)',
-    archivedByEmail: 'misrpr@rathibuildmart.com',
-    archiveReason: 'Internship contract concluded'
-  }
-];
+export const initialArchivedUsers: ArchivedUser[] = [];
 
 export const initialNotificationTemplates: NotificationTemplate[] = [
   {

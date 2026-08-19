@@ -1399,10 +1399,52 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Assign Ticket
   const assignTicket = (ticketId: string, agentId: string) => {
-    const agent = users.find(u => u.id === agentId || u.name === agentId);
-    const assignedId = agent ? agent.id : (agentId || '');
-    const assignedName = agent ? agent.name : (agentId || '');
     const nowFormatted = getFormattedNow();
+    if (!agentId || agentId.trim() === '') {
+      let updatedTicket: Ticket | undefined;
+      setTickets(prev =>
+        prev.map(t => {
+          if (t.id === ticketId) {
+            updatedTicket = {
+              ...t,
+              assignedAgentId: '',
+              assignedAgentName: '',
+              updatedDate: nowFormatted
+            };
+            return updatedTicket;
+          }
+          return t;
+        })
+      );
+      if (updatedTicket) {
+        syncDirectActionToSheets({
+          action: 'updateTicket',
+          ticket: updatedTicket,
+          method: 'batchUpdate'
+        });
+      }
+      setHistory(prev => [
+        {
+          id: `th_${Date.now()}`,
+          ticketId,
+          action: 'Agent Unassigned',
+          actorName: currentUser?.name || 'System User',
+          details: 'Specialist/Agent unassigned from ticket.',
+          timestamp: nowFormatted
+        },
+        ...prev
+      ]);
+      addAuditLog('TICKET_UNASSIGNED', 'Tickets', `Ticket ${ticketId} unassigned`);
+      return;
+    }
+
+    const agent = users.find(u =>
+      u.id === agentId ||
+      u.employeeId === agentId ||
+      (u.name && u.name.toLowerCase() === agentId.toLowerCase())
+    );
+    const assignedId = agent ? agent.id : agentId;
+    const assignedName = agent ? agent.name : agentId;
 
     let updatedTicket: Ticket | undefined;
 
@@ -1437,13 +1479,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ticketId,
         action: 'Assigned Agent',
         actorName: currentUser?.name || 'System User',
-        details: `Assigned to ${agent ? agent.name : agentId} (${agent ? agent.role : 'Agent'})`,
+        details: `Assigned to ${assignedName} (${agent ? agent.role : 'Agent'})`,
         timestamp: nowFormatted
       },
       ...prev
     ]);
 
-    addAuditLog('TICKET_ASSIGNED', 'Tickets', `Ticket ${ticketId} assigned to ${agent ? agent.name : agentId}`);
+    addAuditLog('TICKET_ASSIGNED', 'Tickets', `Ticket ${ticketId} assigned to ${assignedName}`);
   };
 
   // Add Comment
@@ -2475,17 +2517,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       let ticketsCount = 0;
 
       if (data.success && Array.isArray(data.tickets) && data.tickets.length > 0) {
-        const sheetTickets: Ticket[] = data.tickets.map((t: any) => ({
-          ...t,
-          isRealTicket: true,
-          isDemoTicket: false,
-          slaStatus: t.slaStatus || 'Safe',
-          priority: t.priority || 'Medium',
-          status: t.status || 'Open',
-          createdDate: t.createdDate || new Date().toISOString(),
-          updatedDate: t.updatedDate || t.createdDate || new Date().toISOString(),
-          contactNumber: t.contactNumber || ''
-        }));
+        const sheetTickets: Ticket[] = data.tickets.map((t: any) => {
+          const rawAgent = (t.assignedAgentName || t.assignedAgentId || '').trim();
+          const matchedUser = users.find(u =>
+            (t.assignedAgentId && (u.id === t.assignedAgentId || u.employeeId === t.assignedAgentId || u.name.toLowerCase() === t.assignedAgentId.toLowerCase())) ||
+            (rawAgent && (u.name.toLowerCase() === rawAgent.toLowerCase() || u.id === rawAgent || u.employeeId === rawAgent))
+          );
+          const finalAgentId = matchedUser ? matchedUser.id : (rawAgent || '');
+          const finalAgentName = matchedUser ? matchedUser.name : (rawAgent || '');
+
+          return {
+            ...t,
+            assignedAgentId: finalAgentId,
+            assignedAgentName: finalAgentName,
+            isRealTicket: true,
+            isDemoTicket: false,
+            slaStatus: t.slaStatus || 'Safe',
+            priority: t.priority || 'Medium',
+            status: t.status || 'Open',
+            createdDate: t.createdDate || new Date().toISOString(),
+            updatedDate: t.updatedDate || t.createdDate || new Date().toISOString(),
+            contactNumber: t.contactNumber || ''
+          };
+        });
         ticketsCount = sheetTickets.length;
 
         setTickets(prev => {

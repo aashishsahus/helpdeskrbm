@@ -440,6 +440,7 @@ app.post('/api/google/pull-sheet-data', async (req, res) => {
                 if (!ticketId || ticketId.toLowerCase() === 'ticket id') continue;
 
                 if (is21Col) {
+                  const agentName = (r[14] || '').trim();
                   parsedTickets.push({
                     id: ticketId,
                     employeeId: r[1] || 'EMP-001',
@@ -455,8 +456,8 @@ app.post('/api/google/pull-sheet-data', async (req, res) => {
                     description: r[11] || '',
                     priority: r[12] || 'Medium',
                     status: r[13] || 'Open',
-                    assignedAgentName: r[14] || '',
-                    assignedAgentId: '',
+                    assignedAgentName: agentName,
+                    assignedAgentId: agentName,
                     createdDate: r[15] || new Date().toISOString(),
                     slaDueDate: r[16] || '',
                     closedDate: r[17] || '',
@@ -468,6 +469,7 @@ app.post('/api/google/pull-sheet-data', async (req, res) => {
                     isRealTicket: true
                   });
                 } else {
+                  const agentName = (r[12] || '').trim();
                   parsedTickets.push({
                     id: ticketId,
                     employeeId: r[1] || 'EMP-001',
@@ -481,8 +483,8 @@ app.post('/api/google/pull-sheet-data', async (req, res) => {
                     description: r[9] || '',
                     priority: r[10] || 'Medium',
                     status: r[11] || 'Open',
-                    assignedAgentName: r[12] || '',
-                    assignedAgentId: '',
+                    assignedAgentName: agentName,
+                    assignedAgentId: agentName,
                     createdDate: r[13] || new Date().toISOString(),
                     slaDueDate: r[14] || '',
                     closedDate: r[15] || '',

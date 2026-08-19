@@ -123,7 +123,7 @@ export const CreateTicketModal: React.FC = () => {
   };
 
   // Selected agent details
-  const selectedAgent = users.find(u => u.id === assignedAgentId || u.employeeId === assignedAgentId);
+  const selectedAgent = users.find(u => u.id === assignedAgentId || u.employeeId === assignedAgentId || u.name.toLowerCase() === assignedAgentId.toLowerCase());
 
   // Active support agents and staff list
   const activeStaff = users.filter(u => u.status !== 'Disabled');
