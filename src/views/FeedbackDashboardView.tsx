@@ -22,6 +22,7 @@ import {
 import { Ticket } from '../types';
 import { SendEmailModal } from '../components/SendEmailModal';
 import { isTicketRaisedByUser } from '../utils/ticketSecurity';
+import { RefreshButton } from '../components/RefreshButton';
 
 export const FeedbackDashboardView: React.FC = () => {
   const { currentUser, tickets, users, setSelectedTicketId, addAuditLog } = useApp();
@@ -137,10 +138,11 @@ export const FeedbackDashboardView: React.FC = () => {
 
   // Agent Performance Breakdown
   const agentPerformance = useMemo(() => {
-    const agentMap: Record<string, { name: string; dept: string; email: string; ratings: number[] }> = {};
+    const agentMap: Record<string, { id: string; name: string; dept: string; email: string; ratings: number[] }> = {};
 
     users.filter(u => u.role === 'Support Agent' || u.role === 'Support Manager' || u.role === 'Super Admin' || u.role === 'Admin').forEach(u => {
-      agentMap[u.id] = { name: u.name, dept: u.department, email: u.email, ratings: [] };
+      const key = u.id || u.employeeId || u.email;
+      agentMap[key] = { id: key, name: u.name, dept: u.department, email: u.email, ratings: [] };
     });
 
     timeframeFilteredTickets.forEach(t => {
@@ -209,6 +211,13 @@ export const FeedbackDashboardView: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          <RefreshButton
+            id="feedback-refresh-btn"
+            variant="default"
+            showTimestamp={true}
+            label="Refresh Ratings"
+          />
+
           <button
             onClick={() => handleOpenEmailModal('misrpr@rathibuildmart.com', 'Misr Pr')}
             className="px-4 py-2 bg-[#031A12] hover:bg-[#063B2C] text-emerald-300 font-bold text-xs rounded-xl flex items-center gap-2 shadow-md transition-all border border-[#0A4D39]"
@@ -413,8 +422,8 @@ export const FeedbackDashboardView: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {agentPerformance.map(agent => (
-                  <tr key={agent.name} className="hover:bg-gray-50/80 transition-colors">
+                {agentPerformance.map((agent, idx) => (
+                  <tr key={`${agent.id || agent.name}-${idx}`} className="hover:bg-gray-50/80 transition-colors">
                     <td className="p-2.5 font-bold text-gray-900 flex items-center gap-2">
                       <div className="w-6 h-6 rounded-full bg-emerald-800 text-white flex items-center justify-center font-extrabold text-[10px] shrink-0">
                         {agent.name.charAt(0)}

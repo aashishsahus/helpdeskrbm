@@ -18,6 +18,8 @@ import {
 import { TicketPriority, TicketStatus } from '../types';
 import { DateRangeFilter } from '../components/DateRangeFilter';
 import { DateRangeFilterType, isDateInRange } from '../utils/dateUtils';
+import { RefreshButton } from '../components/RefreshButton';
+import { TicketRatingWidget } from '../components/TicketRatingWidget';
 
 export const SupportDashboardView: React.FC = () => {
   const {
@@ -113,12 +115,20 @@ export const SupportDashboardView: React.FC = () => {
           </p>
         </div>
 
-        <DateRangeFilter
-          value={dateFilter}
-          onChange={handleDateFilterChange}
-          customStartDate={customStart}
-          customEndDate={customEnd}
-        />
+        <div className="flex items-center gap-2.5">
+          <RefreshButton
+            id="support-dashboard-refresh-btn"
+            variant="default"
+            showTimestamp={true}
+            label="Refresh Desk"
+          />
+          <DateRangeFilter
+            value={dateFilter}
+            onChange={handleDateFilterChange}
+            customStartDate={customStart}
+            customEndDate={customEnd}
+          />
+        </div>
       </div>
 
       {/* KPI Cards Strip (8 Metrics) */}
@@ -278,6 +288,7 @@ export const SupportDashboardView: React.FC = () => {
                 <th className="px-4 py-3 min-w-[140px]">Sub-Category / Action Item</th>
                 <th className="px-4 py-3 w-20">Priority</th>
                 <th className="px-4 py-3 w-24">Status</th>
+                <th className="px-4 py-3 min-w-[140px]">Feedback & Rating</th>
                 <th className="px-4 py-3 w-32">SLA Countdown</th>
                 <th className="px-4 py-3 w-40">Assigned Agent</th>
                 <th className="px-4 py-3 w-24 text-center">Quick Assign</th>
@@ -335,6 +346,13 @@ export const SupportDashboardView: React.FC = () => {
                     </td>
                     <td className="px-4 py-3.5">
                       <span className="font-semibold text-gray-800">{t.status}</span>
+                    </td>
+                    <td className="px-4 py-3.5 whitespace-nowrap">
+                      {t.status === 'Resolved' || t.status === 'Closed' ? (
+                        <TicketRatingWidget ticket={t} variant="inline" />
+                      ) : (
+                        <span className="text-gray-300 text-[10px] font-mono select-none">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3.5 font-mono text-[11px]">
                       {t.slaStatus === 'Breached' ? (

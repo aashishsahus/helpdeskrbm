@@ -464,8 +464,8 @@ export const UserManagement: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50 text-xs">
-                {filteredUsers.map(u => (
-                  <tr key={u.id} className="hover:bg-gray-50/80 transition-colors">
+                {filteredUsers.map((u, idx) => (
+                  <tr key={`${u.id || u.employeeId}-${idx}`} className="hover:bg-gray-50/80 transition-colors">
                     <td className="px-6 py-4">
                       <div className="font-mono font-bold text-gray-900 text-xs">{u.employeeId}</div>
                       <span className="inline-flex items-center gap-1 text-[9px] font-sans font-extrabold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 mt-1 shadow-2xs">

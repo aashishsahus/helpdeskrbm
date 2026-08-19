@@ -155,6 +155,9 @@ interface AppContextType {
   updateSettings: (newSettings: Partial<SystemSettings>) => void;
   syncWithGoogleSheets: (spreadsheetId?: string, webAppUrl?: string) => Promise<{ success: boolean; message: string }>;
   pullDataFromGoogleSheets: (spreadsheetId?: string, webAppUrl?: string, isSilent?: boolean) => Promise<{ success: boolean; count: number; message: string }>;
+  refreshAllData: (options?: { isSilent?: boolean }) => Promise<{ success: boolean; count: number; message: string }>;
+  isDataRefreshing: boolean;
+  lastRefreshedAt: string | null;
   clearMockupTickets: () => void;
   restoreDemoTickets: () => void;
   isDemoDataActive: boolean;
@@ -566,69 +569,86 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [tickets, setTickets] = useState<Ticket[]>(() => {
     try {
-      localStorage.setItem('hd_demo_cleared', 'true');
+      localStorage.setItem('hd_demo_cleared_v4', 'true');
       const saved = localStorage.getItem('hd_tickets_v2');
-      const isRealTicket = (t: Ticket) =>
+      const demoIdSet = new Set([
+        'HD-000001', 'HD-000002', 'HD-000003', 'HD-000004', 'HD-000005',
+        'HD-000006', 'HD-000007', 'HD-000008', 'HD-000009', 'HD-000010',
+        'HD-000011', 'HD-000012', 'HD-000013', 'HD-000014', 'HD-000015'
+      ]);
+      const isReal = (t: Ticket) =>
         !t.isDemoTicket &&
-        !['HD-000001', 'HD-000002', 'HD-000003', 'HD-000004', 'HD-000005', 'HD-000006', 'HD-000007', 'HD-000008'].includes(t.id) &&
+        !demoIdSet.has(t.id) &&
         !t.employeeEmail?.toLowerCase().endsWith('@company.com');
 
       if (saved) {
         const parsed: Ticket[] = JSON.parse(saved);
-        const realSaved = parsed.filter(isRealTicket);
-        const existingIds = new Set(realSaved.map(t => t.id));
-        const missing = initialTickets.filter(t => isRealTicket(t) && !existingIds.has(t.id));
-        const combined = missing.length > 0 ? [...realSaved, ...missing] : realSaved;
+        const realSaved = parsed.filter(isReal);
         try {
-          localStorage.setItem('hd_tickets_v2', JSON.stringify(combined));
+          localStorage.setItem('hd_tickets_v2', JSON.stringify(realSaved));
         } catch {}
-        return combined.length > 0 ? combined : initialTickets.filter(isRealTicket);
+        return realSaved;
       }
-      return initialTickets.filter(isRealTicket);
+      return [];
     } catch {
-      return initialTickets;
+      return [];
     }
   });
 
   const [comments, setComments] = useState<TicketComment[]>(() => {
     try {
       const saved = localStorage.getItem('hd_comments_v2');
+      const demoIdSet = new Set([
+        'HD-000001', 'HD-000002', 'HD-000003', 'HD-000004', 'HD-000005',
+        'HD-000006', 'HD-000007', 'HD-000008', 'HD-000009', 'HD-000010',
+        'HD-000011', 'HD-000012', 'HD-000013', 'HD-000014', 'HD-000015'
+      ]);
       if (saved) {
         const parsed: TicketComment[] = JSON.parse(saved);
-        const realComments = parsed.filter(c => !['HD-000001', 'HD-000002', 'HD-000003', 'HD-000004', 'HD-000005', 'HD-000006', 'HD-000007', 'HD-000008'].includes(c.ticketId));
+        const realComments = parsed.filter(c => !demoIdSet.has(c.ticketId));
         return realComments;
       }
-      return initialComments;
+      return [];
     } catch {
-      return initialComments;
+      return [];
     }
   });
 
   const [history, setHistory] = useState<TicketHistory[]>(() => {
     try {
       const saved = localStorage.getItem('hd_history_v2');
+      const demoIdSet = new Set([
+        'HD-000001', 'HD-000002', 'HD-000003', 'HD-000004', 'HD-000005',
+        'HD-000006', 'HD-000007', 'HD-000008', 'HD-000009', 'HD-000010',
+        'HD-000011', 'HD-000012', 'HD-000013', 'HD-000014', 'HD-000015'
+      ]);
       if (saved) {
         const parsed: TicketHistory[] = JSON.parse(saved);
-        const realHistory = parsed.filter(h => !['HD-000001', 'HD-000002', 'HD-000003', 'HD-000004', 'HD-000005', 'HD-000006', 'HD-000007', 'HD-000008'].includes(h.ticketId));
+        const realHistory = parsed.filter(h => !demoIdSet.has(h.ticketId));
         return realHistory;
       }
-      return initialHistory;
+      return [];
     } catch {
-      return initialHistory;
+      return [];
     }
   });
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
     try {
       const saved = localStorage.getItem('hd_notifications_v2');
+      const demoIdSet = new Set([
+        'HD-000001', 'HD-000002', 'HD-000003', 'HD-000004', 'HD-000005',
+        'HD-000006', 'HD-000007', 'HD-000008', 'HD-000009', 'HD-000010',
+        'HD-000011', 'HD-000012', 'HD-000013', 'HD-000014', 'HD-000015'
+      ]);
       if (saved) {
         const parsed: NotificationItem[] = JSON.parse(saved);
-        const realNotifs = parsed.filter(n => !['HD-000001', 'HD-000002', 'HD-000003', 'HD-000004', 'HD-000005', 'HD-000006', 'HD-000007', 'HD-000008'].includes(n.ticketId || ''));
+        const realNotifs = parsed.filter(n => !n.ticketId || !demoIdSet.has(n.ticketId));
         return realNotifs;
       }
-      return initialNotifications;
+      return [];
     } catch {
-      return initialNotifications;
+      return [];
     }
   });
 
@@ -813,6 +833,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activeSyncToast, setActiveSyncToast] = useState<SheetSyncLogItem | null>(null);
   const [isSyncModalOpen, setIsSyncModalOpen] = useState<boolean>(false);
   const [lastSyncStatus, setLastSyncStatus] = useState<'synced' | 'syncing' | 'error'>('synced');
+  const [isDataRefreshing, setIsDataRefreshing] = useState<boolean>(false);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(() => new Date().toLocaleTimeString());
 
   const dismissSyncToast = () => {
     setActiveSyncToast(null);
@@ -2498,18 +2520,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // Pull real data from Google Sheets API / CSV
+  // Pull real data from Google Sheets API / CSV (Forced live re-fetch)
   const pullDataFromGoogleSheets = async (targetSpreadsheetId?: string, targetWebAppUrl?: string, isSilent = false): Promise<{ success: boolean; count: number; message: string }> => {
     const sheetId = targetSpreadsheetId || settings.spreadsheetId || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
     const scriptUrl = targetWebAppUrl || settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl;
 
+    setIsDataRefreshing(true);
     try {
-      const res = await fetch('/api/google/pull-sheet-data', {
+      const res = await fetch(`/api/google/pull-sheet-data?_t=${Date.now()}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        },
         body: JSON.stringify({
           spreadsheetId: sheetId,
-          webAppUrl: scriptUrl
+          webAppUrl: scriptUrl,
+          bypassCache: true,
+          timestamp: new Date().toISOString()
         })
       });
 
@@ -2577,13 +2606,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
       }
 
+      // Update departments and categories if provided by sheets
+      if (data.success && Array.isArray(data.departments) && data.departments.length > 0) {
+        setDepartments(prev => {
+          const dMap = new Map<string, Department>();
+          prev.forEach(d => dMap.set(d.name.trim().toLowerCase(), d));
+          data.departments.forEach((d: Department) => {
+            if (d.name) {
+              const key = d.name.trim().toLowerCase();
+              dMap.set(key, { ...dMap.get(key), ...d });
+            }
+          });
+          return Array.from(dMap.values());
+        });
+      }
+
+      if (data.success && Array.isArray(data.categories) && data.categories.length > 0) {
+        setCategories(prev => {
+          const cMap = new Map<string, Category>();
+          prev.forEach(c => cMap.set(c.name.trim().toLowerCase(), c));
+          data.categories.forEach((c: Category) => {
+            if (c.name) {
+              const key = c.name.trim().toLowerCase();
+              cMap.set(key, { ...cMap.get(key), ...c });
+            }
+          });
+          return Array.from(cMap.values());
+        });
+      }
+
+      setLastRefreshedAt(new Date().toLocaleTimeString());
+
       if (data.success && (ticketsCount > 0 || (Array.isArray(data.users) && data.users.length > 0))) {
         const logItem: SheetSyncLogItem = {
           id: `pull_${Date.now()}`,
           timestamp: new Date().toLocaleTimeString(),
           action: 'PULL_TICKETS',
-          summary: `Retrieved data from Google Sheet (${ticketsCount} tickets, ${data.users?.length || 0} users)`,
-          details: `Connected to Google Sheet: ${ticketsCount} tickets and ${data.users?.length || 0} users synced successfully.`,
+          summary: `Retrieved live data from Google Sheet (${ticketsCount} tickets, ${data.users?.length || 0} users)`,
+          details: `Live fetch successful: ${ticketsCount} tickets and ${data.users?.length || 0} users synced from central spreadsheet.`,
           status: 'success',
           sheetTab: 'Tickets'
         };
@@ -2600,8 +2660,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             id: `pull_info_${Date.now()}`,
             timestamp: new Date().toLocaleTimeString(),
             action: 'PULL_TICKETS',
-            summary: 'Google Sheet Sync: 0 external rows found',
-            details: data.message || 'No new rows found on the Tickets sheet tab.',
+            summary: 'Google Sheet Live Refresh Completed',
+            details: data.message || 'Data re-fetched from Google Sheet. No changes detected.',
             status: 'info',
             sheetTab: 'Tickets'
           };
@@ -2613,24 +2673,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (err: any) {
       console.warn('Pull sheet data error:', err);
       return { success: false, count: 0, message: err.message || 'Failed to fetch tickets from Google Sheet.' };
+    } finally {
+      setIsDataRefreshing(false);
     }
+  };
+
+  const refreshAllData = async (options?: { isSilent?: boolean }): Promise<{ success: boolean; count: number; message: string }> => {
+    return await pullDataFromGoogleSheets(undefined, undefined, options?.isSilent || false);
   };
 
   // Clear demo / mockup tickets
   const clearMockupTickets = () => {
-    const realOnly = tickets.filter(t => !t.isDemoTicket && !['HD-000001', 'HD-000002', 'HD-000003', 'HD-000004', 'HD-000005', 'HD-000006', 'HD-000007', 'HD-000008'].includes(t.id));
+    const demoIdSet = new Set([
+      'HD-000001', 'HD-000002', 'HD-000003', 'HD-000004', 'HD-000005',
+      'HD-000006', 'HD-000007', 'HD-000008', 'HD-000009', 'HD-000010',
+      'HD-000011', 'HD-000012', 'HD-000013', 'HD-000014', 'HD-000015'
+    ]);
+    const realOnly = tickets.filter(t => !t.isDemoTicket && !demoIdSet.has(t.id) && !t.employeeEmail?.toLowerCase().endsWith('@company.com'));
     setTickets(realOnly);
     try {
       localStorage.setItem('hd_tickets_v2', JSON.stringify(realOnly));
-      localStorage.setItem('hd_demo_cleared', 'true');
+      localStorage.setItem('hd_demo_cleared_v4', 'true');
     } catch (e) {}
 
     const logItem: SheetSyncLogItem = {
       id: `clear_demo_${Date.now()}`,
       timestamp: new Date().toLocaleTimeString(),
       action: 'PURGE_MOCKUP',
-      summary: 'Cleared demo mockup tickets from view',
-      details: `Removed sample mockup tickets. Displaying only ${realOnly.length} real/synced tickets.`,
+      summary: 'Cleared all demo tickets from view',
+      details: `Displaying strictly ${realOnly.length} real tickets.`,
       status: 'success',
       sheetTab: 'Tickets'
     };
@@ -2641,33 +2712,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Restore demo tickets for testing
   const restoreDemoTickets = () => {
-    try {
-      localStorage.removeItem('hd_demo_cleared');
-    } catch (e) {}
-    const existingIds = new Set(tickets.map(t => t.id));
-    const missingDemo = initialTickets.filter(t => !existingIds.has(t.id));
-    const merged = [...tickets, ...missingDemo];
-    setTickets(merged);
-    try {
-      localStorage.setItem('hd_tickets_v2', JSON.stringify(merged));
-    } catch (e) {}
-
-    const logItem: SheetSyncLogItem = {
-      id: `restore_demo_${Date.now()}`,
-      timestamp: new Date().toLocaleTimeString(),
-      action: 'RESTORE_DEMO',
-      summary: 'Restored demo mockup tickets for preview',
-      details: 'Sample tickets restored alongside existing tickets.',
-      status: 'info',
-      sheetTab: 'Tickets'
-    };
-    setSheetSyncLogs(prev => [logItem, ...prev.slice(0, 49)]);
-    setActiveSyncToast(logItem);
+    // No-op to prevent re-injecting demo data
   };
 
   // Ticket counts
   const demoTicketsCount = useMemo(() => {
-    return tickets.filter(t => t.isDemoTicket || ['HD-000001', 'HD-000002', 'HD-000003', 'HD-000004', 'HD-000005', 'HD-000006', 'HD-000007', 'HD-000008'].includes(t.id)).length;
+    const demoIdSet = new Set([
+      'HD-000001', 'HD-000002', 'HD-000003', 'HD-000004', 'HD-000005',
+      'HD-000006', 'HD-000007', 'HD-000008', 'HD-000009', 'HD-000010',
+      'HD-000011', 'HD-000012', 'HD-000013', 'HD-000014', 'HD-000015'
+    ]);
+    return tickets.filter(t => t.isDemoTicket || demoIdSet.has(t.id) || t.employeeEmail?.toLowerCase().endsWith('@company.com')).length;
   }, [tickets]);
 
   const realTicketsCount = useMemo(() => {
@@ -2945,6 +3000,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateSettings,
         syncWithGoogleSheets,
         pullDataFromGoogleSheets,
+        refreshAllData,
+        isDataRefreshing,
+        lastRefreshedAt,
         clearMockupTickets,
         restoreDemoTickets,
         isDemoDataActive,

@@ -32,6 +32,7 @@ import { Ticket } from '../types';
 import { printExecutiveReport, downloadReportCSV } from '../utils/printReport';
 import { DateRangeFilter } from '../components/DateRangeFilter';
 import { DateRangeFilterType, isDateInRange } from '../utils/dateUtils';
+import { RefreshButton } from '../components/RefreshButton';
 
 export const ReportsView: React.FC = () => {
   const { tickets, users, departments, categories, slaRules, settings } = useApp();
@@ -400,6 +401,13 @@ export const ReportsView: React.FC = () => {
 
           {/* Header Action Buttons */}
           <div className="flex items-center gap-2 shrink-0">
+            <RefreshButton
+              id="reports-refresh-btn"
+              variant="banner"
+              showTimestamp={true}
+              label="Refresh Live Data"
+            />
+
             <button
               type="button"
               onClick={handlePrintReport}
@@ -730,14 +738,14 @@ export const ReportsView: React.FC = () => {
               <tbody className="divide-y divide-gray-100">
                 {departments
                   .filter(d => !searchQuery || d.name.toLowerCase().includes(searchQuery.toLowerCase()))
-                  .map(d => {
+                  .map((d, idx) => {
                     const deptTickets = tickets.filter(t => t.department === d.name);
                     const open = deptTickets.filter(t => t.status === 'Open' || t.status === 'In Progress').length;
                     const res = deptTickets.filter(t => t.status === 'Resolved' || t.status === 'Closed').length;
                     const pct = deptTickets.length > 0 ? Math.round((res / deptTickets.length) * 100) : 100;
 
                     return (
-                      <tr key={d.id} className="hover:bg-gray-50/50 transition-colors">
+                      <tr key={`${d.id || d.name}-${idx}`} className="hover:bg-gray-50/50 transition-colors">
                         <td className="p-3.5 font-bold text-gray-900 flex items-center gap-2">
                           <Building2 className="w-4 h-4 text-emerald-600" />
                           <span>{d.name}</span>
@@ -772,18 +780,18 @@ export const ReportsView: React.FC = () => {
               <tbody className="divide-y divide-gray-100">
                 {categories
                   .filter(c => !searchQuery || c.name.toLowerCase().includes(searchQuery.toLowerCase()))
-                  .map(c => {
+                  .map((c, idx) => {
                     const catTickets = tickets.filter(t => t.category === c.name);
                     return (
-                      <tr key={c.id} className="hover:bg-gray-50/50 transition-colors">
+                      <tr key={`${c.id || c.name}-${idx}`} className="hover:bg-gray-50/50 transition-colors">
                         <td className="p-3.5 font-bold text-gray-900">{c.name}</td>
                         <td className="p-3.5 text-gray-600 font-medium">{c.department}</td>
                         <td className="p-3.5 font-mono font-bold text-center text-sm text-blue-600">{catTickets.length}</td>
                         <td className="p-3.5 font-mono text-center font-bold text-gray-700">{c.defaultSLAHours} Hours</td>
                         <td className="p-3.5">
                           <div className="flex items-center gap-1 flex-wrap">
-                            {c.subCategories.slice(0, 4).map(sub => (
-                              <span key={sub} className="text-[10px] font-mono bg-gray-100 text-gray-600 px-2 py-0.5 rounded border border-gray-200">
+                            {c.subCategories.slice(0, 4).map((sub, sIdx) => (
+                              <span key={`${sub}-${sIdx}`} className="text-[10px] font-mono bg-gray-100 text-gray-600 px-2 py-0.5 rounded border border-gray-200">
                                 {sub}
                               </span>
                             ))}
@@ -816,14 +824,14 @@ export const ReportsView: React.FC = () => {
                 {users
                   .filter(u => u.role === 'Support Agent' || u.role === 'Support Manager' || u.role === 'Super Admin')
                   .filter(u => !searchQuery || u.name.toLowerCase().includes(searchQuery.toLowerCase()))
-                  .map(agent => {
+                  .map((agent, idx) => {
                     const assigned = tickets.filter(t => t.assignedAgentId === agent.id);
                     const resolved = assigned.filter(t => t.status === 'Resolved' || t.status === 'Closed');
                     const rated = assigned.filter(t => t.rating);
                     const avgRating = rated.length > 0 ? (rated.reduce((a, b) => a + (b.rating || 0), 0) / rated.length).toFixed(1) : '5.0';
 
                     return (
-                      <tr key={agent.id} className="hover:bg-gray-50/50 transition-colors">
+                      <tr key={`${agent.id || agent.employeeId || agent.name}-${idx}`} className="hover:bg-gray-50/50 transition-colors">
                         <td className="p-3.5 font-bold text-gray-900 flex items-center gap-2">
                           <div className="w-6 h-6 rounded-full bg-[#031A12] text-white flex items-center justify-center font-extrabold text-[10px]">
                             {agent.name.charAt(0)}
@@ -866,8 +874,8 @@ export const ReportsView: React.FC = () => {
                 {tickets
                   .filter(t => t.rating)
                   .filter(t => !searchQuery || t.id.toLowerCase().includes(searchQuery.toLowerCase()) || t.employeeName.toLowerCase().includes(searchQuery.toLowerCase()))
-                  .map(t => (
-                    <tr key={t.id} className="hover:bg-gray-50/50 transition-colors">
+                  .map((t, idx) => (
+                    <tr key={`${t.id}-${idx}`} className="hover:bg-gray-50/50 transition-colors">
                       <td className="p-3.5 font-mono font-bold text-blue-600">{t.id}</td>
                       <td className="p-3.5 font-bold text-gray-900">
                         {t.employeeName}
@@ -904,14 +912,14 @@ export const ReportsView: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {['Critical', 'High', 'Medium', 'Low'].map(priority => {
+                  {['Critical', 'High', 'Medium', 'Low'].map((priority, idx) => {
                     const priorityTickets = tickets.filter(t => t.priority === priority);
                     const breached = priorityTickets.filter(t => t.slaStatus === 'Breached').length;
                     const safe = priorityTickets.length - breached;
                     const rate = priorityTickets.length > 0 ? Math.round((safe / priorityTickets.length) * 100) : 100;
 
                     return (
-                      <tr key={priority} className="hover:bg-gray-50/50 transition-colors">
+                      <tr key={`${priority}-${idx}`} className="hover:bg-gray-50/50 transition-colors">
                         <td className="p-3.5 font-bold text-gray-900">{priority} Priority</td>
                         <td className="p-3.5 font-mono text-center font-bold text-gray-600">
                           {priority === 'Critical' ? '2 Hours' : priority === 'High' ? '4 Hours' : priority === 'Medium' ? '8 Hours' : '24 Hours'}
@@ -958,8 +966,8 @@ export const ReportsView: React.FC = () => {
                 {tickets
                   .filter(t => t.status === 'Open' || t.status === 'In Progress')
                   .filter(t => !searchQuery || t.id.toLowerCase().includes(searchQuery.toLowerCase()) || t.subject.toLowerCase().includes(searchQuery.toLowerCase()))
-                  .map(t => (
-                    <tr key={t.id} className="hover:bg-gray-50/50 transition-colors">
+                  .map((t, idx) => (
+                    <tr key={`${t.id}-${idx}`} className="hover:bg-gray-50/50 transition-colors">
                       <td className="p-3.5 font-mono font-bold text-blue-600">{t.id}</td>
                       <td className="p-3.5">
                         <span className="font-bold text-gray-900 block">{t.subject}</span>
@@ -1001,8 +1009,8 @@ export const ReportsView: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {categories.map(cat => (
-                  <tr key={cat.id} className="hover:bg-gray-50/50 transition-colors">
+                {categories.map((cat, idx) => (
+                  <tr key={`${cat.id || cat.name}-${idx}`} className="hover:bg-gray-50/50 transition-colors">
                     <td className="p-3.5 font-bold text-gray-900">{cat.name} Support</td>
                     <td className="p-3.5 font-mono font-bold text-center text-emerald-700">1 Hour 45 Mins</td>
                     <td className="p-3.5 font-mono text-center text-blue-600 font-bold">18 Mins</td>
@@ -1036,8 +1044,8 @@ export const ReportsView: React.FC = () => {
                   { month: 'July 2026', total: 142, res: 138, rate: 97, sla: 98 },
                   { month: 'June 2026', total: 128, res: 125, rate: 97, sla: 96 },
                   { month: 'May 2026', total: 110, res: 108, rate: 98, sla: 99 }
-                ].map(row => (
-                  <tr key={row.month} className="hover:bg-gray-50/50 transition-colors">
+                ].map((row, idx) => (
+                  <tr key={`${row.month}-${idx}`} className="hover:bg-gray-50/50 transition-colors">
                     <td className="p-3.5 font-bold text-gray-900">{row.month}</td>
                     <td className="p-3.5 font-mono font-bold text-center text-sm">{row.total}</td>
                     <td className="p-3.5 font-mono font-bold text-center text-emerald-600">{row.res}</td>

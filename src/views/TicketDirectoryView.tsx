@@ -32,7 +32,9 @@ import {
   ArrowUpRight,
   Flame,
   Timer,
-  Calendar
+  Calendar,
+  Star,
+  Lock
 } from 'lucide-react';
 import { TicketPriority, TicketStatus } from '../types';
 import { SendEmailModal } from '../components/SendEmailModal';
@@ -40,6 +42,8 @@ import { isTicketRaisedByUser, isTicketAssignedToAgent } from '../utils/ticketSe
 import { getTicketDelayInfo, getTicketRelationship } from '../utils/slaCalculator';
 import { DateRangeFilter } from '../components/DateRangeFilter';
 import { DateRangeFilterType, isDateInRange, formatDateTime } from '../utils/dateUtils';
+import { RefreshButton } from '../components/RefreshButton';
+import { TicketRatingWidget } from '../components/TicketRatingWidget';
 
 type SortField =
   | 'id'
@@ -53,7 +57,8 @@ type SortField =
   | 'slaStatus'
   | 'assignedAgentName'
   | 'createdDate'
-  | 'slaDueDate';
+  | 'slaDueDate'
+  | 'rating';
 
 type SortOrder = 'asc' | 'desc';
 
@@ -85,8 +90,8 @@ export const TicketDirectoryView: React.FC = () => {
   // Direction / Relationship perspective filter: 'all' | 'raised_by_me' | 'assigned_to_me' | 'dept'
   const [relationshipScope, setRelationshipScope] = useState<'all' | 'raised_by_me' | 'assigned_to_me' | 'dept'>('all');
 
-  // SLA delay quick filter: 'all' | 'breached' | 'due_soon' | 'safe' | 'resolved'
-  const [slaDelayFilter, setSlaDelayFilter] = useState<'all' | 'breached' | 'due_soon' | 'safe' | 'resolved'>('all');
+  // SLA delay quick filter: 'all' | 'breached' | 'due_soon' | 'safe' | 'resolved' | 'feedback_pending'
+  const [slaDelayFilter, setSlaDelayFilter] = useState<'all' | 'breached' | 'due_soon' | 'safe' | 'resolved' | 'feedback_pending'>('all');
 
   // Date Range Filter
   const [dateFilter, setDateFilter] = useState<DateRangeFilterType>('all');
@@ -193,6 +198,13 @@ export const TicketDirectoryView: React.FC = () => {
     return { breached, dueSoon, safe, resolved };
   }, [scopedTickets]);
 
+  // Feedback pending count on resolved/closed tickets
+  const feedbackPendingCount = useMemo(() => {
+    return scopedTickets.filter(
+      t => (t.status === 'Resolved' || t.status === 'Closed') && (!t.rating || t.rating === 0)
+    ).length;
+  }, [scopedTickets]);
+
   const handlePullData = async () => {
     setIsPulling(true);
     setPullMessage(null);
@@ -238,9 +250,11 @@ export const TicketDirectoryView: React.FC = () => {
       const matchesDepartment = departmentFilter === 'All' || t.department === departmentFilter;
       const matchesBranch = branchFilter === 'All' || t.location === branchFilter;
 
-      // SLA delay filter
+      // SLA delay filter & Feedback Pending filter
       let matchesSlaDelay = true;
-      if (slaDelayFilter !== 'all') {
+      if (slaDelayFilter === 'feedback_pending') {
+        matchesSlaDelay = (t.status === 'Resolved' || t.status === 'Closed') && (!t.rating || t.rating === 0);
+      } else if (slaDelayFilter !== 'all') {
         const delayInfo = getTicketDelayInfo(t);
         matchesSlaDelay = delayInfo.category === slaDelayFilter;
       }
@@ -335,6 +349,9 @@ export const TicketDirectoryView: React.FC = () => {
           const dueB = b.slaDueDate ? new Date(b.slaDueDate).getTime() : 0;
           comparison = dueA - dueB;
           break;
+        case 'rating':
+          comparison = (a.rating || 0) - (b.rating || 0);
+          break;
         case 'createdDate':
         default:
           const dateA = a.createdDate ? new Date(a.createdDate).getTime() : 0;
@@ -404,7 +421,12 @@ export const TicketDirectoryView: React.FC = () => {
   const uniqueDepartments = Array.from(new Set([...departments.map(d => d.name), ...scopedTickets.map(t => t.department)]));
   const uniqueBranches = Array.from(new Set([...branches, ...scopedTickets.map(t => t.location)]));
 
-  const scopedRealCount = scopedTickets.filter(t => !t.isDemoTicket && !['HD-000001', 'HD-000002', 'HD-000003', 'HD-000004', 'HD-000005', 'HD-000006', 'HD-000007', 'HD-000008'].includes(t.id)).length;
+  const demoIdSet = new Set([
+    'HD-000001', 'HD-000002', 'HD-000003', 'HD-000004', 'HD-000005',
+    'HD-000006', 'HD-000007', 'HD-000008', 'HD-000009', 'HD-000010',
+    'HD-000011', 'HD-000012', 'HD-000013', 'HD-000014', 'HD-000015'
+  ]);
+  const scopedRealCount = scopedTickets.filter(t => !t.isDemoTicket && !demoIdSet.has(t.id) && !t.employeeEmail?.toLowerCase().endsWith('@company.com')).length;
   const scopedDemoCount = scopedTickets.length - scopedRealCount;
 
   const handleExportCSV = () => {
@@ -456,7 +478,7 @@ export const TicketDirectoryView: React.FC = () => {
             <span className="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-blue-100 text-blue-800 border border-blue-200">
               {isEmployee
                 ? `${scopedTickets.length} Your Requests`
-                : `${scopedRealCount} Real • ${scopedDemoCount} Demo`}
+                : `${scopedTickets.length} Active Tickets`}
             </span>
           </div>
           <p className="text-xs text-gray-500 mt-0.5">
@@ -467,38 +489,24 @@ export const TicketDirectoryView: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Pull from Google Sheets Button */}
-          <button
-            onClick={handlePullData}
-            disabled={isPulling}
-            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
-            title="Fetch real tickets directly from Google Sheet"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isPulling ? 'animate-spin' : ''}`} />
-            <span>{isPulling ? 'Fetching Sheet...' : 'Pull from Sheet'}</span>
-          </button>
+          {/* Live Refresh Button */}
+          <RefreshButton
+            id="ticket-directory-refresh-btn"
+            variant="pill"
+            showTimestamp={true}
+            label="Refresh Sheet Data"
+          />
 
-          {/* Purge / Restore Demo Tickets (Visible to Admins / Agents) */}
-          {!isEmployee && (
-            isDemoDataActive ? (
-              <button
-                onClick={clearMockupTickets}
-                className="px-3 py-1.5 bg-white border border-amber-300 hover:bg-amber-50 text-amber-800 font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
-                title="Remove sample mockup tickets and display only real tickets"
-              >
-                <Trash2 className="w-3.5 h-3.5 text-amber-600" />
-                <span>Clear Mockup ({demoTicketsCount})</span>
-              </button>
-            ) : (
-              <button
-                onClick={restoreDemoTickets}
-                className="px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
-                title="Restore demo tickets for testing"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-gray-500" />
-                <span>Restore Demo</span>
-              </button>
-            )
+          {/* Purge Demo Tickets if any detected */}
+          {isDemoDataActive && (
+            <button
+              onClick={clearMockupTickets}
+              className="px-3 py-1.5 bg-white border border-amber-300 hover:bg-amber-50 text-amber-800 font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+              title="Remove sample mockup tickets and display only real tickets"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-amber-600" />
+              <span>Clear Demo Data</span>
+            </button>
           )}
 
           <button
@@ -675,6 +683,39 @@ export const TicketDirectoryView: React.FC = () => {
           </span>
         </button>
       </div>
+
+      {/* FEEDBACK PENDING PROMINENT BANNER */}
+      {feedbackPendingCount > 0 && (
+        <div className="p-3 bg-gradient-to-r from-amber-50 via-yellow-50 to-amber-50 border border-amber-300 rounded-2xl flex items-center justify-between gap-3 shadow-xs flex-wrap">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500 to-yellow-500 text-white flex items-center justify-center shrink-0 shadow-xs animate-bounce">
+              <Star className="w-5 h-5 fill-current" />
+            </div>
+            <div>
+              <p className="text-xs font-black text-amber-950 flex items-center gap-1.5">
+                <span>⭐ {feedbackPendingCount} Resolved Ticket{feedbackPendingCount > 1 ? 's' : ''} Pending Rating & Feedback</span>
+                <span className="px-2 py-0.2 rounded-full text-[9px] font-extrabold bg-amber-200 text-amber-900 border border-amber-400 animate-pulse">
+                  Action Required
+                </span>
+              </p>
+              <p className="text-[11px] text-amber-800">
+                Tickets are marked resolved. Click on the 5-star rater in the table to submit your feedback (locks automatically after submit).
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setSlaDelayFilter(slaDelayFilter === 'feedback_pending' ? 'all' : 'feedback_pending')}
+            className={`px-3.5 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs ${
+              slaDelayFilter === 'feedback_pending'
+                ? 'bg-amber-600 text-white shadow-xs'
+                : 'bg-white hover:bg-amber-100 text-amber-900 border border-amber-300'
+            }`}
+          >
+            <Star className="w-3.5 h-3.5 fill-current text-amber-500" />
+            <span>{slaDelayFilter === 'feedback_pending' ? '✓ Showing Pending Feedback' : 'Filter Pending Feedback Only'}</span>
+          </button>
+        </div>
+      )}
 
       {/* Comprehensive Filter Bar with Date Range Integration */}
       <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-2xs space-y-2.5">
@@ -973,6 +1014,16 @@ export const TicketDirectoryView: React.FC = () => {
                 </th>
 
                 <th
+                  onClick={() => handleSort('rating')}
+                  className="px-3 py-2.5 min-w-[155px] cursor-pointer hover:bg-gray-100/70 transition-colors group"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Feedback & Rating</span>
+                    {renderSortIcon('rating')}
+                  </div>
+                </th>
+
+                <th
                   onClick={() => handleSort('slaDueDate')}
                   className="px-3 py-2.5 w-36 cursor-pointer hover:bg-gray-100/70 transition-colors group"
                 >
@@ -1138,6 +1189,17 @@ export const TicketDirectoryView: React.FC = () => {
                         }`}>
                           {t.status}
                         </span>
+                      </td>
+
+                      {/* Feedback & Star Rating Cell */}
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {t.status === 'Resolved' || t.status === 'Closed' ? (
+                          <TicketRatingWidget ticket={t} variant="inline" />
+                        ) : (
+                          <span className="text-gray-300 text-[10px] font-mono select-none">
+                            —
+                          </span>
+                        )}
                       </td>
 
                       {/* SLA Status & Delay */}

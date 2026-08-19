@@ -362,9 +362,19 @@ function parseCSV(text: string): string[][] {
   return rows;
 }
 
-// Pull real data directly from Google Sheets / Apps Script
-app.post('/api/google/pull-sheet-data', async (req, res) => {
-  const { spreadsheetId, webAppUrl } = req.body;
+// Pull real data directly from Google Sheets / Apps Script (Forced live refresh)
+const handlePullSheetData = async (req: express.Request, res: express.Response) => {
+  // Prevent any browser or intermediate proxy caching
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
+
+  const bodyData = req.body || {};
+  const queryData = req.query || {};
+  const spreadsheetId = (bodyData.spreadsheetId || queryData.spreadsheetId || '').toString();
+  const webAppUrl = (bodyData.webAppUrl || queryData.webAppUrl || '').toString();
+
   if (webAppUrl && typeof webAppUrl === 'string' && webAppUrl.trim()) {
     runtimeConfig.webAppUrl = webAppUrl.trim();
   }
@@ -384,14 +394,21 @@ app.post('/api/google/pull-sheet-data', async (req, res) => {
   let isSuccess = false;
   let fetchError = null;
 
+  const timestamp = Date.now();
+
   // 1. Try pulling via Google Apps Script POST getAllData
   try {
-    const appsScriptRes = await fetch(targetUrl, {
+    const appsScriptRes = await fetch(`${targetUrl}${targetUrl.includes('?') ? '&' : '?'}_t=${timestamp}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      },
       body: JSON.stringify({
         action: 'getAllData',
         spreadsheetId: targetSheetId,
+        forceRefresh: true,
         timestamp: new Date().toISOString()
       }),
       redirect: 'follow'
@@ -407,7 +424,7 @@ app.post('/api/google/pull-sheet-data', async (req, res) => {
           pulledDepartments = data.departments || [];
           pulledCategories = data.categories || [];
           pulledComments = data.comments || [];
-          source = 'Google Apps Script API';
+          source = 'Google Apps Script API (Live)';
           isSuccess = true;
         }
       } catch {
@@ -418,12 +435,18 @@ app.post('/api/google/pull-sheet-data', async (req, res) => {
     fetchError = err.message;
   }
 
-  // 2. Fallback: Directly pull CSV from Google Sheets tabs (Tickets & Users)
+  // 2. Fallback: Directly pull CSV from Google Sheets tabs (Tickets & Users) with fresh timestamp to bypass caching
   if (targetSheetId) {
     if (pulledTickets.length === 0) {
       try {
-        const ticketsCsvUrl = `https://docs.google.com/spreadsheets/d/${targetSheetId}/gviz/tq?tqx=out:csv&sheet=Tickets`;
-        const csvRes = await fetch(ticketsCsvUrl, { redirect: 'follow' });
+        const ticketsCsvUrl = `https://docs.google.com/spreadsheets/d/${targetSheetId}/gviz/tq?tqx=out:csv&sheet=Tickets&_t=${timestamp}`;
+        const csvRes = await fetch(ticketsCsvUrl, {
+          redirect: 'follow',
+          headers: {
+            'Cache-Control': 'no-cache, no-store',
+            'Pragma': 'no-cache'
+          }
+        });
         if (csvRes.ok) {
           const csvText = await csvRes.text();
           if (csvText && !csvText.includes('<!DOCTYPE') && !csvText.includes('accounts.google.com')) {
@@ -500,7 +523,7 @@ app.post('/api/google/pull-sheet-data', async (req, res) => {
 
               if (parsedTickets.length > 0) {
                 pulledTickets = parsedTickets;
-                source = 'Google Sheets CSV Direct Feed';
+                source = 'Google Sheets Direct Feed (Live)';
                 isSuccess = true;
               }
             }
@@ -513,8 +536,14 @@ app.post('/api/google/pull-sheet-data', async (req, res) => {
 
     if (pulledUsers.length === 0) {
       try {
-        const usersCsvUrl = `https://docs.google.com/spreadsheets/d/${targetSheetId}/gviz/tq?tqx=out:csv&sheet=Users`;
-        const uCsvRes = await fetch(usersCsvUrl, { redirect: 'follow' });
+        const usersCsvUrl = `https://docs.google.com/spreadsheets/d/${targetSheetId}/gviz/tq?tqx=out:csv&sheet=Users&_t=${timestamp}`;
+        const uCsvRes = await fetch(usersCsvUrl, {
+          redirect: 'follow',
+          headers: {
+            'Cache-Control': 'no-cache, no-store',
+            'Pragma': 'no-cache'
+          }
+        });
         if (uCsvRes.ok) {
           const uCsvText = await uCsvRes.text();
           if (uCsvText && !uCsvText.includes('<!DOCTYPE') && !uCsvText.includes('accounts.google.com')) {
@@ -561,11 +590,15 @@ app.post('/api/google/pull-sheet-data', async (req, res) => {
     comments: pulledComments,
     source,
     spreadsheetId: targetSheetId,
+    timestamp: new Date().toISOString(),
     message: isSuccess
       ? `Successfully pulled ${pulledTickets.length} real tickets from ${source} (${targetSheetId}).`
       : `No external tickets could be fetched from Google Sheets. ${fetchError ? `(${fetchError})` : 'Verify sheet permissions.'}`
   });
-});
+};
+
+app.post('/api/google/pull-sheet-data', handlePullSheetData);
+app.get('/api/google/pull-sheet-data', handlePullSheetData);
 
 app.post('/api/google/sync-sheets', async (req, res) => {
   const {

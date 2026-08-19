@@ -30,6 +30,7 @@ import { TicketPriority, TicketStatus } from '../types';
 import { SendEmailModal } from './SendEmailModal';
 import { SendWhatsAppModal } from './SendWhatsAppModal';
 import { getTicketDelayInfo, getTicketRelationship } from '../utils/slaCalculator';
+import { TicketRatingWidget } from './TicketRatingWidget';
 
 export const TicketDetailsModal: React.FC = () => {
   const {
@@ -299,54 +300,9 @@ export const TicketDetailsModal: React.FC = () => {
               </form>
             </div>
 
-            {/* Rating Section (If Ticket Resolved/Closed) */}
+            {/* Service Satisfaction & Rating Section (If Ticket Resolved/Closed) */}
             {(ticket.status === 'Resolved' || ticket.status === 'Closed') && (
-              <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-2xs space-y-3">
-                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
-                  <Star className="w-3.5 h-3.5 text-yellow-500" /> Service Satisfaction Rating
-                </h3>
-
-                {ticket.rating ? (
-                  <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-xs space-y-1">
-                    <div className="flex items-center gap-1 text-yellow-500 font-bold">
-                      {[...Array(ticket.rating)].map((_, i) => (
-                        <Star key={i} className="w-4 h-4 fill-current" />
-                      ))}
-                      <span className="text-gray-800 ml-1">({ticket.rating}/5 Stars)</span>
-                    </div>
-                    {ticket.feedback && <p className="text-gray-700 italic">"{ticket.feedback}"</p>}
-                  </div>
-                ) : (
-                  <form onSubmit={handleRatingSubmit} className="space-y-2">
-                    <p className="text-xs text-gray-600">Please rate your support resolution experience:</p>
-                    <div className="flex items-center gap-2">
-                      {[1, 2, 3, 4, 5].map(star => (
-                        <button
-                          key={star}
-                          type="button"
-                          onClick={() => setStarRating(star)}
-                          className={`p-1.5 rounded hover:bg-yellow-50 transition-colors ${starRating >= star ? 'text-yellow-400' : 'text-gray-300'}`}
-                        >
-                          <Star className="w-6 h-6 fill-current" />
-                        </button>
-                      ))}
-                    </div>
-                    <input
-                      type="text"
-                      value={feedbackText}
-                      onChange={e => setFeedbackText(e.target.value)}
-                      placeholder="Optional feedback..."
-                      className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs outline-none"
-                    />
-                    <button
-                      type="submit"
-                      className="px-4 py-1.5 bg-yellow-500 hover:bg-yellow-600 text-white font-bold rounded-lg text-xs shadow-2xs"
-                    >
-                      Submit Rating
-                    </button>
-                  </form>
-                )}
-              </div>
+              <TicketRatingWidget ticket={ticket} variant="card" />
             )}
           </div>
 
@@ -432,15 +388,15 @@ export const TicketDetailsModal: React.FC = () => {
                     <optgroup label="IT Support & Support Agents">
                       {assignableUsers
                         .filter(u => u.role === 'Support Agent' || u.role === 'Support Manager' || u.department === 'IT Operations')
-                        .map(a => (
-                          <option key={a.id} value={a.id}>{a.name} ({a.department} - {a.role})</option>
+                        .map((a, idx) => (
+                          <option key={`support-${a.id || a.employeeId || a.name}-${idx}`} value={a.id}>{a.name} ({a.department} - {a.role})</option>
                         ))}
                     </optgroup>
                     <optgroup label="Administrators & Department Staff">
                       {assignableUsers
                         .filter(u => !(u.role === 'Support Agent' || u.role === 'Support Manager' || u.department === 'IT Operations'))
-                        .map(a => (
-                          <option key={a.id} value={a.id}>{a.name} ({a.department} - {a.role})</option>
+                        .map((a, idx) => (
+                          <option key={`admin-${a.id || a.employeeId || a.name}-${idx}`} value={a.id}>{a.name} ({a.department} - {a.role})</option>
                         ))}
                     </optgroup>
                     {ticket.assignedAgentName && !currentAssignedUser && (

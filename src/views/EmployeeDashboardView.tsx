@@ -11,10 +11,14 @@ import {
   ArrowUpDown,
   ChevronRight,
   Sparkles,
-  Inbox
+  Inbox,
+  Star,
+  Lock
 } from 'lucide-react';
 import { TicketPriority, TicketStatus } from '../types';
 import { isTicketRaisedByUser } from '../utils/ticketSecurity';
+import { RefreshButton } from '../components/RefreshButton';
+import { TicketRatingWidget } from '../components/TicketRatingWidget';
 
 export const EmployeeDashboardView: React.FC = () => {
   const {
@@ -41,6 +45,11 @@ export const EmployeeDashboardView: React.FC = () => {
   const closedCount = myTickets.filter(t => t.status === 'Closed').length;
   const completedCount = resolvedCount + closedCount;
   const myResolutionRate = totalMyTickets > 0 ? Math.round((completedCount / totalMyTickets) * 100) : 100;
+
+  // Pending feedback count on my tickets
+  const feedbackPendingTickets = myTickets.filter(
+    t => (t.status === 'Resolved' || t.status === 'Closed') && (!t.rating || t.rating === 0)
+  );
 
   const filteredTickets = myTickets.filter(t => {
     const matchesSearch =
@@ -100,13 +109,21 @@ export const EmployeeDashboardView: React.FC = () => {
             Track your IT support requests, submit new issues, or get instant help from AI Help Desk Assistant.
           </p>
         </div>
-        <button
-          onClick={() => setIsCreateTicketOpen(true)}
-          className="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg shadow-blue-600/20 transition-all shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          <span>New Support Ticket</span>
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <RefreshButton
+            id="employee-banner-refresh-btn"
+            variant="banner"
+            showTimestamp={true}
+            label="Refresh"
+          />
+          <button
+            onClick={() => setIsCreateTicketOpen(true)}
+            className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg shadow-blue-600/20 transition-all cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>New Support Ticket</span>
+          </button>
+        </div>
       </div>
 
       {/* Top KPI Cards (Personalized Employee View) */}
@@ -152,6 +169,35 @@ export const EmployeeDashboardView: React.FC = () => {
         </div>
       </div>
 
+      {/* FEEDBACK PENDING PROMINENT ALERT */}
+      {feedbackPendingTickets.length > 0 && (
+        <div className="p-4 bg-gradient-to-r from-amber-500/15 via-yellow-500/10 to-amber-500/15 border border-amber-300 rounded-2xl flex items-center justify-between gap-4 shadow-sm flex-wrap">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-yellow-500 text-white flex items-center justify-center shrink-0 shadow-xs animate-bounce">
+              <Star className="w-5 h-5 fill-current" />
+            </div>
+            <div>
+              <h3 className="text-xs font-black text-amber-950 flex items-center gap-2">
+                <span>⭐ Action Required: {feedbackPendingTickets.length} Resolved Ticket{feedbackPendingTickets.length > 1 ? 's' : ''} Pending Your Rating</span>
+                <span className="px-2 py-0.2 rounded-full text-[9px] font-extrabold bg-amber-200 text-amber-900 border border-amber-400">
+                  Feedback Pending
+                </span>
+              </h3>
+              <p className="text-[11px] text-amber-800 mt-0.5">
+                Your support issues have been resolved. Please rate the quality of service below (locks permanently once submitted).
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setStatusFilter('Resolved')}
+            className="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-white font-black text-xs rounded-xl shadow-xs transition-transform hover:scale-105 active:scale-95 cursor-pointer flex items-center gap-1.5"
+          >
+            <Star className="w-3.5 h-3.5 fill-current" />
+            <span>Rate Resolved Tickets</span>
+          </button>
+        </div>
+      )}
+
       {/* Main Ticket Queue Data Grid */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-2xs overflow-hidden flex flex-col">
         {/* Table Header Controls */}
@@ -164,6 +210,12 @@ export const EmployeeDashboardView: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2">
+            <RefreshButton
+              id="employee-table-refresh-btn"
+              variant="outline"
+              label="Sync Tickets"
+            />
+
             {/* Status Filter */}
             <select
               value={statusFilter}
@@ -204,6 +256,7 @@ export const EmployeeDashboardView: React.FC = () => {
                 <th className="px-5 py-3 min-w-[150px]">Sub-Category / Action Item</th>
                 <th className="px-5 py-3 w-24">Priority</th>
                 <th className="px-5 py-3 w-28">Status</th>
+                <th className="px-5 py-3 min-w-[150px]">Feedback & Rating</th>
                 <th className="px-5 py-3 w-36">Assigned To</th>
                 <th className="px-5 py-3 w-28">Created Date</th>
                 <th className="px-5 py-3 w-16 text-center">Action</th>
@@ -212,7 +265,7 @@ export const EmployeeDashboardView: React.FC = () => {
             <tbody className="divide-y divide-gray-50 text-xs">
               {filteredTickets.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="text-center py-12 text-gray-400">
+                  <td colSpan={10} className="text-center py-12 text-gray-400">
                     <Inbox className="w-8 h-8 mx-auto mb-2 text-gray-300" />
                     No support tickets match your filter criteria.
                   </td>
@@ -258,6 +311,14 @@ export const EmployeeDashboardView: React.FC = () => {
                       <span className={`px-2 py-1 rounded text-xs font-semibold ${getStatusBadge(t.status)}`}>
                         {t.status}
                       </span>
+                    </td>
+                    {/* Feedback Rating Widget */}
+                    <td className="px-5 py-4 whitespace-nowrap">
+                      {t.status === 'Resolved' || t.status === 'Closed' ? (
+                        <TicketRatingWidget ticket={t} variant="inline" />
+                      ) : (
+                        <span className="text-gray-300 text-[10px] font-mono select-none">—</span>
+                      )}
                     </td>
                     <td className="px-5 py-4 text-gray-700 font-medium">
                       {t.assignedAgentName || <span className="text-gray-400 italic">Unassigned</span>}

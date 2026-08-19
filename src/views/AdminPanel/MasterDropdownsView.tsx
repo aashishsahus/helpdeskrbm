@@ -1173,8 +1173,8 @@ export const MasterDropdownsView: React.FC = () => {
                       <option value="">-- Select Registered User as Head --</option>
                       <option value="Unassigned">Unassigned / Pending</option>
                       <optgroup label="Registered Employees & Admins">
-                        {users.map(u => (
-                          <option key={u.id} value={u.name}>
+                        {users.map((u, idx) => (
+                          <option key={`head-opt-${u.id || u.employeeId || u.name}-${idx}`} value={u.name}>
                             {u.name} — {u.role} ({u.department || 'All'})
                           </option>
                         ))}
@@ -1335,8 +1335,8 @@ export const MasterDropdownsView: React.FC = () => {
                 >
                   <option value="Unassigned">Unassigned / Pending</option>
                   <optgroup label="Registered Employees & Admins">
-                    {users.map(u => (
-                      <option key={u.id} value={u.name}>
+                    {users.map((u, idx) => (
+                      <option key={`edit-dept-head-${u.id || u.employeeId || u.name}-${idx}`} value={u.name}>
                         {u.name} — {u.role} ({u.department || 'All'})
                       </option>
                     ))}

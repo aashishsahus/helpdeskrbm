@@ -25,6 +25,7 @@ import {
   KeyRound
 } from 'lucide-react';
 import { UserRole, User } from '../types';
+import { RefreshButton } from './RefreshButton';
 
 export const Header: React.FC = () => {
   const {
@@ -268,26 +269,30 @@ export const Header: React.FC = () => {
                 )}
               </button>
 
-              {/* Admin Sync Refresh Button */}
-              <button
-                id="admin-sync-refresh-btn"
-                onClick={handleManualSync}
-                className={`p-1.5 text-gray-600 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-full transition-all ${
-                  isSyncing ? 'animate-spin text-emerald-600' : ''
-                }`}
-                title="Force Refresh Data from Google Sheets"
-              >
-                <RotateCw className="w-4 h-4" />
-              </button>
+              {/* Quick Live Refresh Button */}
+              <RefreshButton
+                id="header-live-refresh-btn"
+                variant="compact"
+                showTimestamp={false}
+                label="Refresh"
+              />
             </>
           ) : (
-            /* Regular Employees / Agents: Clean, Non-Clickable Connected Status */
-            <div
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-full bg-emerald-50 text-[#065F46] border border-emerald-200 select-none"
-              title="Central Database Connected"
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-              <span>Connected</span>
+            <div className="flex items-center gap-1.5">
+              <RefreshButton
+                id="header-employee-refresh-btn"
+                variant="compact"
+                showTimestamp={false}
+                label="Refresh"
+              />
+              {/* Regular Employees / Agents: Clean Connected Status */}
+              <div
+                className="hidden md:flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-full bg-emerald-50 text-[#065F46] border border-emerald-200 select-none"
+                title="Central Database Connected"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                <span>Connected</span>
+              </div>
             </div>
           )}
 

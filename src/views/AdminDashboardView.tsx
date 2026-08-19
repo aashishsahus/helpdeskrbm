@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { DateRangeFilter } from '../components/DateRangeFilter';
 import { DateRangeFilterType, isDateInRange, getDateRangeLabel } from '../utils/dateUtils';
+import { RefreshButton } from '../components/RefreshButton';
 
 export const AdminDashboardView: React.FC = () => {
   const { tickets, users, departments, categories, slaRules, setSelectedTicketId, currentUser } = useApp();
@@ -142,13 +143,21 @@ export const AdminDashboardView: React.FC = () => {
           </p>
         </div>
 
-        {/* Dynamic Multi-Period Date Filter Component */}
-        <DateRangeFilter
-          value={dateFilter}
-          onChange={handleDateFilterChange}
-          customStartDate={customStart}
-          customEndDate={customEnd}
-        />
+        {/* Actions & Dynamic Multi-Period Date Filter Component */}
+        <div className="flex items-center gap-2.5">
+          <RefreshButton
+            id="admin-dashboard-refresh-btn"
+            variant="default"
+            showTimestamp={true}
+            label="Refresh Central Data"
+          />
+          <DateRangeFilter
+            value={dateFilter}
+            onChange={handleDateFilterChange}
+            customStartDate={customStart}
+            customEndDate={customEnd}
+          />
+        </div>
       </div>
 
       {/* Top 8 Executive KPI Cards */}
