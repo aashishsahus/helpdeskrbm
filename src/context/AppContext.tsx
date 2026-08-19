@@ -2242,39 +2242,67 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
-  // Initial sync with backend runtime configuration
+  // Real-time bidirectional sync with backend runtime configuration
   useEffect(() => {
-    fetch('/api/google/get-config')
-      .then(res => res.json())
-      .then(data => {
-        if (data.success && data.config) {
-          const currentUrl = settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl;
-          if (!currentUrl && data.config.webAppUrl) {
-            setSettings(prev => {
-              const updated = {
+    let isMounted = true;
+
+    const fetchServerConfig = async () => {
+      try {
+        const res = await fetch('/api/google/get-config');
+        const data = await res.json();
+        if (data.success && data.config && isMounted) {
+          const serverUrl = data.config.webAppUrl?.trim();
+          const serverSheetId = data.config.spreadsheetId?.trim();
+          const serverDriveId = data.config.driveFolderId?.trim();
+
+          setSettings(prev => {
+            const currentUrl = (prev.googleAppsScriptWebAppUrl || prev.appsScriptUrl || '').trim();
+            const currentSheetId = (prev.spreadsheetId || '').trim();
+            const currentDriveId = (prev.driveFolderId || '').trim();
+
+            const needsUpdate =
+              (serverUrl && serverUrl !== currentUrl) ||
+              (serverSheetId && serverSheetId !== currentSheetId) ||
+              (serverDriveId && serverDriveId !== currentDriveId);
+
+            if (needsUpdate) {
+              const updated: SystemSettings = {
                 ...prev,
-                googleAppsScriptWebAppUrl: data.config.webAppUrl,
-                appsScriptUrl: data.config.webAppUrl,
-                spreadsheetId: data.config.spreadsheetId || prev.spreadsheetId,
-                driveFolderId: data.config.driveFolderId || prev.driveFolderId
+                googleAppsScriptWebAppUrl: serverUrl || prev.googleAppsScriptWebAppUrl,
+                appsScriptUrl: serverUrl || prev.appsScriptUrl,
+                spreadsheetId: serverSheetId || prev.spreadsheetId,
+                driveFolderId: serverDriveId || prev.driveFolderId
               };
-              try { localStorage.setItem('hd_settings_v2', JSON.stringify(updated)); } catch {}
+              try {
+                localStorage.setItem('hd_settings_v2', JSON.stringify(updated));
+              } catch {}
               return updated;
-            });
-          } else if (currentUrl) {
-            fetch('/api/google/save-config', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                webAppUrl: currentUrl,
-                spreadsheetId: settings.spreadsheetId,
-                driveFolderId: settings.driveFolderId
-              })
-            }).catch(() => {});
-          }
+            }
+            return prev;
+          });
         }
-      })
-      .catch(() => {});
+      } catch (err) {
+        // Network or offline gracefully handled
+      }
+    };
+
+    // 1. Initial fetch immediately on mount
+    fetchServerConfig();
+
+    // 2. Auto-fetch whenever window gains focus (e.g. user switches tabs or returns)
+    const onWindowFocus = () => {
+      fetchServerConfig();
+    };
+    window.addEventListener('focus', onWindowFocus);
+
+    // 3. Periodic real-time background poll every 12 seconds to sync changes made by other admins/users
+    const interval = setInterval(fetchServerConfig, 12000);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener('focus', onWindowFocus);
+      clearInterval(interval);
+    };
   }, []);
 
   // SLA Rule Update

@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 
 const app = express();
@@ -112,15 +113,47 @@ app.get(['/auth/callback', '/auth/callback/'], (req, res) => {
   `);
 });
 // Runtime Dynamic Configuration for Google Workspace Integration
-let runtimeConfig = {
-  spreadsheetId: process.env.SPREADSHEET_ID || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow',
-  webAppUrl: process.env.GOOGLE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec',
-  driveFolderId: '1e9Nu2qsZgOVn36VAnZts18LINrjR_1bR',
-  lastUpdated: new Date().toISOString()
-};
+const CONFIG_FILE_PATH = path.join(process.cwd(), 'runtime-config.json');
+
+function loadPersistentConfig() {
+  try {
+    if (fs.existsSync(CONFIG_FILE_PATH)) {
+      const data = fs.readFileSync(CONFIG_FILE_PATH, 'utf-8');
+      const parsed = JSON.parse(data);
+      if (parsed && typeof parsed === 'object') {
+        return {
+          spreadsheetId: parsed.spreadsheetId || process.env.SPREADSHEET_ID || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow',
+          webAppUrl: parsed.webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec',
+          driveFolderId: parsed.driveFolderId || '1e9Nu2qsZgOVn36VAnZts18LINrjR_1bR',
+          lastUpdated: parsed.lastUpdated || new Date().toISOString()
+        };
+      }
+    }
+  } catch (e) {
+    console.warn('Could not read runtime-config.json, using defaults:', e);
+  }
+  return {
+    spreadsheetId: process.env.SPREADSHEET_ID || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow',
+    webAppUrl: process.env.GOOGLE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec',
+    driveFolderId: '1e9Nu2qsZgOVn36VAnZts18LINrjR_1bR',
+    lastUpdated: new Date().toISOString()
+  };
+}
+
+let runtimeConfig = loadPersistentConfig();
+
+function savePersistentConfig(cfg: typeof runtimeConfig) {
+  try {
+    fs.writeFileSync(CONFIG_FILE_PATH, JSON.stringify(cfg, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('Failed to persist runtime-config.json:', err);
+  }
+}
 
 // Get current active runtime Google Workspace Config
 app.get('/api/google/get-config', (req, res) => {
+  // Always refresh from disk if available to ensure multi-instance / hot updates
+  runtimeConfig = loadPersistentConfig();
   res.json({
     success: true,
     config: runtimeConfig
@@ -141,10 +174,11 @@ app.post('/api/google/save-config', (req, res) => {
     runtimeConfig.driveFolderId = driveFolderId.trim();
   }
   runtimeConfig.lastUpdated = new Date().toISOString();
+  savePersistentConfig(runtimeConfig);
 
   res.json({
     success: true,
-    message: 'Google Workspace runtime configuration updated successfully!',
+    message: 'Google Workspace runtime configuration updated successfully and saved persistently across all users!',
     config: runtimeConfig
   });
 });

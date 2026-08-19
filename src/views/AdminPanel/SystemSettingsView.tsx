@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Settings, Save, CheckCircle2, ShieldCheck, Database, HardDrive, Bell } from 'lucide-react';
+import { Settings, Save, CheckCircle2, ShieldCheck, Database, HardDrive, Bell, RefreshCw } from 'lucide-react';
 
 export const SystemSettingsView: React.FC = () => {
   const { settings, updateSettings, syncWithGoogleSheets } = useApp();
@@ -15,6 +15,30 @@ export const SystemSettingsView: React.FC = () => {
   const [autoAssignment, setAutoAssignment] = useState(settings.autoAssignmentEnabled ?? true);
   const [emailNotifs, setEmailNotifs] = useState(settings.emailNotificationsEnabled ?? true);
   const [slaAlerts, setSlaAlerts] = useState(settings.slaBreachAlertsEnabled ?? true);
+  const [isPullingServer, setIsPullingServer] = useState(false);
+
+  const handlePullServerConfig = async () => {
+    setIsPullingServer(true);
+    try {
+      const res = await fetch('/api/google/get-config');
+      const data = await res.json();
+      if (data.success && data.config) {
+        if (data.config.webAppUrl) setWebAppUrl(data.config.webAppUrl);
+        if (data.config.spreadsheetId) setSpreadsheetId(data.config.spreadsheetId);
+        if (data.config.driveFolderId) setDriveFolderId(data.config.driveFolderId);
+        updateSettings({
+          googleAppsScriptWebAppUrl: data.config.webAppUrl,
+          appsScriptUrl: data.config.webAppUrl,
+          spreadsheetId: data.config.spreadsheetId || settings.spreadsheetId,
+          driveFolderId: data.config.driveFolderId || settings.driveFolderId
+        });
+      }
+    } catch (e) {
+      console.warn('Error pulling server config:', e);
+    } finally {
+      setIsPullingServer(false);
+    }
+  };
 
   // Auto-sync form state whenever settings are updated from any other view or modal
   useEffect(() => {
@@ -202,9 +226,21 @@ export const SystemSettingsView: React.FC = () => {
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center justify-between mb-1 flex-wrap gap-1">
                 <label className="block font-bold text-gray-700">Google Apps Script Web App Endpoint URL</label>
-                <span className="text-[10px] text-emerald-800 bg-emerald-100 font-bold px-2 py-0.5 rounded">Central Single Source</span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={handlePullServerConfig}
+                    disabled={isPullingServer}
+                    className="text-[10px] text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 font-bold px-2 py-0.5 rounded border border-slate-300 flex items-center gap-1 transition-all"
+                    title="Pull latest URL saved on server"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isPullingServer ? 'animate-spin' : ''}`} />
+                    <span>{isPullingServer ? 'Pulling...' : 'Pull Server URL'}</span>
+                  </button>
+                  <span className="text-[10px] text-emerald-800 bg-emerald-100 font-bold px-2 py-0.5 rounded">Central Single Source</span>
+                </div>
               </div>
               <input
                 type="text"
@@ -214,7 +250,7 @@ export const SystemSettingsView: React.FC = () => {
                 className="w-full p-2 border rounded-lg font-mono text-xs"
               />
               <p className="text-[10px] text-gray-500 mt-1">
-                💡 <strong>Central Single Entry:</strong> Sirf yahan ek baar paste karke save karein. Poora helpdesk isi endpoint se automatically sync hoga.
+                💡 <strong>Central Single Entry:</strong> Sirf yahan ek baar paste karke save karein. Poora helpdesk isi endpoint se automatically sync hoga aur sabhi users ke browser me real-time update ho jayega.
               </p>
             </div>
 

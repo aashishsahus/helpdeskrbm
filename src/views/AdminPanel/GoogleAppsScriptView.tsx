@@ -50,6 +50,30 @@ export const GoogleAppsScriptView: React.FC = () => {
   const [diagnosticResult, setDiagnosticResult] = useState<any>(null);
   const [isDeduplicating, setIsDeduplicating] = useState(false);
   const [dedupResult, setDedupResult] = useState<{ success: boolean; message: string; removedCount?: number } | null>(null);
+  const [isRefreshingServer, setIsRefreshingServer] = useState(false);
+
+  const handleRefreshFromServer = async () => {
+    setIsRefreshingServer(true);
+    try {
+      const res = await fetch('/api/google/get-config');
+      const data = await res.json();
+      if (data.success && data.config) {
+        if (data.config.webAppUrl) {
+          updateSettings({
+            googleAppsScriptWebAppUrl: data.config.webAppUrl,
+            appsScriptUrl: data.config.webAppUrl,
+            spreadsheetId: data.config.spreadsheetId || settings.spreadsheetId,
+            driveFolderId: data.config.driveFolderId || settings.driveFolderId
+          });
+          setWebAppUrlInput(data.config.webAppUrl);
+        }
+      }
+    } catch (e) {
+      console.warn('Error refreshing server config:', e);
+    } finally {
+      setIsRefreshingServer(false);
+    }
+  };
 
   // Keep input synchronized when settings change externally
   useEffect(() => {
@@ -1238,6 +1262,16 @@ function setupHelpDeskSheets(ss) {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={handleRefreshFromServer}
+              disabled={isRefreshingServer}
+              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-sm transition-all disabled:opacity-50"
+              title="Fetches the latest active Web App URL saved on the backend server"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingServer ? 'animate-spin' : ''}`} />
+              <span>{isRefreshingServer ? 'Refreshing...' : '🔄 Pull from Server'}</span>
+            </button>
+
             <button
               onClick={handleTestConnection}
               disabled={isDiagnosing}
