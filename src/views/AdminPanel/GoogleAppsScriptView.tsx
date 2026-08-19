@@ -1000,6 +1000,23 @@ function doPost(e) {
         });
       }
 
+      var setSheet = ss.getSheetByName("Settings");
+      if (setSheet) {
+        setSheet.clearContents();
+        setSheet.appendRow(["Setting Key", "Setting Value", "Description", "Last Updated"]);
+        var sObj = contents.settings || {};
+        var nowStr = formatSheetDate(new Date());
+        setSheet.appendRow(["System Name", sObj.systemName || "Apex HelpDesk Pro", "Primary Help Desk Application Name", nowStr]);
+        setSheet.appendRow(["Company Name", sObj.companyName || "Rathi Buildmart", "Organization Name", nowStr]);
+        setSheet.appendRow(["Support Email", sObj.supportEmail || "misrpr@rathibuildmart.com", "Default Support & Escalation Email", nowStr]);
+        setSheet.appendRow(["Spreadsheet ID", sObj.spreadsheetId || targetSpreadsheetId, "Connected Google Spreadsheet ID", nowStr]);
+        setSheet.appendRow(["Drive Folder ID", sObj.driveFolderId || DRIVE_ROOT_FOLDER_ID, "Root Google Drive Folder ID for Attachments", nowStr]);
+        setSheet.appendRow(["Ticket ID Prefix", sObj.ticketIdPrefix || "HD-", "Prefix for generated ticket IDs", nowStr]);
+        setSheet.appendRow(["Auto-Assignment", sObj.autoAssignmentEnabled !== false ? "Enabled" : "Disabled", "Automatic ticket assignment", nowStr]);
+        setSheet.appendRow(["Email Notifications", sObj.emailNotificationsEnabled !== false ? "Enabled" : "Disabled", "Automated email alerts", nowStr]);
+        setSheet.appendRow(["SLA Breach Alerts", sObj.slaBreachAlertsEnabled !== false ? "Enabled" : "Disabled", "Automated SLA breach alerts", nowStr]);
+      }
+
       return ContentService.createTextOutput(JSON.stringify({ success: true, message: "All tabs synchronized safely without erasing existing data." }))
         .setMimeType(ContentService.MimeType.JSON);
     }
@@ -1156,6 +1173,18 @@ function setupHelpDeskSheets(ss) {
         sheet.appendRow(["Option ID", "Dropdown Type", "Option Code", "Option Value", "Status", "Updated At"]);
       } else if (tabName === "AuditLogs") {
         sheet.appendRow(["Log ID", "Action", "Module", "User", "Details", "Timestamp"]);
+      } else if (tabName === "Settings") {
+        sheet.appendRow(["Setting Key", "Setting Value", "Description", "Last Updated"]);
+        var nowStr = formatSheetDate(new Date());
+        sheet.appendRow(["System Name", "Apex HelpDesk Pro", "Primary Help Desk Application Name", nowStr]);
+        sheet.appendRow(["Company Name", "Rathi Buildmart", "Organization Name", nowStr]);
+        sheet.appendRow(["Support Email", "misrpr@rathibuildmart.com", "Default Support & Escalation Email", nowStr]);
+        sheet.appendRow(["Spreadsheet ID", DEFAULT_SPREADSHEET_ID, "Connected Google Spreadsheet ID", nowStr]);
+        sheet.appendRow(["Drive Folder ID", DRIVE_ROOT_FOLDER_ID, "Root Google Drive Folder ID for Attachments", nowStr]);
+        sheet.appendRow(["Ticket ID Prefix", "HD-", "Prefix for generated ticket IDs", nowStr]);
+        sheet.appendRow(["Auto-Assignment", "Enabled", "Automatic ticket assignment to available agents", nowStr]);
+        sheet.appendRow(["Email Notifications", "Enabled", "Automated email alerts for tickets", nowStr]);
+        sheet.appendRow(["SLA Breach Alerts", "Enabled", "Automated alerts for SLA overdue tickets", nowStr]);
       }
     }
   });
