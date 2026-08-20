@@ -390,11 +390,43 @@ const handlePullSheetData = async (req: express.Request, res: express.Response) 
   let pulledDepartments: any[] = [];
   let pulledCategories: any[] = [];
   let pulledComments: any[] = [];
+  let pulledBranches: string[] = [];
+  let pulledPriorities: string[] = [];
+  let pulledStatuses: string[] = [];
+  let pulledRoles: string[] = [];
+  let pulledDesignations: string[] = [];
+  let pulledHierarchy: any[] = [];
+  let pulledTicketTypes: string[] = [];
+  let pulledArchivedTickets: any[] = [];
+  let pulledRolePermissions: any[] = [];
   let source = 'unknown';
   let isSuccess = false;
   let fetchError = null;
 
   const timestamp = Date.now();
+
+  // Helper to fetch and parse a Google Sheets CSV tab
+  const fetchCsvTab = async (tabName: string): Promise<string[][]> => {
+    try {
+      const csvUrl = `https://docs.google.com/spreadsheets/d/${targetSheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tabName)}&_t=${timestamp}`;
+      const csvRes = await fetch(csvUrl, {
+        redirect: 'follow',
+        headers: {
+          'Cache-Control': 'no-cache, no-store',
+          'Pragma': 'no-cache'
+        }
+      });
+      if (csvRes.ok) {
+        const text = await csvRes.text();
+        if (text && !text.includes('<!DOCTYPE') && !text.includes('accounts.google.com')) {
+          return parseCSV(text);
+        }
+      }
+    } catch (e: any) {
+      console.warn(`CSV fetch error for tab ${tabName}:`, e.message);
+    }
+    return [];
+  };
 
   // 1. Try pulling via Google Apps Script POST getAllData
   try {
@@ -415,7 +447,7 @@ const handlePullSheetData = async (req: express.Request, res: express.Response) 
     });
 
     const rawText = await appsScriptRes.text();
-    if (rawText && !rawText.includes('accounts.google.com') && !rawText.includes('ServiceLogin')) {
+    if (rawText && !rawText.includes('accounts.google.com') && !rawText.includes('ServiceLogin') && !rawText.includes('<!DOCTYPE')) {
       try {
         const data = JSON.parse(rawText);
         if ((data.tickets && Array.isArray(data.tickets) && data.tickets.length > 0) || (data.users && Array.isArray(data.users) && data.users.length > 0)) {
@@ -424,6 +456,15 @@ const handlePullSheetData = async (req: express.Request, res: express.Response) 
           pulledDepartments = data.departments || [];
           pulledCategories = data.categories || [];
           pulledComments = data.comments || [];
+          pulledBranches = data.branches || [];
+          pulledPriorities = data.prioritiesList || [];
+          pulledStatuses = data.statusesList || [];
+          pulledRoles = data.rolesList || [];
+          pulledDesignations = data.designationsList || [];
+          pulledHierarchy = data.hierarchy || [];
+          pulledTicketTypes = data.ticketTypes || [];
+          pulledArchivedTickets = data.archivedTickets || [];
+          pulledRolePermissions = data.rolePermissions || [];
           source = 'Google Apps Script API (Live)';
           isSuccess = true;
         }
@@ -435,148 +476,306 @@ const handlePullSheetData = async (req: express.Request, res: express.Response) 
     fetchError = err.message;
   }
 
-  // 2. Fallback: Directly pull CSV from Google Sheets tabs (Tickets & Users) with fresh timestamp to bypass caching
+  // 2. Fallback / Direct: Pull all CSV tabs in parallel directly from Google Sheets
   if (targetSheetId) {
-    if (pulledTickets.length === 0) {
-      try {
-        const ticketsCsvUrl = `https://docs.google.com/spreadsheets/d/${targetSheetId}/gviz/tq?tqx=out:csv&sheet=Tickets&_t=${timestamp}`;
-        const csvRes = await fetch(ticketsCsvUrl, {
-          redirect: 'follow',
-          headers: {
-            'Cache-Control': 'no-cache, no-store',
-            'Pragma': 'no-cache'
-          }
-        });
-        if (csvRes.ok) {
-          const csvText = await csvRes.text();
-          if (csvText && !csvText.includes('<!DOCTYPE') && !csvText.includes('accounts.google.com')) {
-            const rows = parseCSV(csvText);
-            if (rows.length > 1) {
-              const headerRow = rows[0].map(h => (h || '').trim().toLowerCase());
-              const is21Col = rows[0].length >= 21 || headerRow.includes('ticket type') || headerRow.includes('module');
-              
-              const parsedTickets = [];
-              for (let i = 1; i < rows.length; i++) {
-                const r = rows[i];
-                if (!r || !r[0]) continue;
-                const ticketId = r[0].trim();
-                if (!ticketId || ticketId.toLowerCase() === 'ticket id') continue;
+    try {
+      const [
+        tRows,
+        uRows,
+        dRows,
+        hRows,
+        deptRows,
+        cRows,
+        aRows,
+        pRows
+      ] = await Promise.all([
+        pulledTickets.length === 0 ? fetchCsvTab('Tickets') : Promise.resolve([]),
+        pulledUsers.length === 0 ? fetchCsvTab('Users') : Promise.resolve([]),
+        pulledBranches.length === 0 ? fetchCsvTab('MasterDropdowns') : Promise.resolve([]),
+        pulledHierarchy.length === 0 ? fetchCsvTab('TicketHierarchy') : Promise.resolve([]),
+        pulledDepartments.length === 0 ? fetchCsvTab('Departments') : Promise.resolve([]),
+        pulledCategories.length === 0 ? fetchCsvTab('Categories') : Promise.resolve([]),
+        pulledArchivedTickets.length === 0 ? fetchCsvTab('ArchivedTickets') : Promise.resolve([]),
+        pulledRolePermissions.length === 0 ? fetchCsvTab('RolePermissions') : Promise.resolve([])
+      ]);
 
-                if (is21Col) {
-                  const agentName = (r[14] || '').trim();
-                  parsedTickets.push({
-                    id: ticketId,
-                    employeeId: r[1] || 'EMP-001',
-                    employeeName: r[2] || 'User',
-                    employeeEmail: r[3] || '',
-                    ticketType: r[4] || 'Support / How-To',
-                    department: r[5] || 'IT Operations',
-                    location: r[6] || 'Headquarters',
-                    category: r[7] || 'Orbit',
-                    module: r[8] || '',
-                    subCategory: r[9] || '',
-                    subject: r[10] || 'Ticket ' + ticketId,
-                    description: r[11] || '',
-                    priority: r[12] || 'Medium',
-                    status: r[13] || 'Open',
-                    assignedAgentName: agentName,
-                    assignedAgentId: agentName,
-                    createdDate: r[15] || new Date().toISOString(),
-                    slaDueDate: r[16] || '',
-                    closedDate: r[17] || '',
-                    resolvedDate: r[17] || '',
-                    rating: r[18] ? Number(r[18]) : undefined,
-                    feedback: r[19] || '',
-                    contactNumber: r[20] || '',
-                    slaStatus: 'Within SLA',
-                    isRealTicket: true
-                  });
-                } else {
-                  const agentName = (r[12] || '').trim();
-                  parsedTickets.push({
-                    id: ticketId,
-                    employeeId: r[1] || 'EMP-001',
-                    employeeName: r[2] || 'User',
-                    employeeEmail: r[3] || '',
-                    department: r[4] || 'General',
-                    location: r[5] || 'Headquarters',
-                    category: r[6] || 'Support',
-                    subCategory: r[7] || '',
-                    subject: r[8] || 'Ticket ' + ticketId,
-                    description: r[9] || '',
-                    priority: r[10] || 'Medium',
-                    status: r[11] || 'Open',
-                    assignedAgentName: agentName,
-                    assignedAgentId: agentName,
-                    createdDate: r[13] || new Date().toISOString(),
-                    slaDueDate: r[14] || '',
-                    closedDate: r[15] || '',
-                    resolvedDate: r[15] || '',
-                    rating: r[16] ? Number(r[16]) : undefined,
-                    feedback: r[17] || '',
-                    contactNumber: r[18] || '',
-                    slaStatus: 'Within SLA',
-                    isRealTicket: true
-                  });
-                }
-              }
+      // Parse Tickets
+      if (tRows.length > 1) {
+        const headerRow = tRows[0].map(h => (h || '').trim().toLowerCase());
+        const is21Col = tRows[0].length >= 21 || headerRow.includes('ticket type') || headerRow.includes('module');
+        const parsedTickets = [];
+        for (let i = 1; i < tRows.length; i++) {
+          const r = tRows[i];
+          if (!r || !r[0]) continue;
+          const ticketId = r[0].trim();
+          if (!ticketId || ticketId.toLowerCase() === 'ticket id') continue;
 
-              if (parsedTickets.length > 0) {
-                pulledTickets = parsedTickets;
-                source = 'Google Sheets Direct Feed (Live)';
-                isSuccess = true;
-              }
-            }
+          if (is21Col) {
+            const agentName = (r[14] || '').trim();
+            parsedTickets.push({
+              id: ticketId,
+              employeeId: r[1] || 'EMP-001',
+              employeeName: r[2] || 'User',
+              employeeEmail: r[3] || '',
+              ticketType: r[4] || 'Support / How-To',
+              department: r[5] || 'IT Operations',
+              location: r[6] || 'Raipur',
+              category: r[7] || 'Orbit',
+              module: r[8] || '',
+              subCategory: r[9] || '',
+              subject: r[10] || 'Ticket ' + ticketId,
+              description: r[11] || '',
+              priority: r[12] || 'Medium',
+              status: r[13] || 'Open',
+              assignedAgentName: agentName,
+              assignedAgentId: agentName,
+              createdDate: r[15] || new Date().toISOString(),
+              slaDueDate: r[16] || '',
+              closedDate: r[17] || '',
+              resolvedDate: r[17] || '',
+              rating: r[18] ? Number(r[18]) : undefined,
+              feedback: r[19] || '',
+              contactNumber: r[20] || '',
+              slaStatus: 'Within SLA',
+              isRealTicket: true
+            });
+          } else {
+            const agentName = (r[12] || '').trim();
+            parsedTickets.push({
+              id: ticketId,
+              employeeId: r[1] || 'EMP-001',
+              employeeName: r[2] || 'User',
+              employeeEmail: r[3] || '',
+              department: r[4] || 'General',
+              location: r[5] || 'Raipur',
+              category: r[6] || 'Support',
+              subCategory: r[7] || '',
+              subject: r[8] || 'Ticket ' + ticketId,
+              description: r[9] || '',
+              priority: r[10] || 'Medium',
+              status: r[11] || 'Open',
+              assignedAgentName: agentName,
+              assignedAgentId: agentName,
+              createdDate: r[13] || new Date().toISOString(),
+              slaDueDate: r[14] || '',
+              closedDate: r[15] || '',
+              resolvedDate: r[15] || '',
+              rating: r[16] ? Number(r[16]) : undefined,
+              feedback: r[17] || '',
+              contactNumber: r[18] || '',
+              slaStatus: 'Within SLA',
+              isRealTicket: true
+            });
           }
         }
-      } catch (err: any) {
-        if (!fetchError) fetchError = err.message;
+        if (parsedTickets.length > 0) {
+          pulledTickets = parsedTickets;
+          source = 'Google Sheets Direct Feed (Live)';
+          isSuccess = true;
+        }
       }
-    }
 
-    if (pulledUsers.length === 0) {
-      try {
-        const usersCsvUrl = `https://docs.google.com/spreadsheets/d/${targetSheetId}/gviz/tq?tqx=out:csv&sheet=Users&_t=${timestamp}`;
-        const uCsvRes = await fetch(usersCsvUrl, {
-          redirect: 'follow',
-          headers: {
-            'Cache-Control': 'no-cache, no-store',
-            'Pragma': 'no-cache'
-          }
-        });
-        if (uCsvRes.ok) {
-          const uCsvText = await uCsvRes.text();
-          if (uCsvText && !uCsvText.includes('<!DOCTYPE') && !uCsvText.includes('accounts.google.com')) {
-            const uRows = parseCSV(uCsvText);
-            if (uRows.length > 1) {
-              const parsedUsers = [];
-              for (let i = 1; i < uRows.length; i++) {
-                const r = uRows[i];
-                if (!r || (!r[0] && !r[1])) continue;
-                const uid = r[0] ? r[0].trim() : '';
-                const empId = r[1] ? r[1].trim() : '';
-                if (uid.toLowerCase() === 'user id' || empId.toLowerCase() === 'employee id') continue;
-                parsedUsers.push({
-                  id: uid || `u_${empId}`,
-                  employeeId: empId || uid,
-                  name: r[2] || '',
-                  email: r[3] || '',
-                  role: r[4] || 'Employee',
-                  department: r[5] || 'General',
-                  designation: r[6] || 'Staff Member',
-                  location: r[7] || 'Headquarters',
-                  status: r[8] || 'Active',
-                  mobile: r[9] || ''
-                });
-              }
-              if (parsedUsers.length > 0) {
-                pulledUsers = parsedUsers;
-                isSuccess = true;
-              }
-            }
-          }
+      // Parse Users
+      if (uRows.length > 1) {
+        const parsedUsers = [];
+        for (let i = 1; i < uRows.length; i++) {
+          const r = uRows[i];
+          if (!r || (!r[0] && !r[1])) continue;
+          const uid = r[0] ? r[0].trim() : '';
+          const empId = r[1] ? r[1].trim() : '';
+          if (uid.toLowerCase() === 'user id' || empId.toLowerCase() === 'employee id') continue;
+          parsedUsers.push({
+            id: uid || `u_${empId}`,
+            employeeId: empId || uid,
+            name: r[2] || '',
+            email: r[3] || '',
+            role: r[4] || 'Employee',
+            department: r[5] || 'General',
+            designation: r[6] || 'Staff Member',
+            location: r[7] || 'Raipur',
+            status: r[8] || 'Active',
+            mobile: r[9] || ''
+          });
         }
-      } catch (err: any) {}
+        if (parsedUsers.length > 0) {
+          pulledUsers = parsedUsers;
+          isSuccess = true;
+        }
+      }
+
+      // Parse MasterDropdowns
+      if (dRows.length > 1) {
+        const bSet = new Set<string>();
+        const pSet = new Set<string>();
+        const sSet = new Set<string>();
+        const rSet = new Set<string>();
+        const dsgSet = new Set<string>();
+        const tSet = new Set<string>();
+
+        for (let i = 1; i < dRows.length; i++) {
+          const r = dRows[i];
+          const type = (r[1] || '').toLowerCase();
+          const val = (r[3] || '').trim();
+          if (!val) continue;
+          if (type.includes('branch') || type.includes('location')) bSet.add(val);
+          else if (type.includes('priority')) pSet.add(val);
+          else if (type.includes('status')) sSet.add(val);
+          else if (type.includes('role')) rSet.add(val);
+          else if (type.includes('designation')) dsgSet.add(val);
+          else if (type.includes('type')) tSet.add(val);
+        }
+
+        if (bSet.size > 0) pulledBranches = Array.from(bSet);
+        if (pSet.size > 0) pulledPriorities = Array.from(pSet);
+        if (sSet.size > 0) pulledStatuses = Array.from(sSet);
+        if (rSet.size > 0) pulledRoles = Array.from(rSet);
+        if (dsgSet.size > 0) pulledDesignations = Array.from(dsgSet);
+        if (tSet.size > 0) pulledTicketTypes = Array.from(tSet);
+        isSuccess = true;
+      }
+
+      // Parse TicketHierarchy
+      if (hRows.length > 1) {
+        const hierarchyList = [];
+        const typesSet = new Set(pulledTicketTypes);
+        for (let i = 1; i < hRows.length; i++) {
+          const r = hRows[i];
+          if (!r[1] && !r[2]) continue;
+          const typeVal = (r[1] || '').trim();
+          if (typeVal) typesSet.add(typeVal);
+          hierarchyList.push({
+            id: r[0] || `HRY-${i}`,
+            type: typeVal || 'Support / How-To',
+            category: (r[2] || '').trim(),
+            module: (r[3] || '').trim(),
+            subCategory: (r[4] || '').trim()
+          });
+        }
+        if (hierarchyList.length > 0) {
+          pulledHierarchy = hierarchyList;
+          pulledTicketTypes = Array.from(typesSet);
+          isSuccess = true;
+        }
+      }
+
+      // Parse Departments
+      if (deptRows.length > 1) {
+        const deptsList = [];
+        for (let i = 1; i < deptRows.length; i++) {
+          const r = deptRows[i];
+          if (!r[1]) continue;
+          deptsList.push({
+            id: r[0] || `d_${i}`,
+            name: (r[1] || '').trim(),
+            headName: (r[2] || 'Unassigned').trim(),
+            supportTeam: (r[3] || 'Core Team').trim()
+          });
+        }
+        if (deptsList.length > 0) {
+          pulledDepartments = deptsList;
+          isSuccess = true;
+        }
+      }
+
+      // Parse Categories
+      if (cRows.length > 1) {
+        const catsList = [];
+        for (let i = 1; i < cRows.length; i++) {
+          const r = cRows[i];
+          if (!r[1]) continue;
+          catsList.push({
+            id: r[0] || `c_${i}`,
+            name: (r[1] || '').trim(),
+            department: (r[2] || 'IT Operations').trim(),
+            subCategories: r[3] ? r[3].split(',').map(s => s.trim()).filter(Boolean) : [],
+            defaultPriority: (r[4] || 'Medium').trim()
+          });
+        }
+        if (catsList.length > 0) {
+          pulledCategories = catsList;
+          isSuccess = true;
+        }
+      }
+
+      // Parse ArchivedTickets
+      if (aRows.length > 1) {
+        const archivedList = [];
+        for (let i = 1; i < aRows.length; i++) {
+          const r = aRows[i];
+          if (!r || !r[3]) continue; // r[3] is Ticket ID
+          const ticketId = (r[3] || '').trim();
+          if (!ticketId || ticketId.toLowerCase() === 'ticket id') continue;
+          archivedList.push({
+            archivedAt: r[0] || '',
+            archivedBy: r[1] || '',
+            archiveReason: r[2] || '',
+            id: ticketId,
+            employeeId: r[4] || 'EMP-001',
+            employeeName: r[5] || '',
+            employeeEmail: r[6] || '',
+            department: r[7] || 'IT Operations',
+            location: r[8] || 'Raipur',
+            category: r[9] || '',
+            subCategory: r[10] || '',
+            subject: r[11] || '',
+            description: r[12] || '',
+            priority: r[13] || 'Medium',
+            status: r[14] || 'Resolved',
+            assignedAgentName: r[15] || '',
+            createdDate: r[16] || '',
+            slaDueDate: r[17] || '',
+            closedDate: r[18] || '',
+            rating: r[19] ? Number(r[19]) : undefined,
+            feedback: r[20] || '',
+            contactNumber: r[21] || ''
+          });
+        }
+        if (archivedList.length > 0) {
+          pulledArchivedTickets = archivedList;
+          isSuccess = true;
+        }
+      }
+
+      // Parse RolePermissions
+      if (pRows.length > 1) {
+        const permsList = [];
+        for (let i = 1; i < pRows.length; i++) {
+          const r = pRows[i];
+          if (!r || !r[0]) continue;
+          const role = (r[0] || '').trim();
+          if (!role || role.toLowerCase() === 'role') continue;
+          const toBool = (val: string) => (val || '').trim().toUpperCase() === 'TRUE';
+          permsList.push({
+            role,
+            canViewDashboard: toBool(r[1]),
+            canViewTickets: toBool(r[2]),
+            canCreateTickets: toBool(r[3]),
+            canEditTickets: toBool(r[4]),
+            canDeleteTickets: toBool(r[5]),
+            canViewFeedback: toBool(r[6]),
+            canSubmitFeedback: toBool(r[7]),
+            canViewReports: toBool(r[8]),
+            canManageUsers: toBool(r[9]),
+            canDeleteUsersPermanently: toBool(r[10]),
+            canManageDepartments: toBool(r[11]),
+            canManageCategories: toBool(r[12]),
+            canManageSLA: toBool(r[13]),
+            canManageDropdowns: toBool(r[14]),
+            canAccessGoogleDriveSync: toBool(r[15]),
+            canAccessAppsScript: toBool(r[16]),
+            canViewAuditLogs: toBool(r[17]),
+            canManageSystemSettings: toBool(r[18]),
+            canManageRolePermissions: toBool(r[19]),
+            canAccessArchivedData: toBool(r[20])
+          });
+        }
+        if (permsList.length > 0) {
+          pulledRolePermissions = permsList;
+          isSuccess = true;
+        }
+      }
+    } catch (err: any) {
+      if (!fetchError) fetchError = err.message;
     }
   }
 
@@ -587,12 +786,21 @@ const handlePullSheetData = async (req: express.Request, res: express.Response) 
     users: pulledUsers,
     departments: pulledDepartments,
     categories: pulledCategories,
+    branches: pulledBranches,
+    prioritiesList: pulledPriorities,
+    statusesList: pulledStatuses,
+    rolesList: pulledRoles,
+    designationsList: pulledDesignations,
+    hierarchy: pulledHierarchy,
+    ticketTypes: pulledTicketTypes,
+    archivedTickets: pulledArchivedTickets,
+    rolePermissions: pulledRolePermissions,
     comments: pulledComments,
     source,
     spreadsheetId: targetSheetId,
     timestamp: new Date().toISOString(),
     message: isSuccess
-      ? `Successfully pulled ${pulledTickets.length} real tickets from ${source} (${targetSheetId}).`
+      ? `Successfully pulled live data from ${source} (${targetSheetId}): ${pulledTickets.length} tickets, ${pulledUsers.length} users, ${pulledDepartments.length} departments, ${pulledCategories.length} categories, ${pulledBranches.length} locations, ${pulledHierarchy.length} hierarchy mappings.`
       : `No external tickets could be fetched from Google Sheets. ${fetchError ? `(${fetchError})` : 'Verify sheet permissions.'}`
   });
 };

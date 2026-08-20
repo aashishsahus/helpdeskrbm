@@ -26,7 +26,7 @@ import {
   Filter
 } from 'lucide-react';
 import { DateRangeFilter } from '../components/DateRangeFilter';
-import { DateRangeFilterType, isDateInRange, getDateRangeLabel } from '../utils/dateUtils';
+import { DateRangeFilterType, isDateInRange, getDateRangeLabel, formatDateTime } from '../utils/dateUtils';
 import { RefreshButton } from '../components/RefreshButton';
 
 export const AdminDashboardView: React.FC = () => {
@@ -413,7 +413,7 @@ export const AdminDashboardView: React.FC = () => {
                       {t.assignedAgentName || <span className="text-gray-400 italic font-normal">Unassigned</span>}
                     </td>
                     <td className="px-4 py-3 text-gray-400 font-mono text-[11px]">
-                      {new Date(t.createdDate).toLocaleDateString()}
+                      {formatDateTime(t.createdDate) || t.createdDate}
                     </td>
                   </tr>
                 ))}

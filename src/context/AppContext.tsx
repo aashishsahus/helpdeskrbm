@@ -47,7 +47,7 @@ import {
 } from '../data/initialData';
 import { formatDateTime, getFormattedNow } from '../utils/dateUtils';
 import { sendTicketRaisedEmails, sendTicketClosedEmails } from '../utils/emailNotificationService';
-import { getStoredHierarchy, getStoredTicketTypes } from '../data/ticketHierarchy';
+import { getStoredHierarchy, getStoredTicketTypes, saveStoredHierarchy, saveStoredTicketTypes } from '../data/ticketHierarchy';
 
 interface AppContextType {
   currentUser: User | null;
@@ -2306,11 +2306,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
-  // Real-time bidirectional sync with backend runtime configuration
+  // Sync backend runtime configuration on load and on demand
   useEffect(() => {
     let isMounted = true;
+    let lastFetchedAt = 0;
 
     const fetchServerConfig = async () => {
+      const now = Date.now();
+      // Throttle: don't re-fetch if fetched within the last 60 seconds
+      if (now - lastFetchedAt < 60000 && lastFetchedAt > 0) return;
+      lastFetchedAt = now;
+
       try {
         const res = await fetch('/api/google/get-config');
         const data = await res.json();
@@ -2350,22 +2356,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     };
 
-    // 1. Initial fetch immediately on mount
+    // 1. Initial fetch once on mount
     fetchServerConfig();
 
-    // 2. Auto-fetch whenever window gains focus (e.g. user switches tabs or returns)
+    // 2. Passive window focus with throttling
     const onWindowFocus = () => {
       fetchServerConfig();
     };
     window.addEventListener('focus', onWindowFocus);
 
-    // 3. Periodic real-time background poll every 12 seconds to sync changes made by other admins/users
-    const interval = setInterval(fetchServerConfig, 12000);
-
     return () => {
       isMounted = false;
       window.removeEventListener('focus', onWindowFocus);
-      clearInterval(interval);
     };
   }, []);
 
@@ -2617,7 +2619,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               dMap.set(key, { ...dMap.get(key), ...d });
             }
           });
-          return Array.from(dMap.values());
+          const updated = Array.from(dMap.values());
+          try { localStorage.setItem('hd_departments_v1', JSON.stringify(updated)); } catch {}
+          return updated;
         });
       }
 
@@ -2631,8 +2635,52 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               cMap.set(key, { ...cMap.get(key), ...c });
             }
           });
-          return Array.from(cMap.values());
+          const updated = Array.from(cMap.values());
+          try { localStorage.setItem('hd_categories_v1', JSON.stringify(updated)); } catch {}
+          return updated;
         });
+      }
+
+      // Update dropdown lists from MasterDropdowns tab
+      if (data.success && Array.isArray(data.branches) && data.branches.length > 0) {
+        setBranches(data.branches);
+        try { localStorage.setItem('hd_branches_v1', JSON.stringify(data.branches)); } catch {}
+      }
+      if (data.success && Array.isArray(data.prioritiesList) && data.prioritiesList.length > 0) {
+        setPrioritiesList(data.prioritiesList);
+        try { localStorage.setItem('hd_priorities_v1', JSON.stringify(data.prioritiesList)); } catch {}
+      }
+      if (data.success && Array.isArray(data.statusesList) && data.statusesList.length > 0) {
+        setStatusesList(data.statusesList);
+        try { localStorage.setItem('hd_statuses_v1', JSON.stringify(data.statusesList)); } catch {}
+      }
+      if (data.success && Array.isArray(data.rolesList) && data.rolesList.length > 0) {
+        setRolesList(data.rolesList);
+        try { localStorage.setItem('hd_roles_v1', JSON.stringify(data.rolesList)); } catch {}
+      }
+      if (data.success && Array.isArray(data.designationsList) && data.designationsList.length > 0) {
+        setDesignationsList(data.designationsList);
+        try { localStorage.setItem('hd_designations_v1', JSON.stringify(data.designationsList)); } catch {}
+      }
+
+      // Update TicketHierarchy & TicketTypes
+      if (data.success && Array.isArray(data.hierarchy) && data.hierarchy.length > 0) {
+        saveStoredHierarchy(data.hierarchy);
+      }
+      if (data.success && Array.isArray(data.ticketTypes) && data.ticketTypes.length > 0) {
+        saveStoredTicketTypes(data.ticketTypes);
+      }
+
+      // Update Archived Tickets
+      if (data.success && Array.isArray(data.archivedTickets) && data.archivedTickets.length > 0) {
+        setArchivedTickets(data.archivedTickets);
+        try { localStorage.setItem('hd_archived_tickets_v1', JSON.stringify(data.archivedTickets)); } catch {}
+      }
+
+      // Update Role Permissions
+      if (data.success && Array.isArray(data.rolePermissions) && data.rolePermissions.length > 0) {
+        setRolePermissions(data.rolePermissions);
+        try { localStorage.setItem('hd_role_permissions_v1', JSON.stringify(data.rolePermissions)); } catch {}
       }
 
       setLastRefreshedAt(new Date().toLocaleTimeString());
