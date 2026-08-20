@@ -2909,7 +2909,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     htmlBody,
     ticketId,
     ticketSubject,
-    triggerEvent = 'Manual Email'
+    triggerEvent = 'Manual Email',
+    autoOpenGmailFallback = false
   }: {
     recipientEmail: string;
     recipientName: string;
@@ -2919,9 +2920,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     ticketId?: string;
     ticketSubject?: string;
     triggerEvent?: string;
-  }): Promise<boolean> => {
+    autoOpenGmailFallback?: boolean;
+  }): Promise<{ success: boolean; deliveredVia?: string; message?: string; mailtoUrl?: string; webGmailUrl?: string; error?: string }> => {
     try {
       const scriptUrl = settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl;
+      const smtpConfig = (settings.smtpHost && settings.smtpUser && settings.smtpPass) ? {
+        host: settings.smtpHost,
+        port: settings.smtpPort,
+        user: settings.smtpUser,
+        pass: settings.smtpPass,
+        secure: settings.smtpSecure,
+        senderName: settings.smtpSenderName || settings.companyName || 'Rathi Buildmart HelpDesk'
+      } : undefined;
+
       const res = await fetch('/api/google/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2933,12 +2944,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           htmlBody: htmlBody || body,
           ticketId,
           eventType: triggerEvent,
-          webAppUrl: scriptUrl
+          webAppUrl: scriptUrl,
+          smtpConfig
         })
       });
 
       const data = await res.json();
-      const isSuccess = data.success !== false;
+      const isSuccess = data.success === true;
+
+      // If cloud email wasn't delivered and autoOpenGmailFallback is requested, launch web Gmail
+      if (!isSuccess && autoOpenGmailFallback && data.webGmailUrl) {
+        try {
+          window.open(data.webGmailUrl, '_blank', 'noopener,noreferrer');
+        } catch {
+          // Ignore popup block
+        }
+      }
 
       addNotificationLog({
         channel: 'email',
@@ -2952,11 +2973,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         fullMessage: body,
         htmlBody,
         status: isSuccess ? 'Delivered' : 'Failed',
+        errorMessage: !isSuccess ? (data.error || data.message) : undefined,
         sentBy: currentUser ? `${currentUser.name} (${currentUser.role})` : 'System'
       });
 
-      addAuditLog('EMAIL_DISPATCH', 'Notification Hub', `Dispatched email notification to ${recipientEmail} for ticket ${ticketId || 'N/A'}`);
-      return isSuccess;
+      addAuditLog('EMAIL_DISPATCH', 'Notification Hub', `Dispatched email notification to ${recipientEmail} for ticket ${ticketId || 'N/A'} (Result: ${isSuccess ? 'Success' : 'Fallback / Error'})`);
+      return {
+        success: isSuccess,
+        deliveredVia: data.deliveredVia,
+        message: data.message,
+        mailtoUrl: data.mailtoUrl,
+        webGmailUrl: data.webGmailUrl,
+        error: data.error
+      };
     } catch (err: any) {
       console.warn('Dispatch email error:', err);
       addNotificationLog({
@@ -2969,10 +2998,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         subject,
         messagePreview: body.slice(0, 150),
         fullMessage: body,
-        status: 'Sent',
+        htmlBody,
+        status: 'Failed',
+        errorMessage: err.message,
         sentBy: currentUser ? `${currentUser.name} (${currentUser.role})` : 'System'
       });
-      return true;
+      return {
+        success: false,
+        message: err.message || 'Network error sending email',
+        error: err.message
+      };
     }
   };
 

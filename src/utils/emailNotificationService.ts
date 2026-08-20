@@ -159,15 +159,17 @@ export function generateHtmlEmailTemplate(options: {
  */
 export async function sendEmailNotification(
   payload: EmailPayload,
-  webAppUrl?: string
-): Promise<{ success: boolean; message: string }> {
+  webAppUrl?: string,
+  smtpConfig?: { host?: string; port?: number; user?: string; pass?: string; secure?: boolean; senderName?: string }
+): Promise<{ success: boolean; message: string; deliveredVia?: string; mailtoUrl?: string; webGmailUrl?: string }> {
   try {
     const res = await fetch('/api/google/send-email', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         ...payload,
-        webAppUrl
+        webAppUrl,
+        smtpConfig
       })
     });
     const data = await res.json();
@@ -192,6 +194,14 @@ export async function sendTicketRaisedEmails(
 ): Promise<{ employeeSent: boolean; agentSent: boolean }> {
   const scriptUrl = settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl;
   const adminEmail = settings.supportEmail || 'misrpr@rathibuildmart.com';
+  const smtpConfig = (settings.smtpHost && settings.smtpUser && settings.smtpPass) ? {
+    host: settings.smtpHost,
+    port: settings.smtpPort,
+    user: settings.smtpUser,
+    pass: settings.smtpPass,
+    secure: settings.smtpSecure,
+    senderName: settings.smtpSenderName || settings.companyName || 'Rathi Buildmart HelpDesk'
+  } : undefined;
 
   // 1. Resolve Assigned Agent Email
   let assignedAgentEmail = adminEmail;
@@ -276,7 +286,8 @@ export async function sendTicketRaisedEmails(
         ticketId: ticket.id,
         eventType: 'ticket_created'
       },
-      scriptUrl
+      scriptUrl,
+      smtpConfig
     );
     results.agentSent = agentRes.success;
   }
@@ -296,6 +307,14 @@ export async function sendTicketClosedEmails(
 ): Promise<{ employeeSent: boolean; agentSent: boolean }> {
   const scriptUrl = settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl;
   const adminEmail = settings.supportEmail || 'misrpr@rathibuildmart.com';
+  const smtpConfig = (settings.smtpHost && settings.smtpUser && settings.smtpPass) ? {
+    host: settings.smtpHost,
+    port: settings.smtpPort,
+    user: settings.smtpUser,
+    pass: settings.smtpPass,
+    secure: settings.smtpSecure,
+    senderName: settings.smtpSenderName || settings.companyName || 'Rathi Buildmart HelpDesk'
+  } : undefined;
 
   // 1. Resolve Assigned Agent Email
   let assignedAgentEmail = adminEmail;
@@ -345,7 +364,8 @@ export async function sendTicketClosedEmails(
         ticketId: ticket.id,
         eventType: 'ticket_closed'
       },
-      scriptUrl
+      scriptUrl,
+      smtpConfig
     );
     results.employeeSent = empRes.success;
   }
@@ -382,7 +402,8 @@ export async function sendTicketClosedEmails(
         ticketId: ticket.id,
         eventType: 'ticket_closed'
       },
-      scriptUrl
+      scriptUrl,
+      smtpConfig
     );
     results.agentSent = agentRes.success;
   }

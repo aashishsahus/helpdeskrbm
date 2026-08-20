@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Mail, Send, X, CheckCircle2, Copy, Sparkles, ExternalLink, Ticket as TicketIcon } from 'lucide-react';
+import { Mail, Send, X, CheckCircle2, Copy, Sparkles, ExternalLink, Ticket as TicketIcon, AlertCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 interface SendEmailModalProps {
@@ -102,6 +102,8 @@ Rathi Buildmart IT Operations & Support Team`;
 
   if (!isOpen) return null;
 
+  const [cloudResult, setCloudResult] = useState<{ success: boolean; message?: string; error?: string } | null>(null);
+
   const handleTemplateSelect = (tplId: string) => {
     setSelectedTemplateId(tplId);
     const tpl = emailTemplates.find(t => t.id === tplId);
@@ -116,8 +118,9 @@ Rathi Buildmart IT Operations & Support Team`;
     if (!recipientEmail || !subject.trim() || !body.trim()) return;
 
     setSending(true);
+    setCloudResult(null);
     try {
-      await dispatchEmail({
+      const res = await dispatchEmail({
         recipientEmail: recipientEmail.trim(),
         recipientName: recipientName.trim(),
         subject: subject.trim(),
@@ -127,16 +130,22 @@ Rathi Buildmart IT Operations & Support Team`;
         triggerEvent: selectedTemplateId ? (emailTemplates.find(t => t.id === selectedTemplateId)?.name || 'Direct Email') : 'Direct Email'
       });
 
-      setSentSuccess(true);
-      setTimeout(() => {
-        onClose();
-      }, 1500);
-    } catch (err) {
+      if (res.success) {
+        setSentSuccess(true);
+      } else {
+        setCloudResult({
+          success: false,
+          message: res.message || 'Google Apps Script Web App not configured or returned access restriction.',
+          error: res.error
+        });
+      }
+    } catch (err: any) {
       console.error(err);
-      setSentSuccess(true);
-      setTimeout(() => {
-        onClose();
-      }, 1500);
+      setCloudResult({
+        success: false,
+        message: 'Network error communicating with email gateway.',
+        error: err.message
+      });
     } finally {
       setSending(false);
     }
@@ -171,7 +180,7 @@ Rathi Buildmart IT Operations & Support Team`;
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 hover:bg-white/10 text-gray-300 hover:text-white rounded-lg transition-colors"
+            className="p-1.5 hover:bg-white/10 text-gray-300 hover:text-white rounded-lg transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -190,35 +199,49 @@ Rathi Buildmart IT Operations & Support Team`;
               </p>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
-              <a
-                href={webGmailUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span>Open in Web Gmail</span>
-              </a>
-              <a
-                href={mailtoUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span>Open in Mail App</span>
-              </a>
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl text-xs"
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-sm cursor-pointer"
               >
-                Close
+                Close & Return
               </button>
             </div>
           </div>
         ) : (
           <form onSubmit={handleSendEmail} className="p-6 space-y-4 overflow-y-auto flex-1">
+            {cloudResult && (
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-2 text-xs text-amber-900">
+                <div className="flex items-start gap-2 font-bold text-amber-950">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <span>Cloud Gateway Notice: Automated sending requires Apps Script deployment or SMTP.</span>
+                </div>
+                <p className="text-[11px] text-amber-800 leading-relaxed">
+                  Aap turant bina kisi setup ke neeche diye gaye <strong>"Open in Web Gmail"</strong> button par click karke email bhej sakte hain:
+                </p>
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <a
+                    href={webGmailUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shadow-xs"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Send Now via Web Gmail</span>
+                  </a>
+                  <a
+                    href={mailtoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shadow-xs"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Open in Mail App</span>
+                  </a>
+                </div>
+              </div>
+            )}
+
             {/* Recipient Details Row */}
             <div className="bg-gray-50 p-3.5 border border-gray-200 rounded-xl flex items-center justify-between gap-3">
               <div className="min-w-0">
@@ -236,7 +259,7 @@ Rathi Buildmart IT Operations & Support Team`;
                 <button
                   type="button"
                   onClick={handleCopyEmail}
-                  className="p-1.5 text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-200 rounded-lg flex items-center gap-1 border border-gray-200 bg-white"
+                  className="p-1.5 text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-200 rounded-lg flex items-center gap-1 border border-gray-200 bg-white cursor-pointer"
                   title="Copy Email Address"
                 >
                   <Copy className="w-3.5 h-3.5" />
@@ -300,21 +323,23 @@ Rathi Buildmart IT Operations & Support Team`;
 
             {/* Action buttons */}
             <div className="flex items-center justify-between pt-2 border-t border-gray-100 flex-wrap gap-2">
-              <a
-                href={mailtoUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-3 py-1.5 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg flex items-center gap-1 font-medium border border-blue-200"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span>Open Mail Client</span>
-              </a>
+              <div className="flex items-center gap-2">
+                <a
+                  href={webGmailUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 text-xs text-red-700 hover:text-white hover:bg-red-600 bg-red-50 rounded-xl flex items-center gap-1 font-bold border border-red-200 transition-colors"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Send with Web Gmail (1-Click)</span>
+                </a>
+              </div>
 
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-4 py-2 text-xs font-bold text-gray-600 hover:bg-gray-100 rounded-xl transition-colors"
+                  className="px-3.5 py-2 text-xs font-bold text-gray-600 hover:bg-gray-100 rounded-xl transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -324,7 +349,7 @@ Rathi Buildmart IT Operations & Support Team`;
                   className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl flex items-center gap-2 shadow-md transition-all cursor-pointer"
                 >
                   <Send className="w-3.5 h-3.5" />
-                  <span>{sending ? 'Dispatching...' : 'Send Cloud Email'}</span>
+                  <span>{sending ? 'Dispatching...' : 'Send Cloud / SMTP'}</span>
                 </button>
               </div>
             </div>

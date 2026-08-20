@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
+import nodemailer from 'nodemailer';
 
 const app = express();
 const PORT = 3000;
@@ -1093,7 +1094,7 @@ app.post('/api/google/sync-ticket', async (req, res) => {
 });
 
 app.post('/api/google/send-email', async (req, res) => {
-  const { recipientEmail, recipientName, subject, body, htmlBody, ticketId, eventType, webAppUrl } = req.body;
+  const { recipientEmail, recipientName, subject, body, htmlBody, ticketId, eventType, webAppUrl, smtpConfig } = req.body;
   const targetUrl = (webAppUrl && webAppUrl.trim()) || runtimeConfig.webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
 
   const plainText = body || '';
@@ -1103,6 +1104,46 @@ app.post('/api/google/send-email', async (req, res) => {
   const mailtoUrl = `mailto:${recipientEmail}?subject=${encodedSubj}&body=${encodedBody}`;
   const webGmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(recipientEmail || '')}&su=${encodedSubj}&body=${encodedBody}`;
 
+  // 1. Check if SMTP configuration is provided (via body, environment, or settings)
+  const host = smtpConfig?.host || process.env.SMTP_HOST;
+  const port = Number(smtpConfig?.port || process.env.SMTP_PORT || 587);
+  const user = smtpConfig?.user || process.env.SMTP_USER;
+  const pass = smtpConfig?.pass || process.env.SMTP_PASS;
+  const secure = smtpConfig?.secure !== undefined ? Boolean(smtpConfig.secure) : (port === 465);
+
+  if (host && user && pass) {
+    try {
+      const transporter = nodemailer.createTransport({
+        host,
+        port,
+        secure,
+        auth: { user, pass },
+        tls: { rejectUnauthorized: false }
+      });
+
+      const info = await transporter.sendMail({
+        from: `"${smtpConfig?.senderName || 'Rathi Buildmart HelpDesk'}" <${user}>`,
+        to: recipientEmail,
+        subject: subject || 'Rathi Buildmart HelpDesk Notification',
+        text: plainText,
+        html: htmlContent
+      });
+
+      return res.json({
+        success: true,
+        deliveredVia: 'SMTP Mail Server',
+        recipientEmail,
+        message: `Email successfully sent via SMTP to ${recipientEmail}`,
+        messageId: info.messageId,
+        mailtoUrl,
+        webGmailUrl
+      });
+    } catch (smtpErr: any) {
+      console.warn('SMTP dispatch failed, falling back to Apps Script / Web Gmail:', smtpErr);
+    }
+  }
+
+  // 2. Try Google Apps Script dispatch
   let appsScriptSuccess = false;
   let appsScriptDetails: any = null;
   let errorMessage: string | null = null;
@@ -1137,7 +1178,7 @@ app.post('/api/google/send-email', async (req, res) => {
     } catch {
       appsScriptDetails = { raw: resText.slice(0, 300) };
       if (resText.includes('<!DOCTYPE') || resText.includes('<html')) {
-        errorMessage = 'Google Apps Script Web App redirected to login. Ensure Web App is deployed with "Execute as: Me" and "Who has access: Anyone".';
+        errorMessage = 'Google Apps Script Web App URL returned a Google login redirect. To enable automated cloud emails: In Google Apps Script > Deploy > New Deployment > Set "Who has access" to "Anyone" and copy the Web App URL into Settings.';
       } else {
         errorMessage = 'Google Apps Script endpoint returned non-JSON text.';
       }

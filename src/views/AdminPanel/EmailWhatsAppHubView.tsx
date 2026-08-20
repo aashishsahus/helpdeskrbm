@@ -91,6 +91,12 @@ export const EmailWhatsAppHubView: React.FC = () => {
   const [quickBody, setQuickBody] = useState('');
   const [quickSending, setQuickSending] = useState(false);
   const [quickSuccessMsg, setQuickSuccessMsg] = useState('');
+  const [quickErrorMsg, setQuickErrorMsg] = useState<{ message: string; webGmailUrl?: string; mailtoUrl?: string } | null>(null);
+
+  // SMTP Settings & Test State
+  const [testEmailRecipient, setTestEmailRecipient] = useState(settings.supportEmail || 'misrpr@rathibuildmart.com');
+  const [testingSmtp, setTestingSmtp] = useState(false);
+  const [smtpTestResult, setSmtpTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
   // Copied alert state
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -243,6 +249,9 @@ export const EmailWhatsAppHubView: React.FC = () => {
     const tkt = tickets.find(t => t.id === quickSelectedTicketId);
 
     setQuickSending(true);
+    setQuickErrorMsg(null);
+    setQuickSuccessMsg('');
+
     if (quickChannel === 'whatsapp') {
       dispatchWhatsApp({
         recipientPhone: quickRecipientContact.trim(),
@@ -254,7 +263,7 @@ export const EmailWhatsAppHubView: React.FC = () => {
       });
       setQuickSuccessMsg('WhatsApp window launched! Dispatched & recorded into history report.');
     } else {
-      await dispatchEmail({
+      const res = await dispatchEmail({
         recipientEmail: quickRecipientContact.trim(),
         recipientName: quickRecipientName.trim() || 'Employee',
         subject: quickSubject.trim() || `[${tkt?.id || 'HelpDesk'}] Notification`,
@@ -263,10 +272,53 @@ export const EmailWhatsAppHubView: React.FC = () => {
         ticketSubject: tkt?.subject,
         triggerEvent: 'Direct Hub Email'
       });
-      setQuickSuccessMsg('Email dispatched successfully! Recorded into history report.');
+
+      if (res.success) {
+        setQuickSuccessMsg(`Email dispatched successfully via ${res.deliveredVia || 'Cloud'}! Recorded into history report.`);
+      } else {
+        setQuickErrorMsg({
+          message: res.message || 'Automated cloud email could not be delivered directly. Use 1-Click Web Gmail below.',
+          webGmailUrl: res.webGmailUrl,
+          mailtoUrl: res.mailtoUrl
+        });
+      }
     }
     setQuickSending(false);
-    setTimeout(() => setQuickSuccessMsg(''), 4000);
+  };
+
+  const handleTestEmailDispatch = async () => {
+    if (!testEmailRecipient.trim()) return;
+    setTestingSmtp(true);
+    setSmtpTestResult(null);
+
+    try {
+      const res = await dispatchEmail({
+        recipientEmail: testEmailRecipient.trim(),
+        recipientName: 'HelpDesk Admin',
+        subject: `[Test Ping] Rathi Buildmart HelpDesk Notification Test (${new Date().toLocaleTimeString()})`,
+        body: `Hello,\n\nThis is a test notification dispatched from Rathi Buildmart HelpDesk system to verify active email gateway configurations.\n\nTimestamp: ${new Date().toISOString()}\nSystem Name: ${settings.systemName || 'Rathi Buildmart HelpDesk'}`,
+        triggerEvent: 'Gateway Diagnostic Test'
+      });
+
+      if (res.success) {
+        setSmtpTestResult({
+          success: true,
+          message: `Success! Test email delivered via ${res.deliveredVia || 'Cloud Gateway'} to ${testEmailRecipient}`
+        });
+      } else {
+        setSmtpTestResult({
+          success: false,
+          message: res.message || 'Email delivery failed. Please check Google Apps Script deployment or SMTP credentials.'
+        });
+      }
+    } catch (err: any) {
+      setSmtpTestResult({
+        success: false,
+        message: `Error testing email: ${err.message}`
+      });
+    } finally {
+      setTestingSmtp(false);
+    }
   };
 
   const handleQuickTemplateChange = (tplId: string) => {
@@ -999,12 +1051,66 @@ export const EmailWhatsAppHubView: React.FC = () => {
                 />
               </div>
 
-              {/* Submit */}
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
+              {/* Submit / Action Buttons */}
+              {quickSuccessMsg && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl text-xs font-semibold flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{quickSuccessMsg}</span>
+                </div>
+              )}
+
+              {quickErrorMsg && (
+                <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs space-y-2">
+                  <div className="flex items-start gap-2 font-bold text-amber-950">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <span>{quickErrorMsg.message}</span>
+                  </div>
+                  {quickErrorMsg.webGmailUrl && (
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <a
+                        href={quickErrorMsg.webGmailUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shadow-xs"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        <span>Send Now via Web Gmail</span>
+                      </a>
+                      {quickErrorMsg.mailtoUrl && (
+                        <a
+                          href={quickErrorMsg.mailtoUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shadow-xs"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          <span>Open in Mail App</span>
+                        </a>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex items-center justify-between pt-2 border-t border-gray-100 flex-wrap gap-2">
+                {quickChannel === 'email' ? (
+                  <div className="flex items-center gap-2">
+                    <a
+                      href={`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(quickRecipientContact)}&su=${encodeURIComponent(quickSubject)}&body=${encodeURIComponent(quickBody)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-1.5 text-xs text-red-700 hover:text-white hover:bg-red-600 bg-red-50 rounded-xl flex items-center gap-1 font-bold border border-red-200 transition-colors"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>Send with Web Gmail (1-Click)</span>
+                    </a>
+                  </div>
+                ) : <div />}
+
                 <button
                   type="submit"
                   disabled={quickSending || !quickRecipientContact.trim() || !quickBody.trim()}
-                  className={`px-6 py-2.5 text-white font-bold text-xs rounded-xl flex items-center gap-2 shadow-md transition-all ${
+                  className={`px-6 py-2.5 text-white font-bold text-xs rounded-xl flex items-center gap-2 shadow-md transition-all cursor-pointer ${
                     quickChannel === 'whatsapp'
                       ? 'bg-emerald-600 hover:bg-emerald-700'
                       : 'bg-blue-600 hover:bg-blue-700'
@@ -1016,7 +1122,7 @@ export const EmailWhatsAppHubView: React.FC = () => {
                       ? 'Dispatching...'
                       : quickChannel === 'whatsapp'
                       ? 'Launch WhatsApp Dispatch'
-                      : 'Send Direct Email'}
+                      : 'Send via Cloud / SMTP'}
                   </span>
                 </button>
               </div>
@@ -1063,35 +1169,179 @@ export const EmailWhatsAppHubView: React.FC = () => {
       {/* TAB 4: GATEWAYS & AUTOMATION SETTINGS */}
       {/* ========================================================================= */}
       {activeTab === 'settings' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Email Gateway Config */}
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Method A: Google Apps Script Web App Dispatcher */}
+            <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-xs space-y-4">
+              <div className="flex items-center gap-3 border-b border-gray-100 pb-3">
+                <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl">
+                  <Mail className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-gray-900">Google Apps Script Web App Dispatcher</h3>
+                  <p className="text-xs text-gray-500">Method 1: Google Workspace / Gmail Apps Script</p>
+                </div>
+              </div>
+
+              <div className="space-y-3 text-xs">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Google Apps Script Web App URL</label>
+                  <input
+                    type="text"
+                    value={settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || ''}
+                    onChange={e => updateSettings({ googleAppsScriptWebAppUrl: e.target.value, appsScriptUrl: e.target.value })}
+                    placeholder="https://script.google.com/macros/s/.../exec"
+                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl font-mono text-xs font-medium"
+                  />
+                </div>
+
+                <div className="p-3.5 bg-blue-50/80 text-blue-900 rounded-xl text-[11px] border border-blue-200 leading-relaxed space-y-1.5">
+                  <p className="font-bold">📋 Deployment Checklist for Google Apps Script:</p>
+                  <ol className="list-decimal list-inside space-y-1 text-blue-800">
+                    <li>Open your Google Sheet &gt; <strong>Extensions &gt; Apps Script</strong>.</li>
+                    <li>Ensure the backend script code from <strong>Google Apps Script Backend</strong> view is pasted.</li>
+                    <li>Click <strong>Deploy &gt; New deployment</strong> &gt; Select <strong>Web app</strong>.</li>
+                    <li>Set <strong>Execute as:</strong> <code>Me ({settings.supportEmail || 'misrpr@rathibuildmart.com'})</code></li>
+                    <li>Set <strong>Who has access:</strong> <code>Anyone</code> <em>(Important: Anyone access is required for automated backend calls)</em>.</li>
+                    <li>Copy the generated <code>/exec</code> URL and paste above.</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+
+            {/* Method B: Direct SMTP Email Configuration (Nodemailer) */}
+            <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-xs space-y-4">
+              <div className="flex items-center gap-3 border-b border-gray-100 pb-3">
+                <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl">
+                  <Zap className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-gray-900">Direct SMTP Server Configuration</h3>
+                  <p className="text-xs text-gray-500">Method 2: Send directly via SMTP (Gmail App Password, SendGrid, etc.)</p>
+                </div>
+              </div>
+
+              <div className="space-y-3 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="sm:col-span-2">
+                    <label className="block font-bold text-gray-700 mb-1">SMTP Host</label>
+                    <input
+                      type="text"
+                      value={settings.smtpHost || ''}
+                      onChange={e => updateSettings({ smtpHost: e.target.value })}
+                      placeholder="e.g. smtp.gmail.com"
+                      className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl font-mono text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Port</label>
+                    <input
+                      type="number"
+                      value={settings.smtpPort || 587}
+                      onChange={e => updateSettings({ smtpPort: Number(e.target.value) })}
+                      placeholder="587 or 465"
+                      className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl font-mono text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">SMTP Username / Email</label>
+                    <input
+                      type="text"
+                      value={settings.smtpUser || ''}
+                      onChange={e => updateSettings({ smtpUser: e.target.value })}
+                      placeholder="misrpr@rathibuildmart.com"
+                      className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl font-mono text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">SMTP App Password</label>
+                    <input
+                      type="password"
+                      value={settings.smtpPass || ''}
+                      onChange={e => updateSettings({ smtpPass: e.target.value })}
+                      placeholder="••••••••••••••••"
+                      className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl font-mono text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Sender Display Name</label>
+                  <input
+                    type="text"
+                    value={settings.smtpSenderName || ''}
+                    onChange={e => updateSettings({ smtpSenderName: e.target.value })}
+                    placeholder="Rathi Buildmart HelpDesk"
+                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs"
+                  />
+                </div>
+
+                <div className="p-3 bg-indigo-50/70 text-indigo-900 rounded-xl text-[11px] border border-indigo-200">
+                  💡 <strong>Gmail Tip:</strong> If using Gmail SMTP, generate a 16-character <strong>App Password</strong> in your Google Account Security settings (2-Step Verification &gt; App Passwords) and paste it here.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Test Email Dispatcher Tool */}
           <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-xs space-y-4">
-            <div className="flex items-center gap-3 border-b border-gray-100 pb-3">
-              <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl">
-                <Mail className="w-5 h-5" />
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3 flex-wrap gap-2">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-gray-900">Test Email Gateway Diagnostics</h3>
+                  <p className="text-xs text-gray-500">Send an instant test email to verify live delivery</p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-bold text-sm text-gray-900">Email Gateway Integration</h3>
-                <p className="text-xs text-gray-500">Google Apps Script Web App & SMTP</p>
-              </div>
-            </div>
 
-            <div className="space-y-3 text-xs">
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Google Apps Script Dispatcher URL</label>
+              <div className="flex items-center gap-2">
                 <input
-                  type="text"
-                  value={settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || ''}
-                  onChange={e => updateSettings({ googleAppsScriptWebAppUrl: e.target.value, appsScriptUrl: e.target.value })}
-                  placeholder="https://script.google.com/macros/s/.../exec"
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl font-mono text-xs"
+                  type="email"
+                  value={testEmailRecipient}
+                  onChange={e => setTestEmailRecipient(e.target.value)}
+                  placeholder="recipient@example.com"
+                  className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono w-64"
                 />
-              </div>
-
-              <div className="p-3 bg-blue-50 text-blue-800 rounded-xl text-[11px] border border-blue-200 leading-relaxed">
-                ℹ️ The application securely proxies email sending through your Google Apps Script URL. Google Mail API handles delivery to employee inboxes with zero spam risk.
+                <button
+                  type="button"
+                  onClick={handleTestEmailDispatch}
+                  disabled={testingSmtp || !testEmailRecipient.trim()}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl flex items-center gap-2 cursor-pointer shadow-xs"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>{testingSmtp ? 'Sending Test...' : 'Send Live Test Email'}</span>
+                </button>
               </div>
             </div>
+
+            {smtpTestResult && (
+              <div className={`p-4 rounded-xl text-xs font-medium border ${
+                smtpTestResult.success
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                  : 'bg-amber-50 border-amber-200 text-amber-900'
+              }`}>
+                <div className="flex items-start gap-2">
+                  {smtpTestResult.success ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  )}
+                  <div className="space-y-1">
+                    <p className="font-bold">{smtpTestResult.message}</p>
+                    {!smtpTestResult.success && (
+                      <p className="text-[11px] text-amber-800">
+                        Aap 1-Click <strong>Web Gmail</strong> ke through bina kisi configuration ke direct emails bhej sakte hain, ya Google Apps Script Web App ko "Who has access: Anyone" ke saath re-deploy karein.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* WhatsApp Gateway Config */}

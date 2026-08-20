@@ -188,6 +188,41 @@ var DRIVE_ROOT_FOLDER_ID = "${settings.driveFolderId || '1e9Nu2qsZgOVn36VAnZts18
 var DEFAULT_SPREADSHEET_ID = "${settings.spreadsheetId || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow'}";
 
 /** 
+ * ⚡ CRITICAL: ONE-TIME PERMISSION AUTHORIZATION
+ * Select this function in the top dropdown in Google Apps Script and click "Run".
+ * Google will ask to "Review Permissions" -> Choose Account -> Advanced -> Allow.
+ * This authorizes Google to send automated emails directly from the cloud!
+ */
+function authorizeEmailAndSheetPermissions() {
+  Logger.log("Authorizing HelpDesk permissions for Sheets, Drive, Mail & Gmail...");
+  
+  // 1. Authorize Sheets
+  var ss;
+  try {
+    ss = SpreadsheetApp.openById(DEFAULT_SPREADSHEET_ID);
+  } catch (e) {
+    ss = SpreadsheetApp.getActiveSpreadsheet();
+  }
+  
+  // 2. Authorize MailApp & GmailApp
+  try {
+    var quota = MailApp.getRemainingDailyQuota();
+    Logger.log("✅ MailApp permission verified. Remaining email quota today: " + quota);
+  } catch (e) {
+    Logger.log("MailApp notice: " + e.toString());
+  }
+
+  try {
+    var aliases = GmailApp.getAliases();
+    Logger.log("✅ GmailApp permission verified.");
+  } catch (e) {
+    Logger.log("GmailApp notice: " + e.toString());
+  }
+
+  Logger.log("🎉 ALL PERMISSIONS AUTHORIZED! Now click Deploy > Manage deployments > Edit > New version > Deploy.");
+}
+
+/** 
  * TEST FUNCTION: Click "Run" on this function inside Apps Script editor to authorize sheet permissions! 
  */
 function testSync() {

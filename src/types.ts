@@ -263,4 +263,11 @@ export interface SystemSettings {
   slaBreachAlertsEnabled?: boolean;
   driveFolderStructureCreated: boolean;
   driveFolderUrl?: string;
+  // SMTP Email Server Configuration
+  smtpHost?: string;
+  smtpPort?: number;
+  smtpUser?: string;
+  smtpPass?: string;
+  smtpSecure?: boolean;
+  smtpSenderName?: string;
 }
