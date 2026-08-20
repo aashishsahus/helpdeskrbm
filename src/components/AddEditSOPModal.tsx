@@ -327,8 +327,8 @@ export const AddEditSOPModal: React.FC<AddEditSOPModalProps> = ({
                     className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs font-semibold focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
                   >
                     <option value="">All Departments (General)</option>
-                    {departments.map(d => (
-                      <option key={d.id} value={d.name}>
+                    {departments.map((d, idx) => (
+                      <option key={`sop-dept-${d.id || d.name}-${idx}`} value={d.name}>
                         {d.name}
                       </option>
                     ))}

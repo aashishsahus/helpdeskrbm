@@ -746,8 +746,8 @@ export const MasterDropdownsView: React.FC = () => {
                       onChange={e => setNewCatDept(e.target.value)}
                       className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white"
                     >
-                      {departments.map(d => (
-                        <option key={d.id} value={d.name}>{d.name}</option>
+                      {departments.map((d, idx) => (
+                        <option key={`m-dept-opt-${d.id || d.name}-${idx}`} value={d.name}>{d.name}</option>
                       ))}
                     </select>
                   </div>
@@ -1275,8 +1275,8 @@ export const MasterDropdownsView: React.FC = () => {
                   <tbody className="divide-y divide-gray-100">
                     {departments
                       .filter(d => d.name.toLowerCase().includes(searchQuery.toLowerCase()))
-                      .map(d => (
-                        <tr key={d.id} className="hover:bg-gray-50">
+                      .map((d, idx) => (
+                        <tr key={`md-dept-row-${d.id || d.name}-${idx}`} className="hover:bg-gray-50">
                           <td className="p-3">
                             <span className="font-mono font-bold text-[11px] px-2 py-0.5 bg-blue-50 text-blue-700 rounded border border-blue-200">
                               {d.id}
@@ -1410,8 +1410,8 @@ export const MasterDropdownsView: React.FC = () => {
                   onChange={e => setCatEditModal({ ...catEditModal, department: e.target.value })}
                   className="w-full p-2 border rounded-lg"
                 >
-                  {departments.map(d => (
-                    <option key={d.id} value={d.name}>{d.name}</option>
+                  {departments.map((d, idx) => (
+                    <option key={`md-edit-dept-opt-${d.id || d.name}-${idx}`} value={d.name}>{d.name}</option>
                   ))}
                 </select>
               </div>

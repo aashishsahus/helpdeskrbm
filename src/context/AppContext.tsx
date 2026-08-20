@@ -655,7 +655,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [departments, setDepartments] = useState<Department[]>(() => {
     try {
       const saved = localStorage.getItem('hd_departments_v1');
-      return saved ? JSON.parse(saved) : initialDepartments;
+      if (saved) {
+        const parsed: Department[] = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const deptMap = new Map<string, Department>();
+          // Seed with initial departments
+          initialDepartments.forEach(d => deptMap.set(d.name.trim().toLowerCase(), { ...d }));
+          // Merge parsed departments ensuring no duplicate IDs or names
+          parsed.forEach((d: Department) => {
+            if (d && d.name && d.name.trim()) {
+              const nameKey = d.name.trim().toLowerCase();
+              const existing = deptMap.get(nameKey);
+              if (existing) {
+                deptMap.set(nameKey, { ...existing, ...d, id: existing.id || d.id });
+              } else {
+                deptMap.set(nameKey, { ...d, id: d.id || `d_${Date.now()}_${Math.random().toString(36).substring(2, 6)}` });
+              }
+            }
+          });
+
+          // Ensure all IDs in array are 100% distinct
+          const seenIds = new Set<string>();
+          const deduped: Department[] = [];
+          for (const dept of deptMap.values()) {
+            let finalId = dept.id || `d_${deduped.length + 1}`;
+            if (seenIds.has(finalId)) {
+              finalId = `d_${deduped.length + 1}_${Date.now()}`;
+            }
+            seenIds.add(finalId);
+            deduped.push({ ...dept, id: finalId });
+          }
+
+          try {
+            localStorage.setItem('hd_departments_v1', JSON.stringify(deduped));
+          } catch {}
+          return deduped;
+        }
+      }
+      return initialDepartments;
     } catch {
       return initialDepartments;
     }
@@ -2398,14 +2435,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem('hd_settings_v2', JSON.stringify(updated));
     } catch (e) {}
 
-    // Immediately push to backend server runtimeConfig
+    // Immediately push to backend server runtimeConfig (including SMTP parameters)
     fetch('/api/google/save-config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         webAppUrl: updated.googleAppsScriptWebAppUrl || updated.appsScriptUrl,
         spreadsheetId: updated.spreadsheetId,
-        driveFolderId: updated.driveFolderId
+        driveFolderId: updated.driveFolderId,
+        smtpHost: updated.smtpHost,
+        smtpPort: updated.smtpPort,
+        smtpUser: updated.smtpUser,
+        smtpPass: updated.smtpPass,
+        smtpSecure: updated.smtpSecure,
+        smtpSenderName: updated.smtpSenderName
       })
     }).catch(err => console.warn('Config save to backend error:', err));
 
@@ -2612,14 +2655,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (data.success && Array.isArray(data.departments) && data.departments.length > 0) {
         setDepartments(prev => {
           const dMap = new Map<string, Department>();
-          prev.forEach(d => dMap.set(d.name.trim().toLowerCase(), d));
+          prev.forEach(d => {
+            if (d && d.name) dMap.set(d.name.trim().toLowerCase(), { ...d });
+          });
           data.departments.forEach((d: Department) => {
-            if (d.name) {
+            if (d && d.name && d.name.trim()) {
               const key = d.name.trim().toLowerCase();
-              dMap.set(key, { ...dMap.get(key), ...d });
+              const existing = dMap.get(key);
+              if (existing) {
+                dMap.set(key, { ...existing, ...d, id: existing.id || d.id });
+              } else {
+                dMap.set(key, { ...d, id: d.id || `d_${Date.now()}_${Math.random().toString(36).substring(2, 6)}` });
+              }
             }
           });
-          const updated = Array.from(dMap.values());
+
+          // Ensure distinct IDs across the array
+          const seenIds = new Set<string>();
+          const updated: Department[] = [];
+          for (const dept of dMap.values()) {
+            let finalId = dept.id || `d_${updated.length + 1}`;
+            if (seenIds.has(finalId)) {
+              finalId = `d_${updated.length + 1}_${Date.now()}`;
+            }
+            seenIds.add(finalId);
+            updated.push({ ...dept, id: finalId });
+          }
+
           try { localStorage.setItem('hd_departments_v1', JSON.stringify(updated)); } catch {}
           return updated;
         });
@@ -2779,10 +2841,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const isDemoDataActive = demoTicketsCount > 0;
 
-  // Auto pull real sheet data silently on app load
+  // Auto pull real sheet data & server persistent config silently on app load
   useEffect(() => {
     const timer = setTimeout(() => {
       pullDataFromGoogleSheets(undefined, undefined, true);
+
+      // Hydrate persistent runtime config (SMTP & Google Workspace) from server
+      fetch('/api/google/get-config')
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.config) {
+            setSettings(prev => {
+              const cfg = data.config;
+              const needsUpdate = (
+                (cfg.smtpHost && !prev.smtpHost) ||
+                (cfg.smtpUser && !prev.smtpUser) ||
+                (cfg.webAppUrl && !prev.googleAppsScriptWebAppUrl)
+              );
+              if (needsUpdate) {
+                const merged = {
+                  ...prev,
+                  smtpHost: prev.smtpHost || cfg.smtpHost,
+                  smtpPort: prev.smtpPort || cfg.smtpPort,
+                  smtpUser: prev.smtpUser || cfg.smtpUser,
+                  smtpPass: prev.smtpPass || cfg.smtpPass,
+                  smtpSecure: prev.smtpSecure !== undefined ? prev.smtpSecure : cfg.smtpSecure,
+                  smtpSenderName: prev.smtpSenderName || cfg.smtpSenderName,
+                  googleAppsScriptWebAppUrl: prev.googleAppsScriptWebAppUrl || cfg.webAppUrl,
+                  appsScriptUrl: prev.appsScriptUrl || cfg.webAppUrl
+                };
+                try { localStorage.setItem('hd_settings_v2', JSON.stringify(merged)); } catch {}
+                return merged;
+              }
+              return prev;
+            });
+          }
+        })
+        .catch(err => console.warn('Could not fetch server runtime config:', err));
     }, 1200);
     return () => clearTimeout(timer);
   }, []);

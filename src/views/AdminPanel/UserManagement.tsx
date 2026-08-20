@@ -376,8 +376,8 @@ export const UserManagement: React.FC = () => {
               className="bg-transparent font-semibold text-gray-700 outline-none cursor-pointer text-xs"
             >
               <option value="All">All Departments</option>
-              {departments.map(d => (
-                <option key={d.id} value={d.name}>{d.name}</option>
+              {departments.map((d, idx) => (
+                <option key={`um-filter-dept-${d.id || d.name}-${idx}`} value={d.name}>{d.name}</option>
               ))}
             </select>
           </div>
@@ -695,8 +695,8 @@ export const UserManagement: React.FC = () => {
                     onChange={e => setDepartment(e.target.value)}
                     className="w-full p-2 border rounded-lg outline-none focus:border-emerald-500"
                   >
-                    {departments.map(d => (
-                      <option key={d.id} value={d.name}>{d.name}</option>
+                    {departments.map((d, idx) => (
+                      <option key={`um-modal-dept-${d.id || d.name}-${idx}`} value={d.name}>{d.name}</option>
                     ))}
                   </select>
                 </div>

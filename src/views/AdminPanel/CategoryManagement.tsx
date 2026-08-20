@@ -72,8 +72,8 @@ export const CategoryManagement: React.FC = () => {
               onChange={e => setDepartment(e.target.value)}
               className="w-full p-2 border rounded-lg"
             >
-              {departments.map(d => (
-                <option key={d.id} value={d.name}>{d.name}</option>
+              {departments.map((d, idx) => (
+                <option key={`cat-dept-opt-${d.id || d.name}-${idx}`} value={d.name}>{d.name}</option>
               ))}
             </select>
           </div>
@@ -196,8 +196,8 @@ export const CategoryManagement: React.FC = () => {
                   onChange={e => setEditModal({ ...editModal, department: e.target.value })}
                   className="w-full p-2 border rounded-lg"
                 >
-                  {departments.map(d => (
-                    <option key={d.id} value={d.name}>{d.name}</option>
+                  {departments.map((d, idx) => (
+                    <option key={`cat-edit-dept-opt-${d.id || d.name}-${idx}`} value={d.name}>{d.name}</option>
                   ))}
                 </select>
               </div>

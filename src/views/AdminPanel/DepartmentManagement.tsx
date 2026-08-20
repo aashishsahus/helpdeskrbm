@@ -184,8 +184,8 @@ export const DepartmentManagement: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {departments.map(d => (
-                  <tr key={d.id} className="hover:bg-gray-50">
+                {departments.map((d, idx) => (
+                  <tr key={`dept-row-${d.id || d.name}-${idx}`} className="hover:bg-gray-50">
                     <td className="p-3">
                       <span className="font-mono font-bold text-[11px] px-2 py-0.5 bg-blue-50 text-blue-700 rounded border border-blue-200">
                         {d.id}

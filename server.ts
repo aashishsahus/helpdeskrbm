@@ -126,6 +126,12 @@ function loadPersistentConfig() {
           spreadsheetId: parsed.spreadsheetId || process.env.SPREADSHEET_ID || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow',
           webAppUrl: parsed.webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec',
           driveFolderId: parsed.driveFolderId || '1e9Nu2qsZgOVn36VAnZts18LINrjR_1bR',
+          smtpHost: parsed.smtpHost || process.env.SMTP_HOST || '',
+          smtpPort: parsed.smtpPort ? Number(parsed.smtpPort) : (process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587),
+          smtpUser: parsed.smtpUser || process.env.SMTP_USER || '',
+          smtpPass: parsed.smtpPass || process.env.SMTP_PASS || '',
+          smtpSecure: parsed.smtpSecure !== undefined ? Boolean(parsed.smtpSecure) : false,
+          smtpSenderName: parsed.smtpSenderName || 'Rathi Buildmart HelpDesk',
           lastUpdated: parsed.lastUpdated || new Date().toISOString()
         };
       }
@@ -137,6 +143,12 @@ function loadPersistentConfig() {
     spreadsheetId: process.env.SPREADSHEET_ID || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow',
     webAppUrl: process.env.GOOGLE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec',
     driveFolderId: '1e9Nu2qsZgOVn36VAnZts18LINrjR_1bR',
+    smtpHost: process.env.SMTP_HOST || '',
+    smtpPort: process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587,
+    smtpUser: process.env.SMTP_USER || '',
+    smtpPass: process.env.SMTP_PASS || '',
+    smtpSecure: false,
+    smtpSenderName: 'Rathi Buildmart HelpDesk',
     lastUpdated: new Date().toISOString()
   };
 }
@@ -151,7 +163,7 @@ function savePersistentConfig(cfg: typeof runtimeConfig) {
   }
 }
 
-// Get current active runtime Google Workspace Config
+// Get current active runtime Google Workspace Config & SMTP Config
 app.get('/api/google/get-config', (req, res) => {
   // Always refresh from disk if available to ensure multi-instance / hot updates
   runtimeConfig = loadPersistentConfig();
@@ -161,9 +173,22 @@ app.get('/api/google/get-config', (req, res) => {
   });
 });
 
-// Save & apply updated Google Apps Script Web App URL & Spreadsheet ID
+// Save & apply updated Google Apps Script Web App URL, Spreadsheet ID & SMTP Settings
 app.post('/api/google/save-config', (req, res) => {
-  const { webAppUrl, appsScriptUrl, googleAppsScriptWebAppUrl, spreadsheetId, driveFolderId } = req.body;
+  const {
+    webAppUrl,
+    appsScriptUrl,
+    googleAppsScriptWebAppUrl,
+    spreadsheetId,
+    driveFolderId,
+    smtpHost,
+    smtpPort,
+    smtpUser,
+    smtpPass,
+    smtpSecure,
+    smtpSenderName
+  } = req.body;
+
   const newUrl = webAppUrl || googleAppsScriptWebAppUrl || appsScriptUrl;
   if (newUrl && typeof newUrl === 'string' && newUrl.trim()) {
     runtimeConfig.webAppUrl = newUrl.trim();
@@ -174,12 +199,21 @@ app.post('/api/google/save-config', (req, res) => {
   if (driveFolderId && typeof driveFolderId === 'string' && driveFolderId.trim()) {
     runtimeConfig.driveFolderId = driveFolderId.trim();
   }
+
+  // SMTP persistence
+  if (smtpHost !== undefined) runtimeConfig.smtpHost = String(smtpHost).trim();
+  if (smtpPort !== undefined) runtimeConfig.smtpPort = Number(smtpPort);
+  if (smtpUser !== undefined) runtimeConfig.smtpUser = String(smtpUser).trim();
+  if (smtpPass !== undefined) runtimeConfig.smtpPass = String(smtpPass).trim();
+  if (smtpSecure !== undefined) runtimeConfig.smtpSecure = Boolean(smtpSecure);
+  if (smtpSenderName !== undefined) runtimeConfig.smtpSenderName = String(smtpSenderName).trim();
+
   runtimeConfig.lastUpdated = new Date().toISOString();
   savePersistentConfig(runtimeConfig);
 
   res.json({
     success: true,
-    message: 'Google Workspace runtime configuration updated successfully and saved persistently across all users!',
+    message: 'System runtime and SMTP configurations saved persistently across all devices and sessions!',
     config: runtimeConfig
   });
 });
@@ -1105,11 +1139,18 @@ app.post('/api/google/send-email', async (req, res) => {
   const webGmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(recipientEmail || '')}&su=${encodedSubj}&body=${encodedBody}`;
 
   // 1. Check if SMTP configuration is provided (via body, environment, or settings)
-  const host = smtpConfig?.host || process.env.SMTP_HOST;
-  const port = Number(smtpConfig?.port || process.env.SMTP_PORT || 587);
-  const user = smtpConfig?.user || process.env.SMTP_USER;
-  const pass = smtpConfig?.pass || process.env.SMTP_PASS;
+  let host = (smtpConfig?.host || runtimeConfig.smtpHost || process.env.SMTP_HOST || '').trim();
+  // Auto-correct common typo 'smpt' -> 'smtp'
+  if (host.toLowerCase() === 'smpt.gmail.com' || host.toLowerCase() === 'smpt.googlemail.com') {
+    host = 'smtp.gmail.com';
+  }
+
+  const port = Number(smtpConfig?.port || runtimeConfig.smtpPort || process.env.SMTP_PORT || 587);
+  const user = (smtpConfig?.user || runtimeConfig.smtpUser || process.env.SMTP_USER || '').trim();
+  const pass = (smtpConfig?.pass || runtimeConfig.smtpPass || process.env.SMTP_PASS || '').trim().replace(/\s+/g, ''); // strip spaces from App Password
   const secure = smtpConfig?.secure !== undefined ? Boolean(smtpConfig.secure) : (port === 465);
+
+  let smtpErrorDetails: string | null = null;
 
   if (host && user && pass) {
     try {
@@ -1122,7 +1163,7 @@ app.post('/api/google/send-email', async (req, res) => {
       });
 
       const info = await transporter.sendMail({
-        from: `"${smtpConfig?.senderName || 'Rathi Buildmart HelpDesk'}" <${user}>`,
+        from: `"${smtpConfig?.senderName || runtimeConfig.smtpSenderName || 'Rathi Buildmart HelpDesk'}" <${user}>`,
         to: recipientEmail,
         subject: subject || 'Rathi Buildmart HelpDesk Notification',
         text: plainText,
@@ -1131,15 +1172,16 @@ app.post('/api/google/send-email', async (req, res) => {
 
       return res.json({
         success: true,
-        deliveredVia: 'SMTP Mail Server',
+        deliveredVia: 'Direct SMTP Server',
         recipientEmail,
-        message: `Email successfully sent via SMTP to ${recipientEmail}`,
+        message: `Email successfully sent via SMTP (${user}) to ${recipientEmail}`,
         messageId: info.messageId,
         mailtoUrl,
         webGmailUrl
       });
     } catch (smtpErr: any) {
-      console.warn('SMTP dispatch failed, falling back to Apps Script / Web Gmail:', smtpErr);
+      console.warn('SMTP dispatch failed:', smtpErr);
+      smtpErrorDetails = `SMTP Error: ${smtpErr.message || smtpErr.code || 'Failed to authenticate or connect'}`;
     }
   }
 
