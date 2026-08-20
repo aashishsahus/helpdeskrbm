@@ -1052,6 +1052,10 @@ function doPost(e) {
       var bodyHtml = contents.htmlBody || contents.html || "";
 
       if (recipient) {
+        var emailSent = false;
+        var lastErr = null;
+
+        // 1. Try MailApp first
         try {
           if (bodyHtml) {
             MailApp.sendEmail({
@@ -1069,17 +1073,41 @@ function doPost(e) {
               name: "Rathi Buildmart HelpDesk"
             });
           }
+          emailSent = true;
+        } catch (mailErr) {
+          lastErr = mailErr;
+          Logger.log("MailApp error, trying GmailApp fallback: " + mailErr.toString());
+          
+          // 2. Try GmailApp fallback
+          try {
+            if (bodyHtml) {
+              GmailApp.sendEmail(recipient, subj, bodyPlain || "Please view in HTML email client", {
+                htmlBody: bodyHtml,
+                name: "Rathi Buildmart HelpDesk"
+              });
+            } else {
+              GmailApp.sendEmail(recipient, subj, bodyPlain, {
+                name: "Rathi Buildmart HelpDesk"
+              });
+            }
+            emailSent = true;
+          } catch (gmailErr) {
+            lastErr = gmailErr;
+            Logger.log("GmailApp fallback error: " + gmailErr.toString());
+          }
+        }
+
+        if (emailSent) {
           return ContentService.createTextOutput(JSON.stringify({
             success: true,
             recipientEmail: recipient,
             message: "Email successfully dispatched to " + recipient
           })).setMimeType(ContentService.MimeType.JSON);
-        } catch (mailErr) {
-          Logger.log("MailApp error: " + mailErr.toString());
+        } else {
           return ContentService.createTextOutput(JSON.stringify({
             success: false,
-            error: mailErr.toString(),
-            message: "Failed to dispatch email via MailApp: " + mailErr.message
+            error: lastErr ? lastErr.toString() : "Unknown email error",
+            message: "Failed to dispatch email: " + (lastErr ? lastErr.message : "Error")
           })).setMimeType(ContentService.MimeType.JSON);
         }
       } else {

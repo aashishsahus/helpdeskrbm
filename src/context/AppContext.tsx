@@ -2848,13 +2848,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     ticketSubject?: string;
     triggerEvent?: string;
   }) => {
-    const cleanPhone = recipientPhone.replace(/[^\d+]/g, '').replace(/^0+/, '');
-    const finalPhone = cleanPhone.startsWith('+') ? cleanPhone.replace('+', '') : (cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone);
+    // 1. Sanitize phone number to digits
+    const digitsOnly = recipientPhone.replace(/[^\d]/g, '');
+    let finalPhone = digitsOnly;
+    if (finalPhone.startsWith('0')) {
+      finalPhone = finalPhone.replace(/^0+/, '');
+    }
+    // If it's a standard 10-digit Indian phone number without country code, prefix with 91
+    if (finalPhone.length === 10) {
+      finalPhone = `91${finalPhone}`;
+    }
+
     const encodedText = encodeURIComponent(message);
     const whatsappUrl = `https://wa.me/${finalPhone}?text=${encodedText}`;
 
-    // Open WhatsApp Web or mobile app in new tab
-    window.open(whatsappUrl, '_blank');
+    // Reliable window opening across browsers & iframes
+    try {
+      const opened = window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+      if (!opened || opened.closed || typeof opened.closed === 'undefined') {
+        const link = document.createElement('a');
+        link.href = whatsappUrl;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    } catch {
+      const link = document.createElement('a');
+      link.href = whatsappUrl;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
 
     addNotificationLog({
       channel: 'whatsapp',

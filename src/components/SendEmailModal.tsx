@@ -149,6 +149,7 @@ Rathi Buildmart IT Operations & Support Team`;
   };
 
   const mailtoUrl = `mailto:${recipientEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  const webGmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(recipientEmail)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
@@ -178,14 +179,43 @@ Rathi Buildmart IT Operations & Support Team`;
 
         {/* Success Alert Banner */}
         {sentSuccess ? (
-          <div className="p-8 text-center space-y-3 my-auto">
-            <div className="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
-              <CheckCircle2 className="w-7 h-7" />
+          <div className="p-8 text-center space-y-4 my-auto">
+            <div className="w-14 h-14 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
+              <CheckCircle2 className="w-8 h-8" />
             </div>
-            <h3 className="font-bold text-base text-gray-900">Email Dispatched Successfully!</h3>
-            <p className="text-xs text-gray-500 max-w-md mx-auto">
-              An official email message has been dispatched to <strong>{recipientEmail}</strong> and recorded in delivery history.
-            </p>
+            <div>
+              <h3 className="font-bold text-base text-gray-900">Email Dispatched Successfully!</h3>
+              <p className="text-xs text-gray-500 max-w-md mx-auto mt-1">
+                An official email message has been dispatched to <strong>{recipientEmail}</strong> and recorded in delivery history.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+              <a
+                href={webGmailUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>Open in Web Gmail</span>
+              </a>
+              <a
+                href={mailtoUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>Open in Mail App</span>
+              </a>
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl text-xs"
+              >
+                Close
+              </button>
+            </div>
           </div>
         ) : (
           <form onSubmit={handleSendEmail} className="p-6 space-y-4 overflow-y-auto flex-1">
@@ -202,7 +232,7 @@ Rathi Buildmart IT Operations & Support Team`;
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-1.5 shrink-0">
+              <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
                 <button
                   type="button"
                   onClick={handleCopyEmail}
@@ -210,17 +240,17 @@ Rathi Buildmart IT Operations & Support Team`;
                   title="Copy Email Address"
                 >
                   <Copy className="w-3.5 h-3.5" />
-                  <span>{copied ? 'Copied!' : 'Copy Email'}</span>
+                  <span>{copied ? 'Copied!' : 'Copy'}</span>
                 </button>
                 <a
-                  href={mailtoUrl}
+                  href={webGmailUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="p-1.5 text-xs text-blue-600 hover:bg-blue-50 rounded-lg flex items-center gap-1 border border-blue-200 bg-white"
-                  title="Open in Mail Client"
+                  className="p-1.5 text-xs text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-1 border border-red-200 bg-white font-medium"
+                  title="Open Gmail Composer"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
-                  <span>Mail Client</span>
+                  <span>Gmail Web</span>
                 </a>
               </div>
             </div>
@@ -262,17 +292,24 @@ Rathi Buildmart IT Operations & Support Team`;
               <textarea
                 value={body}
                 onChange={e => setBody(e.target.value)}
-                rows={6}
+                rows={5}
                 required
                 className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono outline-none focus:border-blue-500 focus:bg-white transition-all resize-none"
               />
             </div>
 
             {/* Action buttons */}
-            <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-              <span className="text-[11px] text-gray-400">
-                Dispatches via Apps Script & SMTP
-              </span>
+            <div className="flex items-center justify-between pt-2 border-t border-gray-100 flex-wrap gap-2">
+              <a
+                href={mailtoUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-1.5 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg flex items-center gap-1 font-medium border border-blue-200"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>Open Mail Client</span>
+              </a>
+
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -284,10 +321,10 @@ Rathi Buildmart IT Operations & Support Team`;
                 <button
                   type="submit"
                   disabled={sending}
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl flex items-center gap-2 shadow-md transition-all"
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl flex items-center gap-2 shadow-md transition-all cursor-pointer"
                 >
                   <Send className="w-3.5 h-3.5" />
-                  <span>{sending ? 'Sending Email...' : 'Send Direct Email'}</span>
+                  <span>{sending ? 'Dispatching...' : 'Send Cloud Email'}</span>
                 </button>
               </div>
             </div>

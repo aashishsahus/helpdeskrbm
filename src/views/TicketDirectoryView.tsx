@@ -14,6 +14,7 @@ import {
   ArrowUp,
   ArrowDown,
   Mail,
+  MessageSquare,
   Clock,
   UserCheck,
   CheckCircle2,
@@ -36,8 +37,9 @@ import {
   Star,
   Lock
 } from 'lucide-react';
-import { TicketPriority, TicketStatus } from '../types';
+import { TicketPriority, TicketStatus, Ticket } from '../types';
 import { SendEmailModal } from '../components/SendEmailModal';
+import { SendWhatsAppModal } from '../components/SendWhatsAppModal';
 import { isTicketRaisedByUser, isTicketAssignedToAgent } from '../utils/ticketSecurity';
 import { getTicketDelayInfo, getTicketRelationship } from '../utils/slaCalculator';
 import { DateRangeFilter } from '../components/DateRangeFilter';
@@ -117,7 +119,7 @@ export const TicketDirectoryView: React.FC = () => {
   const [pageSize, setPageSize] = useState<number>(25);
   const [currentPage, setCurrentPage] = useState<number>(1);
 
-  // Email Modal
+  // Email & WhatsApp Modals
   const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [selectedRecipient, setSelectedRecipient] = useState({
     email: '',
@@ -125,6 +127,9 @@ export const TicketDirectoryView: React.FC = () => {
     ticketId: '',
     subject: ''
   });
+
+  const [whatsAppModalOpen, setWhatsAppModalOpen] = useState(false);
+  const [selectedWhatsAppTicket, setSelectedWhatsAppTicket] = useState<Ticket | null>(null);
 
   // Base tickets accessible according to role
   const accessibleTickets = useMemo(() => {
@@ -1251,6 +1256,17 @@ export const TicketDirectoryView: React.FC = () => {
                           >
                             <Mail className="w-3 h-3" />
                           </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedWhatsAppTicket(t);
+                              setWhatsAppModalOpen(true);
+                            }}
+                            className="p-1 hover:bg-emerald-50 text-emerald-600 hover:text-emerald-800 rounded border border-emerald-200 transition-all cursor-pointer"
+                            title={`Send WhatsApp message to ${t.employeeName} (${t.contactNumber || 'No mobile'})`}
+                          >
+                            <MessageSquare className="w-3 h-3" />
+                          </button>
                           <button className="p-1 hover:bg-white border border-transparent hover:border-gray-200 rounded transition-all cursor-pointer">
                             <ChevronRight className="w-3.5 h-3.5 text-gray-400 group-hover:text-blue-600" />
                           </button>
@@ -1375,6 +1391,18 @@ export const TicketDirectoryView: React.FC = () => {
         recipientName={selectedRecipient.name}
         ticketId={selectedRecipient.ticketId}
         ticketSubject={selectedRecipient.subject}
+      />
+
+      {/* Send WhatsApp Modal */}
+      <SendWhatsAppModal
+        isOpen={whatsAppModalOpen}
+        onClose={() => {
+          setWhatsAppModalOpen(false);
+          setSelectedWhatsAppTicket(null);
+        }}
+        ticket={selectedWhatsAppTicket || undefined}
+        defaultPhone={selectedWhatsAppTicket?.contactNumber || ''}
+        defaultRecipientName={selectedWhatsAppTicket?.employeeName || ''}
       />
     </div>
   );

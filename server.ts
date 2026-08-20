@@ -1096,6 +1096,17 @@ app.post('/api/google/send-email', async (req, res) => {
   const { recipientEmail, recipientName, subject, body, htmlBody, ticketId, eventType, webAppUrl } = req.body;
   const targetUrl = (webAppUrl && webAppUrl.trim()) || runtimeConfig.webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
 
+  const plainText = body || '';
+  const htmlContent = htmlBody || body || '';
+  const encodedSubj = encodeURIComponent(subject || 'Rathi Buildmart HelpDesk Notification');
+  const encodedBody = encodeURIComponent(plainText);
+  const mailtoUrl = `mailto:${recipientEmail}?subject=${encodedSubj}&body=${encodedBody}`;
+  const webGmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(recipientEmail || '')}&su=${encodedSubj}&body=${encodedBody}`;
+
+  let appsScriptSuccess = false;
+  let appsScriptDetails: any = null;
+  let errorMessage: string | null = null;
+
   try {
     const fetchResponse = await fetch(targetUrl, {
       method: 'POST',
@@ -1103,10 +1114,11 @@ app.post('/api/google/send-email', async (req, res) => {
       body: JSON.stringify({
         action: 'sendEmailNotification',
         recipientEmail,
-        recipientName,
+        to: recipientEmail,
+        recipientName: recipientName || recipientEmail,
         subject,
-        body,
-        htmlBody: htmlBody || body,
+        body: plainText,
+        htmlBody: htmlContent,
         ticketId,
         eventType: eventType || 'general',
         timestamp: new Date().toISOString()
@@ -1115,27 +1127,38 @@ app.post('/api/google/send-email', async (req, res) => {
     });
 
     const resText = await fetchResponse.text();
-    let resJson: any = {};
     try {
-      resJson = JSON.parse(resText);
+      appsScriptDetails = JSON.parse(resText);
+      if (appsScriptDetails.success !== false) {
+        appsScriptSuccess = true;
+      } else {
+        errorMessage = appsScriptDetails.message || appsScriptDetails.error || 'Google Apps Script returned error response';
+      }
     } catch {
-      resJson = { raw: resText.slice(0, 200) };
+      appsScriptDetails = { raw: resText.slice(0, 300) };
+      if (resText.includes('<!DOCTYPE') || resText.includes('<html')) {
+        errorMessage = 'Google Apps Script Web App redirected to login. Ensure Web App is deployed with "Execute as: Me" and "Who has access: Anyone".';
+      } else {
+        errorMessage = 'Google Apps Script endpoint returned non-JSON text.';
+      }
     }
-
-    res.json({
-      success: true,
-      recipientEmail,
-      message: `Email notification successfully dispatched to ${recipientEmail}`,
-      appsScriptResponse: resJson
-    });
   } catch (err: any) {
     console.warn('Backend email notification forward error:', err);
-    res.json({
-      success: true,
-      recipientEmail,
-      message: `Email queued and sent to ${recipientEmail} (${err.message})`
-    });
+    errorMessage = err.message || 'Network error reaching Google Apps Script';
   }
+
+  res.json({
+    success: appsScriptSuccess,
+    deliveredVia: appsScriptSuccess ? 'Google Apps Script (Cloud)' : 'Web Client Fallback',
+    recipientEmail,
+    message: appsScriptSuccess
+      ? `Email notification successfully dispatched to ${recipientEmail}`
+      : `Cloud Email Gateway: ${errorMessage || 'Notice'}. Web Gmail / Mail Client fallback available.`,
+    error: errorMessage,
+    mailtoUrl,
+    webGmailUrl,
+    appsScriptResponse: appsScriptDetails
+  });
 });
 
 app.post('/api/google/provision-drive-folders', async (req, res) => {
