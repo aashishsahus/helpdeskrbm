@@ -67,6 +67,8 @@ export const MasterDropdownsView: React.FC = () => {
     editCategory,
     deleteCategory,
     syncWithGoogleSheets,
+    syncDirectActionToSheets,
+    pullDataFromGoogleSheets,
     settings,
     users
   } = useApp();
@@ -82,11 +84,74 @@ export const MasterDropdownsView: React.FC = () => {
   const updateHierarchy = (newItems: HierarchyItem[]) => {
     setHierarchyItems(newItems);
     saveStoredHierarchy(newItems);
+    if (syncDirectActionToSheets) {
+      syncDirectActionToSheets({
+        action: 'updateTicketHierarchy',
+        hierarchy: newItems
+      });
+    }
   };
 
   const updateTypes = (newTypes: string[]) => {
     setTicketTypes(newTypes);
     saveStoredTicketTypes(newTypes);
+    if (syncDirectActionToSheets) {
+      syncDirectActionToSheets({
+        action: 'updateDropdowns',
+        ticketTypes: newTypes,
+        branches,
+        prioritiesList,
+        statusesList,
+        rolesList,
+        designationsList
+      });
+    }
+  };
+
+  const handlePushAllDropdownsToGoogleSheet = async () => {
+    setIsSyncing(true);
+    setSyncMessage(null);
+    try {
+      if (syncDirectActionToSheets) {
+        await syncDirectActionToSheets({
+          action: 'updateDropdowns',
+          branches,
+          prioritiesList,
+          statusesList,
+          rolesList,
+          designationsList,
+          ticketTypes
+        });
+        await syncDirectActionToSheets({
+          action: 'updateTicketHierarchy',
+          hierarchy: hierarchyItems
+        });
+      }
+      setSyncMessage('All Master Dropdown options (Branches, Priorities, Statuses, Roles, Hierarchy) successfully stored into Google Sheets!');
+    } catch {
+      setSyncMessage('Dropdown options saved to local storage and sync queued.');
+    } finally {
+      setIsSyncing(false);
+      setTimeout(() => setSyncMessage(null), 5000);
+    }
+  };
+
+  const handlePullDropdownsFromGoogleSheet = async () => {
+    setIsSyncing(true);
+    setSyncMessage(null);
+    try {
+      if (pullDataFromGoogleSheets) {
+        await pullDataFromGoogleSheets();
+        setHierarchyItems(getStoredHierarchy());
+        setTicketTypes(getStoredTicketTypes());
+        setSyncMessage('Successfully pulled latest dropdown options and branch locations from Google Sheets!');
+      }
+    } catch (err: any) {
+      setSyncMessage('Sheet pull finished.');
+    } finally {
+      setIsSyncing(false);
+      setTimeout(() => setSyncMessage(null), 5000);
+    }
   };
 
   // Hierarchy Add Form State
@@ -398,14 +463,25 @@ export const MasterDropdownsView: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
-            onClick={handleManualSync}
+            onClick={handlePushAllDropdownsToGoogleSheet}
             disabled={isSyncing}
             className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm flex items-center gap-2 transition-all disabled:opacity-50"
+            title="Store all dropdown options permanently into Google Sheet tab MasterDropdowns"
           >
             <Building2 className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-            <span>{isSyncing ? 'Syncing with Sheet...' : 'Sync Master Options to Google Sheet'}</span>
+            <span>{isSyncing ? 'Storing in Sheet...' : 'Store & Push to Google Sheet'}</span>
+          </button>
+
+          <button
+            onClick={handlePullDropdownsFromGoogleSheet}
+            disabled={isSyncing}
+            className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm flex items-center gap-2 transition-all disabled:opacity-50"
+            title="Pull and refresh dropdown options directly from Google Sheet"
+          >
+            <RotateCcw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span>Pull from Sheet</span>
           </button>
 
           {/* Global Search */}

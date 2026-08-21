@@ -366,7 +366,12 @@ function doPost(e) {
       var uSheet = ss.getSheetByName("Users");
       var dSheet = ss.getSheetByName("Departments");
       var cSheet = ss.getSheetByName("Categories");
-      var comSheet = ss.getSheetByName("TicketComments");
+      var mSheet = ss.getSheetByName("MasterDropdowns") || ss.getSheetByName("DropdownOptions");
+      var hSheet = ss.getSheetByName("TicketHierarchy");
+      var rpSheet = ss.getSheetByName("RolePermissions");
+      var archTSheet = ss.getSheetByName("ArchivedTickets");
+      var archUSheet = ss.getSheetByName("ArchivedUsers");
+      var setSheet = ss.getSheetByName("Settings");
 
       var resultTickets = [];
       var seenTicketIds = {};
@@ -381,64 +386,64 @@ function doPost(e) {
           if (seenTicketIds[tidStr.toLowerCase()]) continue;
           seenTicketIds[tidStr.toLowerCase()] = true;
 
-        var isNewFormat = (tData[0] && tData[0].length >= 21) || (tData[0] && tData[0][4] && tData[0][4].toString().toLowerCase().includes("type"));
-        if (isNewFormat) {
-          resultTickets.push({
-            id: tidStr,
-            employeeId: row[1] ? row[1].toString() : "",
-            employeeName: row[2] ? row[2].toString() : "",
-            employeeEmail: row[3] ? row[3].toString() : "",
-            ticketType: row[4] ? row[4].toString() : "Support / How-To",
-            department: row[5] ? row[5].toString() : "",
-            location: row[6] ? row[6].toString() : "",
-            category: row[7] ? row[7].toString() : "",
-            module: row[8] ? row[8].toString() : "",
-            subCategory: row[9] ? row[9].toString() : "",
-            subject: row[10] ? row[10].toString() : "",
-            description: row[11] ? row[11].toString() : "",
-            priority: row[12] ? row[12].toString() : "Medium",
-            status: row[13] ? row[13].toString() : "Open",
-            assignedAgentName: row[14] ? row[14].toString() : "",
-            createdDate: row[15] ? row[15].toString() : new Date().toISOString(),
-            slaDueDate: row[16] ? row[16].toString() : "",
-            closedDate: row[17] ? row[17].toString() : "",
-            resolvedDate: row[17] ? row[17].toString() : "",
-            rating: row[18] ? Number(row[18]) : undefined,
-            feedback: row[19] ? row[19].toString() : "",
-            contactNumber: row[20] ? row[20].toString() : "",
-            slaStatus: "Within SLA",
-            isRealTicket: true
-          });
-        } else {
-          resultTickets.push({
-            id: tidStr,
-            employeeId: row[1] ? row[1].toString() : "",
-            employeeName: row[2] ? row[2].toString() : "",
-            employeeEmail: row[3] ? row[3].toString() : "",
-            ticketType: "Support / How-To",
-            department: row[4] ? row[4].toString() : "",
-            location: row[5] ? row[5].toString() : "",
-            category: row[6] ? row[6].toString() : "",
-            module: "",
-            subCategory: row[7] ? row[7].toString() : "",
-            subject: row[8] ? row[8].toString() : "",
-            description: row[9] ? row[9].toString() : "",
-            priority: row[10] ? row[10].toString() : "Medium",
-            status: row[11] ? row[11].toString() : "Open",
-            assignedAgentName: row[12] ? row[12].toString() : "",
-            createdDate: row[13] ? row[13].toString() : new Date().toISOString(),
-            slaDueDate: row[14] ? row[14].toString() : "",
-            closedDate: row[15] ? row[15].toString() : "",
-            resolvedDate: row[15] ? row[15].toString() : "",
-            rating: row[16] ? Number(row[16]) : undefined,
-            feedback: row[17] ? row[17].toString() : "",
-            contactNumber: row[18] ? row[18].toString() : "",
-            slaStatus: "Within SLA",
-            isRealTicket: true
-          });
+          var isNewFormat = (tData[0] && tData[0].length >= 21) || (tData[0] && tData[0][4] && tData[0][4].toString().toLowerCase().includes("type"));
+          if (isNewFormat) {
+            resultTickets.push({
+              id: tidStr,
+              employeeId: row[1] ? row[1].toString() : "",
+              employeeName: row[2] ? row[2].toString() : "",
+              employeeEmail: row[3] ? row[3].toString() : "",
+              ticketType: row[4] ? row[4].toString() : "Support / How-To",
+              department: row[5] ? row[5].toString() : "",
+              location: row[6] ? row[6].toString() : "",
+              category: row[7] ? row[7].toString() : "",
+              module: row[8] ? row[8].toString() : "",
+              subCategory: row[9] ? row[9].toString() : "",
+              subject: row[10] ? row[10].toString() : "",
+              description: row[11] ? row[11].toString() : "",
+              priority: row[12] ? row[12].toString() : "Medium",
+              status: row[13] ? row[13].toString() : "Open",
+              assignedAgentName: row[14] ? row[14].toString() : "",
+              createdDate: row[15] ? row[15].toString() : new Date().toISOString(),
+              slaDueDate: row[16] ? row[16].toString() : "",
+              closedDate: row[17] ? row[17].toString() : "",
+              resolvedDate: row[17] ? row[17].toString() : "",
+              rating: row[18] ? Number(row[18]) : undefined,
+              feedback: row[19] ? row[19].toString() : "",
+              contactNumber: row[20] ? row[20].toString() : "",
+              slaStatus: "Within SLA",
+              isRealTicket: true
+            });
+          } else {
+            resultTickets.push({
+              id: tidStr,
+              employeeId: row[1] ? row[1].toString() : "",
+              employeeName: row[2] ? row[2].toString() : "",
+              employeeEmail: row[3] ? row[3].toString() : "",
+              ticketType: "Support / How-To",
+              department: row[4] ? row[4].toString() : "",
+              location: row[5] ? row[5].toString() : "",
+              category: row[6] ? row[6].toString() : "",
+              module: "",
+              subCategory: row[7] ? row[7].toString() : "",
+              subject: row[8] ? row[8].toString() : "",
+              description: row[9] ? row[9].toString() : "",
+              priority: row[10] ? row[10].toString() : "Medium",
+              status: row[11] ? row[11].toString() : "Open",
+              assignedAgentName: row[12] ? row[12].toString() : "",
+              createdDate: row[13] ? row[13].toString() : new Date().toISOString(),
+              slaDueDate: row[14] ? row[14].toString() : "",
+              closedDate: row[15] ? row[15].toString() : "",
+              resolvedDate: row[15] ? row[15].toString() : "",
+              rating: row[16] ? Number(row[16]) : undefined,
+              feedback: row[17] ? row[17].toString() : "",
+              contactNumber: row[18] ? row[18].toString() : "",
+              slaStatus: "Within SLA",
+              isRealTicket: true
+            });
+          }
         }
       }
-    }
 
       var resultUsers = [];
       var seenUserIds = {};
@@ -465,10 +470,181 @@ function doPost(e) {
         }
       }
 
+      // Read Departments from Google Sheets tab
+      var resultDepartments = [];
+      if (dSheet) {
+        var dData = dSheet.getDataRange().getValues();
+        for (var dr = 1; dr < dData.length; dr++) {
+          var dRow = dData[dr];
+          if (!dRow[1]) continue;
+          resultDepartments.push({
+            id: dRow[0] ? dRow[0].toString() : ("d_" + dr),
+            name: dRow[1] ? dRow[1].toString().trim() : "",
+            headName: dRow[2] ? dRow[2].toString().trim() : "Unassigned",
+            supportTeam: dRow[3] ? dRow[3].toString().trim() : "Core Team"
+          });
+        }
+      }
+
+      // Read Categories from Google Sheets tab
+      var resultCategories = [];
+      if (cSheet) {
+        var cData = cSheet.getDataRange().getValues();
+        for (var cr = 1; cr < cData.length; cr++) {
+          var cRow = cData[cr];
+          if (!cRow[1]) continue;
+          var subRaw = cRow[3] ? cRow[3].toString() : "";
+          var subList = subRaw ? subRaw.split(",").map(function(s) { return s.trim(); }).filter(Boolean) : [];
+          resultCategories.push({
+            id: cRow[0] ? cRow[0].toString() : ("c_" + cr),
+            name: cRow[1] ? cRow[1].toString().trim() : "",
+            department: cRow[2] ? cRow[2].toString().trim() : "IT Operations",
+            subCategories: subList,
+            defaultPriority: cRow[4] ? cRow[4].toString().trim() : "Medium"
+          });
+        }
+      }
+
+      // Read MasterDropdowns (Branches, Priorities, Statuses, Roles, Designations, Ticket Types)
+      var resultBranches = [];
+      var resultPriorities = [];
+      var resultStatuses = [];
+      var resultRoles = [];
+      var resultDesignations = [];
+      var resultTicketTypes = [];
+      var seenB = {}, seenP = {}, seenS = {}, seenR = {}, seenD = {}, seenT = {};
+
+      if (mSheet) {
+        var mData = mSheet.getDataRange().getValues();
+        for (var mr = 1; mr < mData.length; mr++) {
+          var mRow = mData[mr];
+          var mType = (mRow[1] || "").toString().toLowerCase();
+          var mVal = (mRow[3] || "").toString().trim();
+          var mStatus = (mRow[4] || "Active").toString().toLowerCase();
+          if (!mVal || mStatus === "inactive" || mStatus === "disabled") continue;
+
+          if (mType.indexOf("branch") !== -1 || mType.indexOf("location") !== -1) {
+            if (!seenB[mVal.toLowerCase()]) { seenB[mVal.toLowerCase()] = true; resultBranches.push(mVal); }
+          } else if (mType.indexOf("priority") !== -1) {
+            if (!seenP[mVal.toLowerCase()]) { seenP[mVal.toLowerCase()] = true; resultPriorities.push(mVal); }
+          } else if (mType.indexOf("status") !== -1) {
+            if (!seenS[mVal.toLowerCase()]) { seenS[mVal.toLowerCase()] = true; resultStatuses.push(mVal); }
+          } else if (mType.indexOf("role") !== -1) {
+            if (!seenR[mVal.toLowerCase()]) { seenR[mVal.toLowerCase()] = true; resultRoles.push(mVal); }
+          } else if (mType.indexOf("designation") !== -1) {
+            if (!seenD[mVal.toLowerCase()]) { seenD[mVal.toLowerCase()] = true; resultDesignations.push(mVal); }
+          } else if (mType.indexOf("type") !== -1) {
+            if (!seenT[mVal.toLowerCase()]) { seenT[mVal.toLowerCase()] = true; resultTicketTypes.push(mVal); }
+          }
+        }
+      }
+
+      // Read TicketHierarchy
+      var resultHierarchy = [];
+      if (hSheet) {
+        var hData = hSheet.getDataRange().getValues();
+        for (var hr = 1; hr < hData.length; hr++) {
+          var hRow = hData[hr];
+          if (!hRow[1] && !hRow[2]) continue;
+          var tTypeVal = (hRow[1] || "Support / How-To").toString().trim();
+          if (tTypeVal && !seenT[tTypeVal.toLowerCase()]) {
+            seenT[tTypeVal.toLowerCase()] = true;
+            resultTicketTypes.push(tTypeVal);
+          }
+          resultHierarchy.push({
+            id: hRow[0] ? hRow[0].toString() : ("HRY-" + hr),
+            type: tTypeVal,
+            category: (hRow[2] || "").toString().trim(),
+            module: (hRow[3] || "").toString().trim(),
+            subCategory: (hRow[4] || "").toString().trim()
+          });
+        }
+      }
+
+      // Read RolePermissions
+      var resultRolePermissions = [];
+      if (rpSheet) {
+        var rpData = rpSheet.getDataRange().getValues();
+        for (var rpr = 1; rpr < rpData.length; rpr++) {
+          var rpRow = rpData[rpr];
+          if (!rpRow[0]) continue;
+          resultRolePermissions.push({
+            role: rpRow[0].toString(),
+            canViewDashboard: rpRow[1] === true || rpRow[1] === "TRUE" || rpRow[1] === "true",
+            canViewTickets: rpRow[2] === true || rpRow[2] === "TRUE" || rpRow[2] === "true",
+            canCreateTickets: rpRow[3] === true || rpRow[3] === "TRUE" || rpRow[3] === "true",
+            canEditTickets: rpRow[4] === true || rpRow[4] === "TRUE" || rpRow[4] === "true",
+            canDeleteTickets: rpRow[5] === true || rpRow[5] === "TRUE" || rpRow[5] === "true",
+            canViewFeedback: rpRow[6] === true || rpRow[6] === "TRUE" || rpRow[6] === "true",
+            canSubmitFeedback: rpRow[7] === true || rpRow[7] === "TRUE" || rpRow[7] === "true",
+            canViewReports: rpRow[8] === true || rpRow[8] === "TRUE" || rpRow[8] === "true",
+            canManageUsers: rpRow[9] === true || rpRow[9] === "TRUE" || rpRow[9] === "true",
+            canDeleteUsersPermanently: rpRow[10] === true || rpRow[10] === "TRUE" || rpRow[10] === "true",
+            canManageDepartments: rpRow[11] === true || rpRow[11] === "TRUE" || rpRow[11] === "true",
+            canManageCategories: rpRow[12] === true || rpRow[12] === "TRUE" || rpRow[12] === "true",
+            canManageSLA: rpRow[13] === true || rpRow[13] === "TRUE" || rpRow[13] === "true",
+            canManageDropdowns: rpRow[14] === true || rpRow[14] === "TRUE" || rpRow[14] === "true",
+            canAccessGoogleDriveSync: rpRow[15] === true || rpRow[15] === "TRUE" || rpRow[15] === "true",
+            canAccessAppsScript: rpRow[16] === true || rpRow[16] === "TRUE" || rpRow[16] === "true",
+            canViewAuditLogs: rpRow[17] === true || rpRow[17] === "TRUE" || rpRow[17] === "true",
+            canManageSystemSettings: rpRow[18] === true || rpRow[18] === "TRUE" || rpRow[18] === "true",
+            canManageRolePermissions: rpRow[19] === true || rpRow[19] === "TRUE" || rpRow[19] === "true",
+            canAccessArchivedData: rpRow[20] === true || rpRow[20] === "TRUE" || rpRow[20] === "true"
+          });
+        }
+      }
+
+      // Read ArchivedTickets
+      var resultArchivedTickets = [];
+      if (archTSheet) {
+        var atData = archTSheet.getDataRange().getValues();
+        for (var atr = 1; atr < atData.length; atr++) {
+          var atRow = atData[atr];
+          if (!atRow[3]) continue;
+          resultArchivedTickets.push({
+            archivedAt: atRow[0] ? atRow[0].toString() : "",
+            archivedBy: atRow[1] ? atRow[1].toString() : "",
+            archiveReason: atRow[2] ? atRow[2].toString() : "",
+            id: atRow[3] ? atRow[3].toString() : "",
+            employeeId: atRow[4] ? atRow[4].toString() : "",
+            employeeName: atRow[5] ? atRow[5].toString() : "",
+            employeeEmail: atRow[6] ? atRow[6].toString() : "",
+            ticketType: atRow[7] ? atRow[7].toString() : "Support / How-To",
+            department: atRow[8] ? atRow[8].toString() : "",
+            location: atRow[9] ? atRow[9].toString() : "",
+            category: atRow[10] ? atRow[10].toString() : "",
+            module: atRow[11] ? atRow[11].toString() : "",
+            subCategory: atRow[12] ? atRow[12].toString() : "",
+            subject: atRow[13] ? atRow[13].toString() : "",
+            description: atRow[14] ? atRow[14].toString() : "",
+            priority: atRow[15] ? atRow[15].toString() : "Medium",
+            status: atRow[16] ? atRow[16].toString() : "Closed",
+            assignedAgentName: atRow[17] ? atRow[17].toString() : "",
+            createdDate: atRow[18] ? atRow[18].toString() : "",
+            slaDueDate: atRow[19] ? atRow[19].toString() : "",
+            closedDate: atRow[20] ? atRow[20].toString() : "",
+            rating: atRow[21] ? Number(atRow[21]) : undefined,
+            feedback: atRow[22] ? atRow[22].toString() : "",
+            contactNumber: atRow[23] ? atRow[23].toString() : ""
+          });
+        }
+      }
+
       return ContentService.createTextOutput(JSON.stringify({
         success: true,
         tickets: resultTickets,
         users: resultUsers,
+        departments: resultDepartments,
+        categories: resultCategories,
+        branches: resultBranches,
+        prioritiesList: resultPriorities,
+        statusesList: resultStatuses,
+        rolesList: resultRoles,
+        designationsList: resultDesignations,
+        ticketTypes: resultTicketTypes,
+        hierarchy: resultHierarchy,
+        rolePermissions: resultRolePermissions,
+        archivedTickets: resultArchivedTickets,
         totalTickets: resultTickets.length,
         timestamp: new Date().toISOString()
       })).setMimeType(ContentService.MimeType.JSON);
@@ -884,9 +1060,10 @@ function doPost(e) {
 
     if (action === "updateDropdowns" || action === "updateMasterDropdowns") {
       var mSheet = ss.getSheetByName("MasterDropdowns") || ss.getSheetByName("DropdownOptions");
+      if (!mSheet) {
+        mSheet = ss.insertSheet("MasterDropdowns");
+      }
       if (mSheet) {
-        mSheet.clearContents();
-        mSheet.appendRow(["Option ID", "Dropdown Type", "Option Code", "Option Value", "Status", "Updated At"]);
         var nowStr = new Date().toISOString();
         var formatOptionId = function(prefix, idx) {
           var num = idx + 1;
@@ -896,22 +1073,68 @@ function doPost(e) {
           return (val || "").toString().toUpperCase().replace(/[^A-Z0-9]/g, "_").replace(/__+/g, "_").slice(0, 20);
         };
 
-        (contents.ticketTypes || []).forEach(function(t, idx) {
+        // Read existing options to preserve other dropdown types if only one type was updated
+        var existingOptions = [];
+        var existingMData = mSheet.getDataRange().getValues();
+        for (var ex = 1; ex < existingMData.length; ex++) {
+          var er = existingMData[ex];
+          if (er[3]) {
+            existingOptions.push({
+              id: er[0] || "",
+              type: (er[1] || "").toString(),
+              code: (er[2] || "").toString(),
+              val: (er[3] || "").toString().trim(),
+              status: (er[4] || "Active").toString()
+            });
+          }
+        }
+
+        var newTypes = contents.ticketTypes;
+        var newBranches = contents.branches;
+        var newPriorities = contents.prioritiesList;
+        var newStatuses = contents.statusesList;
+        var newRoles = contents.rolesList;
+        var newDesigs = contents.designationsList;
+
+        // If all or most are passed, rebuild completely. If single category passed, update only that category.
+        var hasMultiple = [newTypes, newBranches, newPriorities, newStatuses, newRoles, newDesigs].filter(function(a) { return Array.isArray(a); }).length >= 2;
+
+        mSheet.clearContents();
+        mSheet.appendRow(["Option ID", "Dropdown Type", "Option Code", "Option Value", "Status", "Updated At"]);
+
+        // 1. Ticket Request Types
+        var typesList = Array.isArray(newTypes) ? newTypes : (hasMultiple ? [] : existingOptions.filter(function(o) { return o.type.indexOf("Type") !== -1; }).map(function(o) { return o.val; }));
+        typesList.forEach(function(t, idx) {
           mSheet.appendRow([formatOptionId("TYP", idx), "Ticket Request Type", formatOptionCode(t), t, "Active", nowStr]);
         });
-        (contents.branches || []).forEach(function(b, idx) {
+
+        // 2. Branches / Locations
+        var branchesList = Array.isArray(newBranches) ? newBranches : (hasMultiple ? [] : existingOptions.filter(function(o) { return o.type.indexOf("Branch") !== -1 || o.type.indexOf("Location") !== -1; }).map(function(o) { return o.val; }));
+        branchesList.forEach(function(b, idx) {
           mSheet.appendRow([formatOptionId("LOC", idx), "Branch / Location", formatOptionCode(b), b, "Active", nowStr]);
         });
-        (contents.prioritiesList || []).forEach(function(p, idx) {
+
+        // 3. Ticket Priorities
+        var priList = Array.isArray(newPriorities) ? newPriorities : (hasMultiple ? [] : existingOptions.filter(function(o) { return o.type.indexOf("Priority") !== -1; }).map(function(o) { return o.val; }));
+        priList.forEach(function(p, idx) {
           mSheet.appendRow([formatOptionId("PRI", idx), "Ticket Priority", formatOptionCode(p), p, "Active", nowStr]);
         });
-        (contents.statusesList || []).forEach(function(s, idx) {
+
+        // 4. Ticket Statuses
+        var stsList = Array.isArray(newStatuses) ? newStatuses : (hasMultiple ? [] : existingOptions.filter(function(o) { return o.type.indexOf("Status") !== -1; }).map(function(o) { return o.val; }));
+        stsList.forEach(function(s, idx) {
           mSheet.appendRow([formatOptionId("STS", idx), "Ticket Status", formatOptionCode(s), s, "Active", nowStr]);
         });
-        (contents.rolesList || []).forEach(function(r, idx) {
+
+        // 5. User Roles
+        var rList = Array.isArray(newRoles) ? newRoles : (hasMultiple ? [] : existingOptions.filter(function(o) { return o.type.indexOf("Role") !== -1; }).map(function(o) { return o.val; }));
+        rList.forEach(function(r, idx) {
           mSheet.appendRow([formatOptionId("ROL", idx), "User Role", formatOptionCode(r), r, "Active", nowStr]);
         });
-        (contents.designationsList || []).forEach(function(d, idx) {
+
+        // 6. Designations
+        var dsgList = Array.isArray(newDesigs) ? newDesigs : (hasMultiple ? [] : existingOptions.filter(function(o) { return o.type.indexOf("Designation") !== -1; }).map(function(o) { return o.val; }));
+        dsgList.forEach(function(d, idx) {
           mSheet.appendRow([formatOptionId("DSG", idx), "Designation", formatOptionCode(d), d, "Active", nowStr]);
         });
       }
@@ -1252,12 +1475,105 @@ function setupHelpDeskSheets(ss) {
         sheet.appendRow(["User ID", "Emp ID", "Name", "Email", "Role", "Dept", "Designation", "Location", "Status"]);
       } else if (tabName === "Departments") {
         sheet.appendRow(["Department ID", "Department Name", "Department Head", "Support Team"]);
+        sheet.appendRow(["d_it", "IT & ERP Operations", "Ashish Sharma", "Orbit & FMS Core Team"]);
+        sheet.appendRow(["d_acc", "Accounts & Finance", "CA Rahul Verma", "Finance Operations"]);
+        sheet.appendRow(["d_sales", "Sales & Marketing", "Vikas Agrawal", "Commercial Team"]);
+        sheet.appendRow(["d_inv", "Inventory & Warehouse", "Sunil Patel", "Stores & Logistics"]);
+        sheet.appendRow(["d_plant", "Plant & Manufacturing", "Er. Rajesh Gupta", "Engineering Team"]);
+        sheet.appendRow(["d_hr", "HR & Administration", "Pooja Sharma", "General Admin"]);
       } else if (tabName === "Categories") {
         sheet.appendRow(["Category ID", "Category Name", "Target Department", "Sub-Categories", "Default Priority"]);
+        sheet.appendRow(["c_orbit", "Orbit ERP", "IT & ERP Operations", "Invoice, Order, Quotation, Lead, Customer, Vendor, Stock, Receipt Voucher, Payment Voucher, Journal Voucher, Credit Note, Professional, Consignment", "High"]);
+        sheet.appendRow(["c_fms", "FMS Workflow", "IT & ERP Operations", "Material, Entry, Item, Status, FMS Check", "Medium"]);
+        sheet.appendRow(["c_hw", "Hardware & IT Equipment", "IT & ERP Operations", "Desktop / Laptop, Printer / Scanner, CCTV & Surveillance, Network Switch / Router", "High"]);
+        sheet.appendRow(["c_sw", "Software & Licenses", "IT & ERP Operations", "OS / Windows Issue, MS Office / Excel, Antivirus, Tally / Accounting", "Medium"]);
+        sheet.appendRow(["c_net", "Network & Internet", "IT & ERP Operations", "LAN / Wi-Fi Down, Slow Internet, VPN / Remote Access", "Critical"]);
+        sheet.appendRow(["c_email", "Email & Workspace", "IT & ERP Operations", "Password Reset, New Email ID, Storage Full, Outlook / Mail Client", "Low"]);
+        sheet.appendRow(["c_gen", "General Support", "IT & ERP Operations", "User Training / SOP, Policy Query, Miscellaneous", "Low"]);
       } else if (tabName === "TicketHierarchy") {
         sheet.appendRow(["Hierarchy ID", "Ticket Type", "Category", "Module", "Sub-Category / Action Item", "Status"]);
+        sheet.appendRow(["HRY-001", "Modification Request", "FMS", "Material", "Remove Material Name", "Active"]);
+        sheet.appendRow(["HRY-002", "Modification Request", "FMS", "Material", "Change Material Name", "Active"]);
+        sheet.appendRow(["HRY-003", "Modification Request", "FMS", "Material", "Change QTY", "Active"]);
+        sheet.appendRow(["HRY-004", "New Request", "FMS", "Material", "New Material Add", "Active"]);
+        sheet.appendRow(["HRY-005", "New Request", "FMS", "Entry", "New Entry", "Active"]);
+        sheet.appendRow(["HRY-006", "Modification Request", "FMS", "Item", "Replace Item Name", "Active"]);
+        sheet.appendRow(["HRY-007", "Modification Request", "FMS", "Status", "Status Change", "Active"]);
+        sheet.appendRow(["HRY-008", "Modification Request", "FMS", "FMS", "Step Check & Back", "Active"]);
+        sheet.appendRow(["HRY-009", "Support / How-To", "FMS", "FMS", "FMS Related Help", "Active"]);
+        sheet.appendRow(["HRY-010", "Modification Request", "Orbit", "Invoice", "Add Item", "Active"]);
+        sheet.appendRow(["HRY-011", "Modification Request", "Orbit", "Invoice", "Remove Item", "Active"]);
+        sheet.appendRow(["HRY-012", "Modification Request", "Orbit", "Invoice", "Change Material Name", "Active"]);
+        sheet.appendRow(["HRY-013", "Modification Request", "Orbit", "Invoice", "Change QTY", "Active"]);
+        sheet.appendRow(["HRY-014", "Modification Request", "Orbit", "Invoice", "Price Change", "Active"]);
+        sheet.appendRow(["HRY-015", "Modification Request", "Orbit", "Invoice", "Status Change", "Active"]);
+        sheet.appendRow(["HRY-016", "New Request", "Orbit", "Invoice", "New Invoice Entry", "Active"]);
+        sheet.appendRow(["HRY-017", "Modification Request", "Orbit", "Order", "Add Item", "Active"]);
+        sheet.appendRow(["HRY-018", "Modification Request", "Orbit", "Order", "Remove Item", "Active"]);
+        sheet.appendRow(["HRY-019", "Modification Request", "Orbit", "Order", "Change Material Name", "Active"]);
+        sheet.appendRow(["HRY-020", "Modification Request", "Orbit", "Order", "Change QTY", "Active"]);
+        sheet.appendRow(["HRY-021", "Modification Request", "Orbit", "Order", "Price Change", "Active"]);
+        sheet.appendRow(["HRY-022", "New Request", "Orbit", "Order", "New Order Entry", "Active"]);
+        sheet.appendRow(["HRY-023", "Modification Request", "Orbit", "Quotation", "Add Item", "Active"]);
+        sheet.appendRow(["HRY-024", "Modification Request", "Orbit", "Quotation", "Remove Item", "Active"]);
+        sheet.appendRow(["HRY-025", "Modification Request", "Orbit", "Quotation", "Change Material Name", "Active"]);
+        sheet.appendRow(["HRY-026", "Modification Request", "Orbit", "Quotation", "Change QTY", "Active"]);
+        sheet.appendRow(["HRY-027", "Modification Request", "Orbit", "Quotation", "Price Change", "Active"]);
+        sheet.appendRow(["HRY-028", "Modification Request", "Orbit", "Quotation", "Validity Date", "Active"]);
+        sheet.appendRow(["HRY-029", "New Request", "Orbit", "Quotation", "New Quotation Entry", "Active"]);
+        sheet.appendRow(["HRY-030", "New Request", "Orbit", "Lead", "New Lead Create", "Active"]);
+        sheet.appendRow(["HRY-031", "Approval Request", "Orbit", "Customer", "Customer Approve", "Active"]);
+        sheet.appendRow(["HRY-032", "Approval Request", "Orbit", "Customer", "Customer Hard Limit", "Active"]);
+        sheet.appendRow(["HRY-033", "Approval Request", "Orbit", "Vendor", "Vendor Approve", "Active"]);
+        sheet.appendRow(["HRY-034", "Verification Request", "Orbit", "Stock", "Physical Stock Verification", "Active"]);
+        sheet.appendRow(["HRY-035", "Modification Request", "Orbit", "Stock", "Stock Transfer", "Active"]);
+        sheet.appendRow(["HRY-036", "Issue / Bug", "Orbit", "Stock", "Damage Stock", "Active"]);
+        sheet.appendRow(["HRY-037", "New Request", "Orbit", "Receipt Voucher", "New Receipt Voucher", "Active"]);
+        sheet.appendRow(["HRY-038", "New Request", "Orbit", "Payment Voucher", "New Payment Voucher", "Active"]);
+        sheet.appendRow(["HRY-039", "New Request", "Orbit", "Journal Voucher", "New Journal Voucher", "Active"]);
+        sheet.appendRow(["HRY-040", "Approval Request", "Orbit", "Journal Voucher", "Journal Voucher Approve", "Active"]);
+        sheet.appendRow(["HRY-041", "Modification Request", "Orbit", "Credit Note", "Credit Note", "Active"]);
+        sheet.appendRow(["HRY-042", "New Request", "Orbit", "Professional", "Professional Name Add", "Active"]);
+        sheet.appendRow(["HRY-043", "New Request", "Orbit", "Consignment", "New Consignment", "Active"]);
       } else if (tabName === "MasterDropdowns" || tabName === "DropdownOptions") {
         sheet.appendRow(["Option ID", "Dropdown Type", "Option Code", "Option Value", "Status", "Updated At"]);
+        var sNow = new Date().toISOString();
+        var seedLocations = ["Raipur", "Bilaspur", "Durg", "Bhilai", "Korba", "Rajnandgaon", "Jagdalpur", "Head Office", "Plant Unit 1", "Plant Unit 2", "Warehouse 1", "Warehouse 2", "Central Logistics"];
+        seedLocations.forEach(function(loc, idx) {
+          var n = idx + 1;
+          var lid = "LOC-" + (n < 10 ? "00" + n : (n < 100 ? "0" + n : n));
+          sheet.appendRow([lid, "Branch / Location", loc.toUpperCase().replace(/\s+/g, "_"), loc, "Active", sNow]);
+        });
+        var seedPriorities = ["Low", "Medium", "High", "Critical"];
+        seedPriorities.forEach(function(pri, idx) {
+          var n = idx + 1;
+          var pid = "PRI-" + (n < 10 ? "00" + n : (n < 100 ? "0" + n : n));
+          sheet.appendRow([pid, "Ticket Priority", pri.toUpperCase(), pri, "Active", sNow]);
+        });
+        var seedStatuses = ["Open", "In Progress", "Pending Approval", "Resolved", "Closed", "Reopened"];
+        seedStatuses.forEach(function(sts, idx) {
+          var n = idx + 1;
+          var sid = "STS-" + (n < 10 ? "00" + n : (n < 100 ? "0" + n : n));
+          sheet.appendRow([sid, "Ticket Status", sts.toUpperCase().replace(/\s+/g, "_"), sts, "Active", sNow]);
+        });
+        var seedRoles = ["Employee", "Agent", "Manager", "IT Admin", "Super Admin"];
+        seedRoles.forEach(function(rol, idx) {
+          var n = idx + 1;
+          var rid = "ROL-" + (n < 10 ? "00" + n : (n < 100 ? "0" + n : n));
+          sheet.appendRow([rid, "User Role", rol.toUpperCase().replace(/\s+/g, "_"), rol, "Active", sNow]);
+        });
+        var seedDesignations = ["Branch Manager", "Accounts Officer", "Sales Executive", "Inventory Supervisor", "IT Engineer", "Logistics Coordinator", "Plant Incharge", "Operations Head", "Staff Member", "Director"];
+        seedDesignations.forEach(function(dsg, idx) {
+          var n = idx + 1;
+          var did = "DSG-" + (n < 10 ? "00" + n : (n < 100 ? "0" + n : n));
+          sheet.appendRow([did, "Designation", dsg.toUpperCase().replace(/\s+/g, "_"), dsg, "Active", sNow]);
+        });
+        var seedTypes = ["Modification Request", "New Request", "Support / How-To", "Approval Request", "Verification Request", "Issue / Bug"];
+        seedTypes.forEach(function(typ, idx) {
+          var n = idx + 1;
+          var tid = "TYP-" + (n < 10 ? "00" + n : (n < 100 ? "0" + n : n));
+          sheet.appendRow([tid, "Ticket Request Type", typ.toUpperCase().replace(/[^A-Z0-9]/g, "_"), typ, "Active", sNow]);
+        });
       } else if (tabName === "AuditLogs") {
         sheet.appendRow(["Log ID", "Action", "Module", "User", "Details", "Timestamp"]);
       } else if (tabName === "Settings") {

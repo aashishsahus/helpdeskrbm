@@ -3274,6 +3274,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         updateSettings,
         syncWithGoogleSheets,
+        syncDirectActionToSheets,
         pullDataFromGoogleSheets,
         refreshAllData,
         isDataRefreshing,
