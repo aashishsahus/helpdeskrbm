@@ -284,12 +284,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return false; // Password / PIN is strictly required for every user!
     }
     const cleanPass = passwordInput.trim();
+    
+    // 1. Exact match with user's configured password
     if (user.password && cleanPass === user.password) return true;
+    
+    // 2. Exact match with user's configured numeric PIN
     if (user.pin && cleanPass === user.pin) return true;
-    const empNum = user.employeeId ? user.employeeId.replace(/\D/g, '') : '';
-    if (empNum && cleanPass === empNum) return true;
-    if (user.role === 'Super Admin' && (cleanPass === 'admin123' || cleanPass === '2026')) return true;
-    if (cleanPass === '1234' || cleanPass === '123456' || cleanPass === '2026' || cleanPass === 'admin123') return true;
+    
+    // 3. Fallback check ONLY for fresh/unmodified accounts with default credentials:
+    const hasCustomPassword = user.password && user.password !== '123456' && user.password !== 'admin123';
+    const hasCustomPin = user.pin && user.pin !== '1234' && user.pin !== '2026';
+    
+    if (!hasCustomPassword && !hasCustomPin) {
+      if (cleanPass === (user.password || '123456')) return true;
+      if (cleanPass === (user.pin || '1234')) return true;
+      const empNum = user.employeeId ? user.employeeId.replace(/\D/g, '') : '';
+      if (empNum && cleanPass === empNum) return true;
+      if (user.role === 'Super Admin' && (cleanPass === 'admin123' || cleanPass === '2026')) return true;
+    }
+    
     return false;
   };
 
@@ -320,7 +333,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!verifyPasswordOrPin(matched, passwordInput)) {
         return {
           success: false,
-          message: `Authentication Failed: Incorrect Password/PIN for Google Account '${googleEmail}'. (Registered PIN: ${matched.pin || matched.employeeId.replace(/\D/g, '') || '2026'})`
+          message: `Authentication Failed: Incorrect Password or PIN for Google Account '${googleEmail}'.`
         };
       }
       setCurrentUser(matched);
@@ -366,7 +379,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // 0. Direct Super Admin Shortcut (e.g., 'admin', 'superuser', 'emp-admin', 'admin123')
     if (cleanQuery === 'admin' || cleanQuery === 'superuser' || cleanQuery === 'emp-admin' || cleanQuery === 'admin@rathibuildmart.com') {
       const superAdminUser = users.find(u => u.role === 'Super Admin') || users[0];
-      if (passwordInput && (passwordInput.trim() === 'admin123' || verifyPasswordOrPin(superAdminUser, passwordInput))) {
+      if (passwordInput && verifyPasswordOrPin(superAdminUser, passwordInput)) {
         setCurrentUser(superAdminUser);
         addAuditLog('USER_LOGIN', 'Authentication', `Super Admin logged in via direct shortcut (${superAdminUser.email})`);
         return {
@@ -377,7 +390,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       } else {
         return {
           success: false,
-          message: `Authentication Failed: Incorrect Super Admin Password. (Required Password: 'admin123' or PIN: '${superAdminUser.pin || '2026'}')`
+          message: `Authentication Failed: Incorrect Super Admin Password or PIN.`
         };
       }
     }
@@ -388,7 +401,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!verifyPasswordOrPin(exactIdMatch, passwordInput)) {
         return {
           success: false,
-          message: `Incorrect Password/PIN for ${exactIdMatch.name} (${exactIdMatch.employeeId}). (Default PIN: ${exactIdMatch.pin || '1234'})`
+          message: `Incorrect Password or PIN for ${exactIdMatch.name} (${exactIdMatch.employeeId}).`
         };
       }
       setCurrentUser(exactIdMatch);
@@ -406,7 +419,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!verifyPasswordOrPin(exactEmpIdMatch, passwordInput)) {
         return {
           success: false,
-          message: `Incorrect Password/PIN for ${exactEmpIdMatch.name} (${exactEmpIdMatch.employeeId}). (Default PIN: ${exactEmpIdMatch.pin || '1234'})`
+          message: `Incorrect Password or PIN for ${exactEmpIdMatch.name} (${exactEmpIdMatch.employeeId}).`
         };
       }
       setCurrentUser(exactEmpIdMatch);
@@ -430,7 +443,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (!verifyPasswordOrPin(matched, passwordInput)) {
           return {
             success: false,
-            message: `Incorrect Password/PIN for ${matched.name} (${matched.employeeId}). (Default PIN: ${matched.pin || '1234'})`
+            message: `Incorrect Password or PIN for ${matched.name} (${matched.employeeId}).`
           };
         }
         setCurrentUser(matched);
@@ -455,7 +468,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!verifyPasswordOrPin(exactNameMatch, passwordInput)) {
         return {
           success: false,
-          message: `Incorrect Password/PIN for ${exactNameMatch.name} (${exactNameMatch.employeeId}). (Default PIN: ${exactNameMatch.pin || '1234'})`
+          message: `Incorrect Password or PIN for ${exactNameMatch.name} (${exactNameMatch.employeeId}).`
         };
       }
       setCurrentUser(exactNameMatch);
@@ -474,7 +487,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!verifyPasswordOrPin(matched, passwordInput)) {
         return {
           success: false,
-          message: `Incorrect Password/PIN for ${matched.name} (${matched.employeeId}). (Default PIN: ${matched.pin || '1234'})`
+          message: `Incorrect Password or PIN for ${matched.name} (${matched.employeeId}).`
         };
       }
       setCurrentUser(matched);
@@ -505,7 +518,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!verifyPasswordOrPin(matched, passwordInput)) {
         return {
           success: false,
-          message: `Incorrect Password/PIN for ${matched.name} (${matched.employeeId}). (Default PIN: ${matched.pin || '1234'})`
+          message: `Incorrect Password or PIN for ${matched.name} (${matched.employeeId}).`
         };
       }
       setCurrentUser(matched);
@@ -2011,6 +2024,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     setRolePermissions(updated);
+    try {
+      localStorage.setItem('hd_role_permissions_v1', JSON.stringify(updated));
+    } catch (e) {}
+
     syncDirectActionToSheets({
       action: 'updateRolePermissions',
       rolePermissions: updated,
@@ -2023,6 +2040,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Reset Role Permissions to Default
   const resetRolePermissionsToDefault = () => {
     setRolePermissions(defaultRolePermissions);
+    try {
+      localStorage.setItem('hd_role_permissions_v1', JSON.stringify(defaultRolePermissions));
+    } catch (e) {}
+
     syncDirectActionToSheets({
       action: 'updateRolePermissions',
       rolePermissions: defaultRolePermissions,
@@ -2037,8 +2058,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     users.forEach(u => {
       const key = u.id || u.employeeId;
       if (key) {
-        const existing = uMap.get(key) || {};
-        uMap.set(key, { ...existing, ...u });
+        const existing = uMap.get(key);
+        const mergedPass = (u.password && u.password.trim()) ? u.password : existing?.password;
+        const mergedPin = (u.pin && u.pin.trim()) ? u.pin : existing?.pin;
+        const mergedMobile = (u.mobile && u.mobile.trim()) ? u.mobile : existing?.mobile;
+        uMap.set(key, { ...(existing || {}), ...u, password: mergedPass, pin: mergedPin, mobile: mergedMobile } as User);
       }
     });
     const mergedUsers = Array.from(uMap.values());
@@ -2621,8 +2645,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           // Keep real tickets created locally
           prev.filter(p => !p.isDemoTicket && !['HD-000001', 'HD-000002', 'HD-000003', 'HD-000004', 'HD-000005', 'HD-000006', 'HD-000007', 'HD-000008'].includes(p.id))
             .forEach(t => map.set(t.id, t));
-          // Overlay tickets from Google Sheet
-          sheetTickets.forEach(t => map.set(t.id, t));
+
+          // Smartly overlay tickets from Google Sheet without clobbering newer local updates
+          sheetTickets.forEach(st => {
+            const existing = map.get(st.id);
+            if (!existing) {
+              map.set(st.id, st);
+            } else {
+              const localTime = new Date(existing.updatedDate || existing.createdDate || 0).getTime();
+              const sheetTime = new Date(st.updatedDate || st.createdDate || 0).getTime();
+
+              if (sheetTime > localTime) {
+                // Sheet has newer edits
+                map.set(st.id, {
+                  ...existing,
+                  ...st,
+                  attachments: (st.attachments && st.attachments.length > 0) ? st.attachments : (existing.attachments || [])
+                });
+              } else {
+                // Local is newer or equal: preserve local status, fields, ratings & notes
+                map.set(st.id, {
+                  ...st,
+                  ...existing,
+                  assignedAgentName: existing.assignedAgentName || st.assignedAgentName,
+                  assignedAgentId: existing.assignedAgentId || st.assignedAgentId
+                });
+              }
+            }
+          });
           const updated = Array.from(map.values());
           try {
             localStorage.setItem('hd_tickets_v2', JSON.stringify(updated));
@@ -2639,8 +2689,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           data.users.forEach((u: User) => {
             const key = u.id || u.employeeId;
             if (key) {
-              const existing = uMap.get(key) || {};
-              uMap.set(key, { ...existing, ...u });
+              const existing = uMap.get(key);
+              // Preserve locally updated password, pin, and mobile if sheet returns empty or missing
+              const mergedPassword = (u.password && u.password.trim()) ? u.password : existing?.password;
+              const mergedPin = (u.pin && u.pin.trim()) ? u.pin : existing?.pin;
+              const mergedMobile = (u.mobile && u.mobile.trim()) ? u.mobile : existing?.mobile;
+              uMap.set(key, {
+                ...(existing || {}),
+                ...u,
+                password: mergedPassword,
+                pin: mergedPin,
+                mobile: mergedMobile
+              } as User);
             }
           });
           const updatedUsers = Array.from(uMap.values());
@@ -2703,26 +2763,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
       }
 
-      // Update dropdown lists from MasterDropdowns tab
+      // Update dropdown lists from MasterDropdowns tab with unique deduplicated items
       if (data.success && Array.isArray(data.branches) && data.branches.length > 0) {
-        setBranches(data.branches);
-        try { localStorage.setItem('hd_branches_v1', JSON.stringify(data.branches)); } catch {}
+        setBranches(prev => {
+          const merged = Array.from(new Set([...prev, ...data.branches]));
+          try { localStorage.setItem('hd_branches_v1', JSON.stringify(merged)); } catch {}
+          return merged;
+        });
       }
       if (data.success && Array.isArray(data.prioritiesList) && data.prioritiesList.length > 0) {
-        setPrioritiesList(data.prioritiesList);
-        try { localStorage.setItem('hd_priorities_v1', JSON.stringify(data.prioritiesList)); } catch {}
+        setPrioritiesList(prev => {
+          const merged = Array.from(new Set([...prev, ...data.prioritiesList]));
+          try { localStorage.setItem('hd_priorities_v1', JSON.stringify(merged)); } catch {}
+          return merged;
+        });
       }
       if (data.success && Array.isArray(data.statusesList) && data.statusesList.length > 0) {
-        setStatusesList(data.statusesList);
-        try { localStorage.setItem('hd_statuses_v1', JSON.stringify(data.statusesList)); } catch {}
+        setStatusesList(prev => {
+          const merged = Array.from(new Set([...prev, ...data.statusesList]));
+          try { localStorage.setItem('hd_statuses_v1', JSON.stringify(merged)); } catch {}
+          return merged;
+        });
       }
       if (data.success && Array.isArray(data.rolesList) && data.rolesList.length > 0) {
-        setRolesList(data.rolesList);
-        try { localStorage.setItem('hd_roles_v1', JSON.stringify(data.rolesList)); } catch {}
+        setRolesList(prev => {
+          const merged = Array.from(new Set([...prev, ...data.rolesList]));
+          try { localStorage.setItem('hd_roles_v1', JSON.stringify(merged)); } catch {}
+          return merged;
+        });
       }
       if (data.success && Array.isArray(data.designationsList) && data.designationsList.length > 0) {
-        setDesignationsList(data.designationsList);
-        try { localStorage.setItem('hd_designations_v1', JSON.stringify(data.designationsList)); } catch {}
+        setDesignationsList(prev => {
+          const merged = Array.from(new Set([...prev, ...data.designationsList]));
+          try { localStorage.setItem('hd_designations_v1', JSON.stringify(merged)); } catch {}
+          return merged;
+        });
       }
 
       // Update TicketHierarchy & TicketTypes
@@ -2853,27 +2928,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (data.success && data.config) {
             setSettings(prev => {
               const cfg = data.config;
-              const needsUpdate = (
-                (cfg.smtpHost && !prev.smtpHost) ||
-                (cfg.smtpUser && !prev.smtpUser) ||
-                (cfg.webAppUrl && !prev.googleAppsScriptWebAppUrl)
-              );
-              if (needsUpdate) {
-                const merged = {
-                  ...prev,
-                  smtpHost: prev.smtpHost || cfg.smtpHost,
-                  smtpPort: prev.smtpPort || cfg.smtpPort,
-                  smtpUser: prev.smtpUser || cfg.smtpUser,
-                  smtpPass: prev.smtpPass || cfg.smtpPass,
-                  smtpSecure: prev.smtpSecure !== undefined ? prev.smtpSecure : cfg.smtpSecure,
-                  smtpSenderName: prev.smtpSenderName || cfg.smtpSenderName,
-                  googleAppsScriptWebAppUrl: prev.googleAppsScriptWebAppUrl || cfg.webAppUrl,
-                  appsScriptUrl: prev.appsScriptUrl || cfg.webAppUrl
-                };
-                try { localStorage.setItem('hd_settings_v2', JSON.stringify(merged)); } catch {}
-                return merged;
-              }
-              return prev;
+              const merged = {
+                ...prev,
+                spreadsheetId: cfg.spreadsheetId || prev.spreadsheetId,
+                driveFolderId: cfg.driveFolderId || prev.driveFolderId,
+                googleAppsScriptWebAppUrl: cfg.webAppUrl || prev.googleAppsScriptWebAppUrl,
+                appsScriptUrl: cfg.webAppUrl || prev.appsScriptUrl,
+                smtpHost: (cfg.smtpHost !== undefined && cfg.smtpHost !== '') ? cfg.smtpHost : prev.smtpHost,
+                smtpPort: cfg.smtpPort ? Number(cfg.smtpPort) : prev.smtpPort,
+                smtpUser: (cfg.smtpUser !== undefined && cfg.smtpUser !== '') ? cfg.smtpUser : prev.smtpUser,
+                smtpPass: (cfg.smtpPass !== undefined && cfg.smtpPass !== '') ? cfg.smtpPass : prev.smtpPass,
+                smtpSecure: cfg.smtpSecure !== undefined ? cfg.smtpSecure : prev.smtpSecure,
+                smtpSenderName: cfg.smtpSenderName || prev.smtpSenderName
+              };
+              try { localStorage.setItem('hd_settings_v2', JSON.stringify(merged)); } catch {}
+              return merged;
             });
           }
         })

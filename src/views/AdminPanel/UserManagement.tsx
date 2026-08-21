@@ -124,8 +124,8 @@ export const UserManagement: React.FC = () => {
     setEmployeeId(u.employeeId);
     setName(u.name);
     setEmail(u.email);
-    setPin(u.pin || u.employeeId.replace(/\D/g, '') || '1234');
-    setPassword(u.password || '123456');
+    setPin(u.pin || '');
+    setPassword(u.password || '');
     setRole(u.role);
     setDepartment(u.department);
     setDesignation(u.designation || '');
@@ -162,26 +162,39 @@ export const UserManagement: React.FC = () => {
     if (!name || !employeeId || !email) return;
 
     if (editingUser) {
-      updateUser(editingUser.id, {
+      const updates: Partial<User> = {
         employeeId,
         name,
         email,
-        pin,
-        password,
         role,
         department,
         designation: designation || 'Staff Member',
         location,
         mobile,
         status: userStatus
-      });
+      };
+      
+      // Only overwrite pin/password if explicitly modified in the form
+      if (pin.trim()) {
+        updates.pin = pin.trim();
+      } else if (editingUser.pin) {
+        updates.pin = editingUser.pin;
+      }
+
+      if (password.trim()) {
+        updates.password = password.trim();
+      } else if (editingUser.password) {
+        updates.password = editingUser.password;
+      }
+
+      updateUser(editingUser.id, updates);
     } else {
       addUser({
         employeeId,
         name,
         email,
-        pin,
-        password,
+        pin: pin.trim() || '1234',
+        password: password.trim() || '123456',
         role,
         department,
         designation: designation || 'Staff Member',
@@ -644,33 +657,37 @@ export const UserManagement: React.FC = () => {
               <div className="grid grid-cols-2 gap-3 bg-blue-50/60 p-3 rounded-xl border border-blue-100">
                 <div>
                   <label className="block font-bold text-blue-900 mb-1 flex items-center justify-between">
-                    <span>Employee PIN *</span>
+                    <span>Employee PIN {editingUser ? '' : '*'}</span>
                     <span className="text-[10px] text-blue-600 font-mono">Quick PIN</span>
                   </label>
                   <input
-                    required
+                    required={!editingUser}
                     type="text"
                     value={pin}
                     onChange={e => setPin(e.target.value)}
-                    placeholder="e.g. 1011 or 1234"
+                    placeholder={editingUser ? 'Leave blank to keep current PIN' : 'e.g. 1011 or 1234'}
                     className="w-full p-2 bg-white border border-blue-200 rounded-lg text-xs font-mono font-bold outline-none focus:border-blue-500"
                   />
-                  <span className="text-[9px] text-gray-500 mt-0.5 block">Used for fast ID sign-in</span>
+                  <span className="text-[9px] text-gray-500 mt-0.5 block">
+                    {editingUser ? 'Leave blank to preserve current account PIN' : 'Used for fast ID sign-in'}
+                  </span>
                 </div>
                 <div>
                   <label className="block font-bold text-blue-900 mb-1 flex items-center justify-between">
-                    <span>Password *</span>
+                    <span>Password {editingUser ? '' : '*'}</span>
                     <span className="text-[10px] text-blue-600 font-mono">Account Pass</span>
                   </label>
                   <input
-                    required
+                    required={!editingUser}
                     type="text"
                     value={password}
                     onChange={e => setPassword(e.target.value)}
-                    placeholder="e.g. admin123 or pass123"
+                    placeholder={editingUser ? 'Leave blank to keep current password' : 'e.g. admin123 or pass123'}
                     className="w-full p-2 bg-white border border-blue-200 rounded-lg text-xs font-mono outline-none focus:border-blue-500"
                   />
-                  <span className="text-[9px] text-gray-500 mt-0.5 block">Account authentication password</span>
+                  <span className="text-[9px] text-gray-500 mt-0.5 block">
+                    {editingUser ? 'Leave blank to preserve current password' : 'Account authentication password'}
+                  </span>
                 </div>
               </div>
 

@@ -170,13 +170,17 @@ const ROLES: UserRole[] = ['Employee', 'Support Agent', 'Support Manager', 'Admi
 export const RolePermissionsView: React.FC = () => {
   const {
     currentUser,
+    users,
     rolePermissions,
     updateRolePermission,
     resetRolePermissionsToDefault,
-    hasPermission
+    hasPermission,
+    setActiveView
   } = useApp();
 
   const [activeCategory, setActiveCategory] = useState<string>('All');
+  const [selectedRoleForMembers, setSelectedRoleForMembers] = useState<UserRole>('Admin');
+  const [activeTab, setActiveTab] = useState<'matrix' | 'roster'>('matrix');
   const [saveToast, setSaveToast] = useState<string | null>(null);
 
   const isSuperAdmin = currentUser?.role === 'Super Admin';
@@ -186,6 +190,8 @@ export const RolePermissionsView: React.FC = () => {
   const filteredPermissions = PERMISSION_DEFINITIONS.filter(
     p => activeCategory === 'All' || p.category === activeCategory
   );
+
+  const roleMembers = users.filter(u => u.role === selectedRoleForMembers);
 
   const handleToggle = (role: UserRole, key: keyof RolePermissionConfig, currentVal: boolean) => {
     if (!isSuperAdmin) {
@@ -224,21 +230,46 @@ export const RolePermissionsView: React.FC = () => {
             </span>
           </div>
           <p className="text-xs text-gray-500 mt-1">
-            Define granular access permissions for each user role. All changes are automatically synchronized with the Google Sheets <strong>RolePermissions</strong> tab.
+            Define granular access permissions for each user role and inspect assigned staff accounts. All changes are saved locally and synced with Google Sheets.
           </p>
         </div>
 
-        {isSuperAdmin && (
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2">
+          {/* Tab Switcher */}
+          <div className="flex bg-white rounded-xl p-1 border border-gray-200 shadow-2xs">
             <button
-              onClick={handleReset}
-              className="px-3.5 py-2 bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-2xs transition-all"
+              onClick={() => setActiveTab('matrix')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                activeTab === 'matrix'
+                  ? 'bg-emerald-800 text-white shadow-2xs'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
             >
-              <RotateCcw className="w-3.5 h-3.5 text-gray-500" />
-              <span>Reset Corporate Defaults</span>
+              Permission Matrix
+            </button>
+            <button
+              onClick={() => setActiveTab('roster')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'roster'
+                  ? 'bg-emerald-800 text-white shadow-2xs'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>Assigned Staff ({users.length})</span>
             </button>
           </div>
-        )}
+
+          {isSuperAdmin && (
+            <button
+              onClick={handleReset}
+              className="px-3.5 py-2 bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-gray-500" />
+              <span>Reset Defaults</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {saveToast && (
@@ -254,122 +285,221 @@ export const RolePermissionsView: React.FC = () => {
           <ShieldAlert className="w-5 h-5" />
         </div>
         <div className="space-y-1 text-xs">
-          <p className="font-bold text-sm text-emerald-200">Corporate Security & Deletion Policy</p>
+          <p className="font-bold text-sm text-emerald-200">Live Role Capability & Security Policy</p>
           <p className="text-gray-300 leading-relaxed">
-            Per company audit compliance, <strong>Permanent User Deletion</strong> and <strong>Permanent Ticket Deletion</strong> are strictly restricted to <strong>Super Admin</strong>. When items are deleted, they are never lost—they are automatically transferred to the dedicated <strong>ArchivedUsers</strong> and <strong>ArchivedTickets</strong> sheets in Google Workspace for audit traceability.
+            Permissions granted in this matrix take immediate effect for all active staff members assigned to that role. 
+            When granting <strong>Manage Staff Accounts</strong> to Support Managers or Admins, they can view, add, and manage user accounts in the <strong>User Management</strong> directory.
           </p>
         </div>
       </div>
 
-      {/* Category Filter Pills */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1">
-        {categories.map(cat => (
-          <button
-            key={cat}
-            onClick={() => setActiveCategory(cat)}
-            className={`px-3.5 py-1.5 rounded-xl font-bold text-xs transition-all shrink-0 ${
-              activeCategory === cat
-                ? 'bg-[#063B2C] text-white shadow-2xs'
-                : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200/80'
-            }`}
-          >
-            {cat}
-          </button>
-        ))}
-      </div>
+      {activeTab === 'matrix' ? (
+        <>
+          {/* Category Filter Pills */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1">
+            {categories.map(cat => (
+              <button
+                key={cat}
+                onClick={() => setActiveCategory(cat)}
+                className={`px-3.5 py-1.5 rounded-xl font-bold text-xs transition-all shrink-0 cursor-pointer ${
+                  activeCategory === cat
+                    ? 'bg-[#063B2C] text-white shadow-2xs'
+                    : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200/80'
+                }`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
 
-      {/* RBAC Matrix Table */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-200 text-gray-700 font-bold text-[11px]">
-                <th className="py-3.5 px-6 min-w-[280px]">Permission Capability</th>
-                <th className="py-3.5 px-4 text-center min-w-[110px]">
-                  <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-800 font-bold">Employee</span>
-                </th>
-                <th className="py-3.5 px-4 text-center min-w-[120px]">
-                  <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-bold">Support Agent</span>
-                </th>
-                <th className="py-3.5 px-4 text-center min-w-[130px]">
-                  <span className="px-2 py-0.5 rounded bg-cyan-100 text-cyan-800 font-bold">Support Manager</span>
-                </th>
-                <th className="py-3.5 px-4 text-center min-w-[110px]">
-                  <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-bold">Admin</span>
-                </th>
-                <th className="py-3.5 px-4 text-center min-w-[120px]">
-                  <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center gap-1">
-                    <Sparkles className="w-3 h-3 text-emerald-600" />
-                    Super Admin
-                  </span>
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {filteredPermissions.map(perm => (
-                <tr key={perm.key} className="hover:bg-gray-50/70 transition-colors">
-                  <td className="py-3.5 px-6">
-                    <div className="flex items-start gap-2">
-                      {perm.superAdminOnly ? (
-                        <div className="p-1 rounded bg-red-50 text-red-600 shrink-0 mt-0.5" title="Super Admin Strict Restricted">
-                          <Lock className="w-3.5 h-3.5" />
-                        </div>
-                      ) : (
-                        <div className="p-1 rounded bg-emerald-50 text-emerald-700 shrink-0 mt-0.5">
-                          <Check className="w-3.5 h-3.5" />
-                        </div>
-                      )}
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-gray-900">{perm.label}</span>
-                          <span className="text-[10px] px-2 py-0.2 text-gray-400 bg-gray-100 rounded-full font-mono">
-                            {perm.category}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-gray-500 mt-0.5">{perm.description}</p>
-                      </div>
-                    </div>
-                  </td>
+          {/* RBAC Matrix Table */}
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200 text-gray-700 font-bold text-[11px]">
+                    <th className="py-3.5 px-6 min-w-[280px]">Permission Capability</th>
+                    {ROLES.map(r => {
+                      const count = users.filter(u => u.role === r).length;
+                      let badgeColor = 'bg-purple-100 text-purple-800';
+                      if (r === 'Support Agent') badgeColor = 'bg-blue-100 text-blue-800';
+                      if (r === 'Support Manager') badgeColor = 'bg-cyan-100 text-cyan-800';
+                      if (r === 'Admin') badgeColor = 'bg-amber-100 text-amber-800';
+                      if (r === 'Super Admin') badgeColor = 'bg-emerald-100 text-emerald-800';
 
-                  {ROLES.map(r => {
-                    const roleConfig = rolePermissions.find(p => p.role === r);
-                    const isGranted = roleConfig ? !!roleConfig[perm.key] : false;
-                    const isSuperAdminCol = r === 'Super Admin';
-
-                    return (
-                      <td key={r} className="py-3.5 px-4 text-center">
-                        <button
-                          type="button"
-                          disabled={!isSuperAdmin || isSuperAdminCol}
-                          onClick={() => handleToggle(r, perm.key, isGranted)}
-                          className={`w-7 h-7 rounded-xl flex items-center justify-center mx-auto transition-all shadow-2xs ${
-                            isGranted
-                              ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                              : 'bg-gray-100 text-gray-400 hover:bg-gray-200 border border-gray-200'
-                          } ${!isSuperAdmin || isSuperAdminCol ? 'cursor-default opacity-90' : 'cursor-pointer hover:scale-105'}`}
-                          title={
-                            isSuperAdminCol
-                              ? 'Super Admin retains full master permission.'
-                              : !isSuperAdmin
-                              ? 'Only Super Admin can toggle permissions.'
-                              : `Click to toggle "${perm.label}" for ${r}`
-                          }
-                        >
-                          {isGranted ? (
-                            <Check className="w-4 h-4 stroke-[3]" />
+                      return (
+                        <th key={r} className="py-3.5 px-4 text-center min-w-[120px]">
+                          <div className="flex flex-col items-center gap-1">
+                            <span className={`px-2 py-0.5 rounded font-bold ${badgeColor}`}>
+                              {r}
+                            </span>
+                            <span className="text-[10px] text-gray-400 font-normal">
+                              ({count} {count === 1 ? 'user' : 'users'})
+                            </span>
+                          </div>
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {filteredPermissions.map(perm => (
+                    <tr key={perm.key} className="hover:bg-gray-50/70 transition-colors">
+                      <td className="py-3.5 px-6">
+                        <div className="flex items-start gap-2">
+                          {perm.superAdminOnly ? (
+                            <div className="p-1 rounded bg-red-50 text-red-600 shrink-0 mt-0.5" title="Super Admin Strict Restricted">
+                              <Lock className="w-3.5 h-3.5" />
+                            </div>
                           ) : (
-                            <X className="w-3.5 h-3.5 stroke-[2.5]" />
+                            <div className="p-1 rounded bg-emerald-50 text-emerald-700 shrink-0 mt-0.5">
+                              <Check className="w-3.5 h-3.5" />
+                            </div>
                           )}
-                        </button>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-gray-900">{perm.label}</span>
+                              <span className="text-[10px] px-2 py-0.2 text-gray-400 bg-gray-100 rounded-full font-mono">
+                                {perm.category}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-gray-500 mt-0.5">{perm.description}</p>
+                          </div>
+                        </div>
                       </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+
+                      {ROLES.map(r => {
+                        const roleConfig = rolePermissions.find(p => p.role === r);
+                        const isGranted = roleConfig ? !!roleConfig[perm.key] : false;
+                        const isSuperAdminCol = r === 'Super Admin';
+
+                        return (
+                          <td key={r} className="py-3.5 px-4 text-center">
+                            <button
+                              type="button"
+                              disabled={!isSuperAdmin || isSuperAdminCol}
+                              onClick={() => handleToggle(r, perm.key, isGranted)}
+                              className={`w-7 h-7 rounded-xl flex items-center justify-center mx-auto transition-all shadow-2xs ${
+                                isGranted
+                                  ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                  : 'bg-gray-100 text-gray-400 hover:bg-gray-200 border border-gray-200'
+                              } ${!isSuperAdmin || isSuperAdminCol ? 'cursor-default opacity-90' : 'cursor-pointer hover:scale-105'}`}
+                              title={
+                                isSuperAdminCol
+                                  ? 'Super Admin retains full master permission.'
+                                  : !isSuperAdmin
+                                  ? 'Only Super Admin can toggle permissions.'
+                                  : `Click to toggle "${perm.label}" for ${r}`
+                              }
+                            >
+                              {isGranted ? (
+                                <Check className="w-4 h-4 stroke-[3]" />
+                              ) : (
+                                <X className="w-3.5 h-3.5 stroke-[2.5]" />
+                              )}
+                            </button>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      ) : (
+        /* Role Member Roster View */
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1">
+            {ROLES.map(r => {
+              const count = users.filter(u => u.role === r).length;
+              return (
+                <button
+                  key={r}
+                  onClick={() => setSelectedRoleForMembers(r)}
+                  className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 cursor-pointer ${
+                    selectedRoleForMembers === r
+                      ? 'bg-emerald-800 text-white shadow-sm'
+                      : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+                  }`}
+                >
+                  <span>{r}</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] ${
+                    selectedRoleForMembers === r ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-600 font-bold'
+                  }`}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs overflow-hidden">
+            <div className="p-4 bg-gray-50 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <h3 className="font-bold text-gray-900 text-sm">
+                  Active Staff with Role: <span className="text-emerald-800 font-extrabold">{selectedRoleForMembers}</span> ({roleMembers.length})
+                </h3>
+                <p className="text-xs text-gray-500">
+                  These users inherit all permissions enabled for <strong>{selectedRoleForMembers}</strong> in the RBAC matrix.
+                </p>
+              </div>
+
+              <button
+                onClick={() => setActiveView('users')}
+                className="px-3.5 py-1.5 bg-[#063B2C] hover:bg-[#04281C] text-white text-xs font-bold rounded-lg shadow-2xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <Users className="w-3.5 h-3.5" />
+                <span>Manage Users in Directory</span>
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-gray-50/50 border-b border-gray-200 text-gray-600 font-bold text-[11px]">
+                    <th className="py-3 px-4">Employee ID</th>
+                    <th className="py-3 px-4">Staff Name</th>
+                    <th className="py-3 px-4">Email Address</th>
+                    <th className="py-3 px-4">Department</th>
+                    <th className="py-3 px-4">Designation</th>
+                    <th className="py-3 px-4">Location</th>
+                    <th className="py-3 px-4 text-center">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {roleMembers.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-8 text-center text-gray-500 text-xs">
+                        No active users currently assigned to role <strong>{selectedRoleForMembers}</strong>.
+                      </td>
+                    </tr>
+                  ) : (
+                    roleMembers.map(u => (
+                      <tr key={u.id} className="hover:bg-gray-50/60 transition-colors">
+                        <td className="py-3 px-4 font-mono font-bold text-gray-800">{u.employeeId}</td>
+                        <td className="py-3 px-4 font-bold text-gray-900">{u.name}</td>
+                        <td className="py-3 px-4 text-gray-600 font-mono text-[11px]">{u.email}</td>
+                        <td className="py-3 px-4 text-gray-700">{u.department}</td>
+                        <td className="py-3 px-4 text-gray-600">{u.designation || '—'}</td>
+                        <td className="py-3 px-4 text-gray-600">{u.location}</td>
+                        <td className="py-3 px-4 text-center">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            u.status === 'Active' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                          }`}>
+                            {u.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Role Summary Guide */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-3.5 text-xs">

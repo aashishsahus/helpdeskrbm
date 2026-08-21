@@ -1448,6 +1448,58 @@ function setupHelpDeskSheets(ss) {
           )}
         </div>
 
+        {/* Critical Explanation: Do I need to update link every time? & Data Persistence Fix */}
+        <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl space-y-3">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 bg-blue-600 text-white rounded-lg">
+              <Info className="w-4 h-4" />
+            </div>
+            <h4 className="text-xs font-black text-blue-950 uppercase tracking-wide">
+              FAQ & Solution: क्या हर बार Apps Script लिंक (Web App URL) बदलना पड़ेगा?
+            </h4>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            <div className="bg-white/90 p-3.5 rounded-lg border border-blue-200 space-y-1.5 shadow-2xs">
+              <div className="flex items-center gap-1.5 text-blue-900 font-extrabold text-[13px]">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>1. लिंक (URL) को बार-बार बदलने की ज़रूरत <u>नहीं</u> है:</span>
+              </div>
+              <p className="text-gray-700 text-[11px] leading-relaxed">
+                Google Apps Script में जब भी आप कोड में कोई बदलाव या अपडेट करते हैं, तो <strong>"New deployment"</strong> पर क्लिक <strong>मत कीजिए</strong>।
+              </p>
+              <div className="bg-blue-50 p-2 rounded border border-blue-200 text-[11px] font-medium text-blue-900 space-y-0.5">
+                <p><strong>सही तरीका:</strong></p>
+                <p>1. Apps Script में ऊपर <strong>Deploy → Manage deployments</strong> खोलें।</p>
+                <p>2. Active Deployment पर <strong>✏️ Pencil (Edit)</strong> आइकन दबाएं।</p>
+                <p>3. Version ड्रॉपडाउन में <strong>"New version"</strong> चुनें और <strong>Deploy</strong> दबाएं।</p>
+              </div>
+              <p className="text-[11px] text-emerald-800 font-bold">
+                ✓ इससे आपका Web App URL <strong>हमेशा वही रहता है</strong> और HelpDesk में दोबारा लिंक पेस्ट नहीं करना पड़ता!
+              </p>
+            </div>
+
+            <div className="bg-white/90 p-3.5 rounded-lg border border-blue-200 space-y-1.5 shadow-2xs">
+              <div className="flex items-center gap-1.5 text-indigo-900 font-extrabold text-[13px]">
+                <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0" />
+                <span>2. नया डेटा रिमूव होने और पुराना दिखने का समाधान:</span>
+              </div>
+              <p className="text-gray-700 text-[11px] leading-relaxed">
+                पहले जब शीट से डेटा रिफ्रेश होता था, तो अगर शीट में पुराना डेटा था तो वह नए लोकल डेटा को ओवरराइट कर देता था।
+              </p>
+              <div className="bg-indigo-50 p-2 rounded border border-indigo-200 text-[11px] font-medium text-indigo-900 space-y-0.5">
+                <p><strong>अब क्या फिक्स हुआ है:</strong></p>
+                <p>• <strong>Smart Timestamp Sync:</strong> आपके सबसे हालिया (Last Saved) टिकट, यूज़र पासवर्ड, स्टेटस और मास्टर ड्रॉपडाउन हमेशा सुरक्षित रहते हैं।</p>
+                <p>• पुराना शीट डेटा अब आपके नए डेटा को कभी डिलीट या ओवरराइट नहीं कर सकता।</p>
+                <p>• सर्वर और लोकल स्टोरेज दोनों में <strong>Last Saved</strong> डेटा हमेशा प्रायोरिटी पर रहेगा।</p>
+              </div>
+              <p className="text-[11px] text-indigo-800 font-bold">
+                ✓ आपका नया डेटा हमेशा सुरक्षित और स्क्रीन पर विजिबल रहेगा।
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* Live Diagnostics & Response Render Box */}
         {diagnosticResult && (
           <div className={`p-4 rounded-xl border ${diagnosticResult.success ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-amber-50 border-amber-300 text-amber-950'} space-y-3 animate-in fade-in`}>

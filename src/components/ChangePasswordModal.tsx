@@ -25,22 +25,29 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen
     setError('');
     setSuccessMsg('');
 
-    // 1. Verify current PIN/Password if user set one
+    // 1. Verify current PIN/Password
     const cleanCurrentInput = currentPinInput.trim();
-    const userPin = currentUser.pin || currentUser.employeeId.replace(/\D/g, '') || '2026';
-    const userPass = currentUser.password || 'admin123';
-    const empDigits = currentUser.employeeId ? currentUser.employeeId.replace(/\D/g, '') : '';
+    if (!cleanCurrentInput) {
+      setError('Please enter your current Password or PIN.');
+      return;
+    }
 
-    const isCurrentValid =
-      cleanCurrentInput === userPin ||
-      cleanCurrentInput === userPass ||
-      (empDigits && cleanCurrentInput === empDigits) ||
-      cleanCurrentInput === '1234' ||
-      cleanCurrentInput === '123456' ||
-      cleanCurrentInput === 'admin123' ||
-      cleanCurrentInput === '2026' ||
-      (currentUser.pin && cleanCurrentInput === currentUser.pin) ||
-      (currentUser.password && cleanCurrentInput === currentUser.password);
+    const hasCustomPassword = currentUser.password && currentUser.password !== '123456' && currentUser.password !== 'admin123';
+    const hasCustomPin = currentUser.pin && currentUser.pin !== '1234' && currentUser.pin !== '2026';
+
+    let isCurrentValid = false;
+    if (currentUser.password && cleanCurrentInput === currentUser.password) {
+      isCurrentValid = true;
+    } else if (currentUser.pin && cleanCurrentInput === currentUser.pin) {
+      isCurrentValid = true;
+    } else if (!hasCustomPassword && !hasCustomPin) {
+      const empDigits = currentUser.employeeId ? currentUser.employeeId.replace(/\D/g, '') : '';
+      isCurrentValid =
+        cleanCurrentInput === (currentUser.password || '123456') ||
+        cleanCurrentInput === (currentUser.pin || '1234') ||
+        (empDigits && cleanCurrentInput === empDigits) ||
+        (currentUser.role === 'Super Admin' && (cleanCurrentInput === 'admin123' || cleanCurrentInput === '2026'));
+    }
 
     if (!isCurrentValid) {
       setError('Current Password / PIN does not match your active account settings.');
