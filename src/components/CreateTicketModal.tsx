@@ -35,6 +35,8 @@ export const CreateTicketModal: React.FC = () => {
     categories,
     branches,
     prioritiesList,
+    ticketTypes,
+    hierarchyItems,
     createTicket
   } = useApp();
 
@@ -43,7 +45,7 @@ export const CreateTicketModal: React.FC = () => {
   const [location, setLocation] = useState(currentUser?.location || 'RPR');
 
   // Hierarchy State: Type -> Category -> Module -> Sub-Category
-  const [ticketType, setTicketType] = useState<string>('Modification Request');
+  const [ticketType, setTicketType] = useState<string>(() => ticketTypes[0] || 'Modification Request');
   const [category, setCategory] = useState<string>('Orbit');
   const [module, setModule] = useState<string>('Invoice');
   const [subCategory, setSubCategory] = useState<string>('Add Item');
@@ -71,34 +73,70 @@ export const CreateTicketModal: React.FC = () => {
     }
   }, [isCreateTicketOpen, currentUser, departments, branches]);
 
+  // Synchronize dynamic hierarchy selections when modal opens or types/items change
+  useEffect(() => {
+    if (!isCreateTicketOpen) return;
+    
+    // Validate ticketType
+    const currentTypes = ticketTypes && ticketTypes.length > 0 ? ticketTypes : TICKET_TYPES;
+    const activeType = currentTypes.includes(ticketType) ? ticketType : currentTypes[0];
+    if (activeType !== ticketType) {
+      setTicketType(activeType);
+    }
+
+    // Validate Category
+    const regCatNames = categories.map(c => c.name);
+    const validCats = getCategoriesForType(activeType, regCatNames, hierarchyItems);
+    const activeCat = validCats.includes(category) ? category : (validCats[0] || 'Orbit');
+    if (activeCat !== category) {
+      setCategory(activeCat);
+    }
+
+    // Validate Module
+    const validMods = getModulesForCategory(activeCat, activeType, hierarchyItems);
+    const activeMod = validMods.includes(module) ? module : (validMods[0] || 'General');
+    if (activeMod !== module) {
+      setModule(activeMod);
+    }
+
+    // Validate SubCategory
+    const catSubs = categories.find(c => c.name === activeCat)?.subCategories || [];
+    const validSubs = getSubCategoriesForModule(activeCat, activeMod, activeType, catSubs, hierarchyItems);
+    const activeSub = validSubs.includes(subCategory) ? subCategory : (validSubs[0] || 'General');
+    if (activeSub !== subCategory) {
+      setSubCategory(activeSub);
+    }
+  }, [isCreateTicketOpen, ticketType, hierarchyItems, ticketTypes, categories]);
+
   if (!isCreateTicketOpen) return null;
 
   // Registered category names from system settings
   const registeredCategoryNames = categories.map(c => c.name);
-  const availableCategories = getCategoriesForType(ticketType, registeredCategoryNames);
-  const availableModules = getModulesForCategory(category, ticketType);
+  const availableCategories = getCategoriesForType(ticketType, registeredCategoryNames, hierarchyItems);
+  const availableModules = getModulesForCategory(category, ticketType, hierarchyItems);
 
   const fallbackSubs = categories.find(c => c.name === category)?.subCategories || [];
-  const availableSubCategories = getSubCategoriesForModule(category, module, ticketType, fallbackSubs);
+  const availableSubCategories = getSubCategoriesForModule(category, module, ticketType, fallbackSubs, hierarchyItems);
 
   // Hierarchy Handlers
   const handleTypeChange = (newType: string) => {
     setTicketType(newType);
-    const newCats = getCategoriesForType(newType, registeredCategoryNames);
+    const newCats = getCategoriesForType(newType, registeredCategoryNames, hierarchyItems);
     const validCat = newCats.includes(category) ? category : newCats[0] || 'Orbit';
     setCategory(validCat);
 
-    const newMods = getModulesForCategory(validCat, newType);
+    const newMods = getModulesForCategory(validCat, newType, hierarchyItems);
     const validMod = newMods[0] || 'General';
     setModule(validMod);
 
-    const newSubs = getSubCategoriesForModule(validCat, validMod, newType, fallbackSubs);
+    const catSubs = categories.find(c => c.name === validCat)?.subCategories || [];
+    const newSubs = getSubCategoriesForModule(validCat, validMod, newType, catSubs, hierarchyItems);
     setSubCategory(newSubs[0] || 'General');
   };
 
   const handleCategoryChange = (newCat: string) => {
     setCategory(newCat);
-    const newMods = getModulesForCategory(newCat, ticketType);
+    const newMods = getModulesForCategory(newCat, ticketType, hierarchyItems);
     const validMod = newMods[0] || 'General';
     setModule(validMod);
 
@@ -107,13 +145,14 @@ export const CreateTicketModal: React.FC = () => {
       setPriority(catObj.defaultPriority);
     }
 
-    const newSubs = getSubCategoriesForModule(newCat, validMod, ticketType, catObj?.subCategories || []);
+    const newSubs = getSubCategoriesForModule(newCat, validMod, ticketType, catObj?.subCategories || [], hierarchyItems);
     setSubCategory(newSubs[0] || 'General');
   };
 
   const handleModuleChange = (newMod: string) => {
     setModule(newMod);
-    const newSubs = getSubCategoriesForModule(category, newMod, ticketType, fallbackSubs);
+    const catSubs = categories.find(c => c.name === category)?.subCategories || [];
+    const newSubs = getSubCategoriesForModule(category, newMod, ticketType, catSubs, hierarchyItems);
     setSubCategory(newSubs[0] || 'General');
   };
 
@@ -314,7 +353,7 @@ export const CreateTicketModal: React.FC = () => {
                   onChange={e => handleTypeChange(e.target.value)}
                   className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs font-bold text-blue-900 focus:ring-2 focus:ring-blue-500 outline-none"
                 >
-                  {TICKET_TYPES.map(t => (
+                  {(ticketTypes && ticketTypes.length > 0 ? ticketTypes : TICKET_TYPES).map(t => (
                     <option key={t} value={t}>{t}</option>
                   ))}
                 </select>

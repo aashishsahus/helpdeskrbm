@@ -118,74 +118,119 @@ export function saveStoredTicketTypes(types: string[]): void {
 /**
  * Get distinct categories that match a specific type, or return all unique categories
  */
-export function getCategoriesForType(selectedType?: string, allRegisteredCategoryNames: string[] = []): string[] {
-  const data = getStoredHierarchy();
-  const customCats = Array.from(new Set(
-    data
-      .filter(item => !selectedType || item.type === selectedType)
-      .map(item => item.category)
-  ));
+export function getCategoriesForType(
+  selectedType?: string,
+  allRegisteredCategoryNames: string[] = [],
+  customItems?: HierarchyItem[]
+): string[] {
+  const data = customItems && customItems.length > 0 ? customItems : getStoredHierarchy();
+  const typeLower = (selectedType || '').trim().toLowerCase();
 
-  const merged = Array.from(new Set([...customCats, ...allRegisteredCategoryNames]));
+  // Categories for this specific type
+  const typeCats = data
+    .filter(item => !typeLower || (item.type || '').trim().toLowerCase() === typeLower)
+    .map(item => (item.category || '').trim())
+    .filter(Boolean);
+
+  // All categories present anywhere in hierarchy
+  const allHierarchyCats = data
+    .map(item => (item.category || '').trim())
+    .filter(Boolean);
+
+  // Combine and deduplicate
+  const merged = Array.from(new Set([...typeCats, ...allRegisteredCategoryNames, ...allHierarchyCats]))
+    .filter(Boolean);
+
   return merged.length > 0 ? merged : ['Orbit', 'FMS', 'Hardware', 'Software', 'Network & Internet'];
 }
 
 /**
  * Get distinct modules for a given Category and optional Type
  */
-export function getModulesForCategory(category: string, selectedType?: string): string[] {
-  const data = getStoredHierarchy();
-  const filtered = data.filter(
-    item => item.category.toLowerCase() === category.toLowerCase() &&
-      (!selectedType || item.type === selectedType)
-  );
+export function getModulesForCategory(
+  category: string,
+  selectedType?: string,
+  customItems?: HierarchyItem[]
+): string[] {
+  const data = customItems && customItems.length > 0 ? customItems : getStoredHierarchy();
+  const catLower = (category || '').trim().toLowerCase();
+  const typeLower = (selectedType || '').trim().toLowerCase();
 
-  const modules = Array.from(new Set(filtered.map(i => i.module)));
-  if (modules.length > 0) {
-    return modules;
+  // 1. Specific matches: Category + Type
+  const exactTypeMatches = data.filter(
+    item => (item.category || '').trim().toLowerCase() === catLower &&
+      (!typeLower || (item.type || '').trim().toLowerCase() === typeLower)
+  );
+  const exactModules = Array.from(new Set(exactTypeMatches.map(i => (i.module || '').trim()).filter(Boolean)));
+
+  // 2. Any matches for this Category across any type
+  const allCatMatches = data.filter(
+    item => (item.category || '').trim().toLowerCase() === catLower
+  );
+  const allCatModules = Array.from(new Set(allCatMatches.map(i => (i.module || '').trim()).filter(Boolean)));
+
+  const combined = Array.from(new Set([...exactModules, ...allCatModules]));
+  if (combined.length > 0) {
+    return combined;
   }
 
   // Fallback modules for general IT/Corporate categories
-  if (category.toLowerCase().includes('hardware')) {
+  if (catLower.includes('hardware')) {
     return ['Desktop/Laptop', 'Peripherals', 'Printers & Scanners', 'Server Hardware'];
   }
-  if (category.toLowerCase().includes('software') || category.toLowerCase().includes('erp')) {
+  if (catLower.includes('software') || catLower.includes('erp')) {
     return ['Application Access', 'Installation / Upgrade', 'Bug / Error', 'User License'];
   }
-  if (category.toLowerCase().includes('network')) {
+  if (catLower.includes('network') || catLower.includes('internet')) {
     return ['Wi-Fi / LAN', 'VPN Access', 'Internet Speed', 'Firewall'];
   }
-  if (category.toLowerCase().includes('accounts') || category.toLowerCase().includes('fms')) {
+  if (catLower.includes('accounts') || catLower.includes('fms')) {
     return ['Invoice & Billing', 'Ledger', 'GST / Tax', 'Vouchers'];
   }
 
-  return ['General', 'Operations', 'Access & Permission'];
+  // If user has created a category with the same name as module or general
+  return [category, 'General', 'Operations', 'Access & Permission'].filter(Boolean);
 }
 
 /**
  * Get sub-categories for a given Category, Module, and optional Type
  */
-export function getSubCategoriesForModule(category: string, module: string, selectedType?: string, fallbackSubCategories: string[] = []): string[] {
-  const data = getStoredHierarchy();
-  const filtered = data.filter(
-    item => item.category.toLowerCase() === category.toLowerCase() &&
-      item.module.toLowerCase() === module.toLowerCase() &&
-      (!selectedType || item.type === selectedType)
-  );
+export function getSubCategoriesForModule(
+  category: string,
+  module: string,
+  selectedType?: string,
+  fallbackSubCategories: string[] = [],
+  customItems?: HierarchyItem[]
+): string[] {
+  const data = customItems && customItems.length > 0 ? customItems : getStoredHierarchy();
+  const catLower = (category || '').trim().toLowerCase();
+  const modLower = (module || '').trim().toLowerCase();
+  const typeLower = (selectedType || '').trim().toLowerCase();
 
-  const subCategories = Array.from(new Set(filtered.map(i => i.subCategory)));
-  if (subCategories.length > 0) {
-    return subCategories;
+  // 1. Exact match: Category + Module + Type
+  const exactMatches = data.filter(
+    item => (item.category || '').trim().toLowerCase() === catLower &&
+      (item.module || '').trim().toLowerCase() === modLower &&
+      (!typeLower || (item.type || '').trim().toLowerCase() === typeLower)
+  );
+  const exactSubs = Array.from(new Set(exactMatches.map(i => (i.subCategory || '').trim()).filter(Boolean)));
+
+  // 2. Match: Category + Module (any type)
+  const modMatches = data.filter(
+    item => (item.category || '').trim().toLowerCase() === catLower &&
+      (item.module || '').trim().toLowerCase() === modLower
+  );
+  const modSubs = Array.from(new Set(modMatches.map(i => (i.subCategory || '').trim()).filter(Boolean)));
+
+  const combined = Array.from(new Set([...exactSubs, ...modSubs]));
+  if (combined.length > 0) {
+    return combined;
   }
 
-  // If no exact match with type, return any subCategory for this module
-  const moduleOnly = data.filter(
-    item => item.category.toLowerCase() === category.toLowerCase() &&
-      item.module.toLowerCase() === module.toLowerCase()
-  );
-  if (moduleOnly.length > 0) {
-    return Array.from(new Set(moduleOnly.map(i => i.subCategory)));
+  // 3. Check fallback list (e.g. from Category.subCategories)
+  if (fallbackSubCategories.length > 0) {
+    return fallbackSubCategories;
   }
 
-  return fallbackSubCategories.length > 0 ? fallbackSubCategories : ['General Request', 'System Update', 'Issue Resolution'];
+  return ['General Request', 'System Update', 'Issue Resolution'];
 }

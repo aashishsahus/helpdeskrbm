@@ -47,7 +47,13 @@ import {
 } from '../data/initialData';
 import { formatDateTime, getFormattedNow } from '../utils/dateUtils';
 import { sendTicketRaisedEmails, sendTicketClosedEmails } from '../utils/emailNotificationService';
-import { getStoredHierarchy, getStoredTicketTypes, saveStoredHierarchy, saveStoredTicketTypes } from '../data/ticketHierarchy';
+import {
+  HierarchyItem,
+  getStoredHierarchy,
+  getStoredTicketTypes,
+  saveStoredHierarchy,
+  saveStoredTicketTypes
+} from '../data/ticketHierarchy';
 
 interface AppContextType {
   currentUser: User | null;
@@ -74,6 +80,8 @@ interface AppContextType {
   statusesList: string[];
   rolesList: string[];
   designationsList: string[];
+  ticketTypes: string[];
+  hierarchyItems: HierarchyItem[];
 
   // Dropdown CRUD Methods
   addBranch: (branch: string) => void;
@@ -95,6 +103,12 @@ interface AppContextType {
   addDesignation: (designation: string) => void;
   editDesignation: (oldDesig: string, newDesig: string) => void;
   deleteDesignation: (designation: string) => void;
+
+  // Hierarchy CRUD Methods
+  updateHierarchy: (newItems: HierarchyItem[]) => void;
+  updateTicketTypes: (newTypes: string[]) => void;
+  addHierarchyItem: (item: HierarchyItem) => void;
+  deleteHierarchyItem: (item: { category: string; module: string; subCategory: string; type?: string }) => void;
 
   editDepartment: (id: string, updates: Partial<Department>) => void;
   deleteDepartment: (id: string) => void;
@@ -785,6 +799,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   });
 
+  const [hierarchyItems, setHierarchyItems] = useState<HierarchyItem[]>(() => getStoredHierarchy());
+  const [ticketTypes, setTicketTypes] = useState<string[]>(() => getStoredTicketTypes());
+
   const [slaRules, setSlaRules] = useState<SLARule[]>(initialSLARules);
   const [knowledgeBase, setKnowledgeBase] = useState<KnowledgeBaseArticle[]>(() => {
     try {
@@ -940,6 +957,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     try { localStorage.setItem('hd_designations_v1', JSON.stringify(designationsList)); } catch {}
   }, [designationsList]);
+
+  useEffect(() => {
+    try { localStorage.setItem('hd_ticket_hierarchy_v1', JSON.stringify(hierarchyItems)); } catch {}
+  }, [hierarchyItems]);
+
+  useEffect(() => {
+    try { localStorage.setItem('hd_ticket_types_v1', JSON.stringify(ticketTypes)); } catch {}
+  }, [ticketTypes]);
 
   useEffect(() => {
     try { localStorage.setItem('hd_knowledge_base_v1', JSON.stringify(knowledgeBase)); } catch {}
@@ -2433,6 +2458,75 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addAuditLog('DESIGNATION_DELETED', 'Master Settings', `Deleted designation ${designation}`);
   };
 
+  const updateHierarchy = (newItems: HierarchyItem[]) => {
+    setHierarchyItems(newItems);
+    saveStoredHierarchy(newItems);
+    syncDirectActionToSheets({
+      action: 'updateTicketHierarchy',
+      hierarchy: newItems
+    });
+  };
+
+  const updateTicketTypes = (newTypes: string[]) => {
+    setTicketTypes(newTypes);
+    saveStoredTicketTypes(newTypes);
+    syncDirectActionToSheets({
+      action: 'updateDropdowns',
+      ticketTypes: newTypes,
+      branches,
+      prioritiesList,
+      statusesList,
+      rolesList,
+      designationsList
+    });
+  };
+
+  const addHierarchyItem = (item: HierarchyItem) => {
+    const trimmedItem: HierarchyItem = {
+      type: item.type?.trim() || 'Modification Request',
+      category: item.category?.trim() || 'General',
+      module: item.module?.trim() || 'General',
+      subCategory: item.subCategory?.trim() || 'General'
+    };
+    const exists = hierarchyItems.some(
+      h => h.type?.toLowerCase() === trimmedItem.type.toLowerCase() &&
+           h.category?.toLowerCase() === trimmedItem.category.toLowerCase() &&
+           h.module?.toLowerCase() === trimmedItem.module.toLowerCase() &&
+           h.subCategory?.toLowerCase() === trimmedItem.subCategory.toLowerCase()
+    );
+    if (exists) return;
+    const updated = [...hierarchyItems, trimmedItem];
+    setHierarchyItems(updated);
+    saveStoredHierarchy(updated);
+    syncDirectActionToSheets({
+      action: 'addHierarchyItem',
+      item: trimmedItem,
+      hierarchyItem: trimmedItem
+    });
+    addAuditLog('HIERARCHY_ADDED', 'Master Settings', `Added hierarchy mapping: [${trimmedItem.type}] ${trimmedItem.category} → ${trimmedItem.module} (${trimmedItem.subCategory})`);
+  };
+
+  const deleteHierarchyItem = (target: { category: string; module: string; subCategory: string; type?: string }) => {
+    const updated = hierarchyItems.filter(
+      h => !(
+        h.category?.toLowerCase() === target.category.toLowerCase() &&
+        h.module?.toLowerCase() === target.module.toLowerCase() &&
+        h.subCategory?.toLowerCase() === target.subCategory.toLowerCase() &&
+        (!target.type || h.type?.toLowerCase() === target.type.toLowerCase())
+      )
+    );
+    setHierarchyItems(updated);
+    saveStoredHierarchy(updated);
+    syncDirectActionToSheets({
+      action: 'deleteHierarchyItem',
+      category: target.category,
+      module: target.module,
+      subCategory: target.subCategory,
+      type: target.type
+    });
+    addAuditLog('HIERARCHY_DELETED', 'Master Settings', `Deleted hierarchy mapping: ${target.category} → ${target.module} (${target.subCategory})`);
+  };
+
   // Knowledge Base SOP Methods
   const addKnowledgeBaseArticle = (articleData: Omit<KnowledgeBaseArticle, 'id' | 'views' | 'updatedAt' | 'helpfulCount' | 'notHelpfulCount'>): KnowledgeBaseArticle => {
     const newArt: KnowledgeBaseArticle = {
@@ -2922,9 +3016,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // Update TicketHierarchy & TicketTypes
       if (data.success && Array.isArray(data.hierarchy) && data.hierarchy.length > 0) {
+        setHierarchyItems(data.hierarchy);
         saveStoredHierarchy(data.hierarchy);
       }
       if (data.success && Array.isArray(data.ticketTypes) && data.ticketTypes.length > 0) {
+        setTicketTypes(data.ticketTypes);
         saveStoredTicketTypes(data.ticketTypes);
       }
 
@@ -3316,6 +3412,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         statusesList,
         rolesList,
         designationsList,
+        ticketTypes,
+        hierarchyItems,
         slaRules,
         knowledgeBase,
         auditLogs,
@@ -3340,6 +3438,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addDesignation,
         editDesignation,
         deleteDesignation,
+
+        updateHierarchy,
+        updateTicketTypes,
+        addHierarchyItem,
+        deleteHierarchyItem,
 
         editDepartment,
         deleteDepartment,

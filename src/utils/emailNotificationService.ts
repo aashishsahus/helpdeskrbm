@@ -11,7 +11,173 @@ export interface EmailPayload {
 }
 
 /**
- * Format clean, branded HTML email for Rathi Buildmart HelpDesk
+ * Format any date string or Date object into a clean, professional IST date format
+ * e.g. "18 Aug 2026, 02:37 PM IST" - preventing raw browser locale strings like "(印度標準時間)"
+ */
+export function formatISTDate(dateInput?: string | Date | null): string {
+  if (!dateInput) return 'Within SLA Target';
+  try {
+    const d = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
+    if (isNaN(d.getTime())) {
+      // If already a formatted string, clean up any messy timezone strings
+      return String(dateInput).replace(/\s*\([^)]*\)/g, '').trim();
+    }
+    
+    // Format in English (India) with 12-hour AM/PM and IST suffix
+    const dateFormatted = d.toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
+    });
+    
+    const timeFormatted = d.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+
+    return `${dateFormatted} at ${timeFormatted} (IST)`;
+  } catch {
+    return String(dateInput);
+  }
+}
+
+/**
+ * Convert plain text into an enterprise-grade branded HTML email if no custom HTML is provided
+ */
+export function generateRichHtmlFromText(options: {
+  subject: string;
+  recipientName: string;
+  textBody: string;
+  badgeText?: string;
+  badgeColor?: string;
+  ticketId?: string;
+  actionButtonText?: string;
+  actionButtonUrl?: string;
+}): string {
+  const {
+    subject,
+    recipientName,
+    textBody,
+    badgeText = 'NOTIFICATION',
+    badgeColor = '#0284c7',
+    ticketId,
+    actionButtonText = 'Open HelpDesk Portal',
+    actionButtonUrl = 'https://ais-pre-og6oceunixmom6wlssthgr-101533959483.asia-east1.run.app'
+  } = options;
+
+  // Split lines into clean paragraphs or formatted lists
+  const lines = textBody.split('\n');
+  const formattedHtmlLines: string[] = [];
+  let inList = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) {
+      if (inList) {
+        formattedHtmlLines.push('</ul>');
+        inList = false;
+      }
+      formattedHtmlLines.push('<div style="height: 12px;"></div>');
+      continue;
+    }
+
+    if (line.startsWith('- ') || line.startsWith('• ') || line.startsWith('* ')) {
+      if (!inList) {
+        formattedHtmlLines.push('<ul style="margin: 8px 0; padding-left: 20px; color: #334155; line-height: 1.6;">');
+        inList = true;
+      }
+      const itemContent = line.replace(/^[-•*]\s*/, '');
+      const parts = itemContent.split(':');
+      if (parts.length > 1) {
+        formattedHtmlLines.push(`<li style="margin-bottom: 6px;"><strong style="color: #0f172a;">${parts[0].trim()}:</strong> ${parts.slice(1).join(':').trim()}</li>`);
+      } else {
+        formattedHtmlLines.push(`<li style="margin-bottom: 6px;">${itemContent}</li>`);
+      }
+    } else {
+      if (inList) {
+        formattedHtmlLines.push('</ul>');
+        inList = false;
+      }
+      if (line.startsWith('Ticket Details:') || line.startsWith('Details:')) {
+        formattedHtmlLines.push(`<div style="font-weight: 700; color: #0f172a; margin-top: 14px; margin-bottom: 6px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px;">${line}</div>`);
+      } else if (line.startsWith('Dear ') || line.startsWith('Hello ') || line.startsWith('Namaste ')) {
+        formattedHtmlLines.push(`<p style="font-weight: 700; color: #0f172a; font-size: 15px; margin: 0 0 10px 0;">${line}</p>`);
+      } else if (line.startsWith('Best regards,') || line.startsWith('Regards,')) {
+        formattedHtmlLines.push(`<p style="color: #64748b; font-size: 13px; margin: 18px 0 2px 0;">${line}</p>`);
+      } else {
+        formattedHtmlLines.push(`<p style="color: #334155; font-size: 14px; line-height: 1.6; margin: 0 0 10px 0;">${line}</p>`);
+      }
+    }
+  }
+  if (inList) {
+    formattedHtmlLines.push('</ul>');
+  }
+
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${subject}</title>
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f1f5f9; margin: 0; padding: 24px 12px; color: #1e293b;">
+  <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0">
+    <tr>
+      <td align="center">
+        <table role="presentation" style="max-width: 620px; width: 100%; background: #ffffff; border-radius: 14px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.06); border: 1px solid #e2e8f0;" border="0" cellspacing="0" cellpadding="0">
+          <!-- Header -->
+          <tr>
+            <td style="background: #0f172a; padding: 24px 30px; border-bottom: 3px solid #059669;">
+              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td>
+                    <div style="font-size: 20px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px;">🏢 Rathi Buildmart HelpDesk</div>
+                    <div style="font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px;">Enterprise IT & Operations Support</div>
+                  </td>
+                  <td align="right">
+                    <span style="display: inline-block; padding: 5px 14px; border-radius: 20px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; background-color: ${badgeColor}; color: #ffffff;">${badgeText}</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Body Content -->
+          <tr>
+            <td style="padding: 28px 30px 24px 30px;">
+              ${ticketId ? `<div style="display: inline-block; background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; font-weight: 800; font-family: monospace; font-size: 13px; padding: 4px 10px; border-radius: 6px; margin-bottom: 16px;">Ticket Ref: ${ticketId}</div>` : ''}
+              
+              <div style="color: #334155; font-size: 14px; line-height: 1.65;">
+                ${formattedHtmlLines.join('\n')}
+              </div>
+
+              <div style="text-align: center; margin-top: 26px; padding-top: 20px; border-top: 1px solid #f1f5f9;">
+                <a href="${actionButtonUrl}" style="display: inline-block; background-color: #0284c7; color: #ffffff !important; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-size: 14px; font-weight: 700; letter-spacing: 0.3px;" target="_blank">${actionButtonText}</a>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background: #f8fafc; padding: 20px 30px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; line-height: 1.6;">
+              <div style="font-weight: 700; color: #334155; margin-bottom: 4px;">Rathi Buildmart IT Operations & HelpDesk System</div>
+              <div>Support & Escalations: <a href="mailto:misrpr@rathibuildmart.com" style="color: #0284c7; text-decoration: none; font-weight: 600;">misrpr@rathibuildmart.com</a></div>
+              <div style="font-size: 11px; color: #94a3b8; margin-top: 8px;">Dispatched automatically at ${formatISTDate(new Date())}</div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `;
+}
+
+/**
+ * Format clean, responsive, high-contrast HTML email for Rathi Buildmart HelpDesk
  */
 export function generateHtmlEmailTemplate(options: {
   title: string;
@@ -35,10 +201,45 @@ export function generateHtmlEmailTemplate(options: {
     introMessage,
     ticket,
     additionalInfo = [],
-    actionButtonText = 'View Ticket in HelpDesk',
+    actionButtonText = 'View & Track Ticket in HelpDesk',
     actionButtonUrl = 'https://ais-pre-og6oceunixmom6wlssthgr-101533959483.asia-east1.run.app',
-    footerNote = 'This is an automated notification from Rathi Buildmart HelpDesk System.'
+    footerNote = 'This is an automated notification from Rathi Buildmart IT Operations & HelpDesk System.'
   } = options;
+
+  // Priority color config
+  let priorityBg = '#fef2f2';
+  let priorityColor = '#dc2626';
+  let priorityBorder = '#fecaca';
+  if (ticket.priority === 'Medium') {
+    priorityBg = '#fffbeb';
+    priorityColor = '#b45309';
+    priorityBorder = '#fde68a';
+  } else if (ticket.priority === 'Low') {
+    priorityBg = '#f0fdf4';
+    priorityColor = '#15803d';
+    priorityBorder = '#bbf7d0';
+  } else if (ticket.priority === 'Urgent') {
+    priorityBg = '#faf5ff';
+    priorityColor = '#7e22ce';
+    priorityBorder = '#e9d5ff';
+  }
+
+  // Status color config
+  let statusBg = '#eff6ff';
+  let statusColor = '#1d4ed8';
+  if (ticket.status === 'Resolved' || ticket.status === 'Closed') {
+    statusBg = '#f0fdf4';
+    statusColor = '#15803d';
+  } else if (ticket.status === 'In Progress') {
+    statusBg = '#f0f9ff';
+    statusColor = '#0369a1';
+  } else if (ticket.status === 'On Hold') {
+    statusBg = '#fff7ed';
+    statusColor = '#c2410c';
+  }
+
+  const formattedSlaDue = formatISTDate(ticket.slaDueDate);
+  const formattedCreated = formatISTDate(ticket.createdDate);
 
   return `
 <!DOCTYPE html>
@@ -47,108 +248,140 @@ export function generateHtmlEmailTemplate(options: {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${title}</title>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f1f5f9; margin: 0; padding: 20px; color: #1e293b; }
-    .email-container { max-width: 620px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08); border: 1px solid #e2e8f0; }
-    .email-header { background: linear-gradient(135deg, #064e3b 0%, #0f172a 100%); color: #ffffff; padding: 24px 30px; text-align: left; }
-    .brand-title { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; margin: 0; display: flex; align-items: center; gap: 8px; }
-    .brand-subtitle { font-size: 12px; color: #94a3b8; margin: 4px 0 0 0; text-transform: uppercase; letter-spacing: 1px; }
-    .badge { display: inline-block; padding: 4px 12px; border-radius: 9999px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 12px; background-color: ${badgeColor}; color: #ffffff; }
-    .content-body { padding: 30px; }
-    .greeting { font-size: 15px; font-weight: 700; color: #0f172a; margin-bottom: 8px; }
-    .intro { font-size: 14px; line-height: 1.6; color: #475569; margin-bottom: 20px; }
-    .ticket-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 24px; }
-    .ticket-header { border-bottom: 1px solid #cbd5e1; padding-bottom: 12px; margin-bottom: 14px; }
-    .ticket-id { font-size: 18px; font-weight: 800; color: #0284c7; font-family: monospace; }
-    .ticket-subject { font-size: 16px; font-weight: 700; color: #0f172a; margin-top: 4px; }
-    .info-grid { width: 100%; border-collapse: collapse; }
-    .info-grid td { padding: 6px 0; font-size: 13px; vertical-align: top; }
-    .info-label { color: #64748b; font-weight: 600; width: 38%; }
-    .info-value { color: #0f172a; font-weight: 600; }
-    .description-box { margin-top: 14px; padding-top: 12px; border-top: 1px dashed #cbd5e1; }
-    .description-title { font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 4px; }
-    .description-text { font-size: 13px; line-height: 1.5; color: #334155; white-space: pre-wrap; background: #ffffff; padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; }
-    .action-btn { display: inline-block; background-color: #0284c7; color: #ffffff !important; text-decoration: none; padding: 12px 28px; border-radius: 10px; font-size: 14px; font-weight: 700; text-align: center; margin: 10px 0 20px 0; }
-    .footer { background: #f8fafc; padding: 20px 30px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; line-height: 1.5; }
-    .priority-High { color: #dc2626; font-weight: 800; }
-    .priority-Medium { color: #d97706; font-weight: 800; }
-    .priority-Low { color: #16a34a; font-weight: 800; }
-  </style>
 </head>
-<body>
-  <div class="email-container">
-    <div class="email-header">
-      <div class="brand-title">🏢 Rathi Buildmart HelpDesk</div>
-      <div class="brand-subtitle">Enterprise IT & Facilities Operations</div>
-      <span class="badge">${badgeText}</span>
-    </div>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f1f5f9; margin: 0; padding: 24px 12px; color: #1e293b;">
+  <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0">
+    <tr>
+      <td align="center">
+        <table role="presentation" style="max-width: 620px; width: 100%; background: #ffffff; border-radius: 14px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.06); border: 1px solid #e2e8f0;" border="0" cellspacing="0" cellpadding="0">
+          <!-- Header -->
+          <tr>
+            <td style="background: #0f172a; padding: 24px 30px; border-bottom: 3px solid #059669;">
+              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td>
+                    <div style="font-size: 20px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px;">🏢 Rathi Buildmart HelpDesk</div>
+                    <div style="font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px;">Enterprise IT & Operations Support</div>
+                  </td>
+                  <td align="right">
+                    <span style="display: inline-block; padding: 5px 14px; border-radius: 20px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; background-color: ${badgeColor}; color: #ffffff;">${badgeText}</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
 
-    <div class="content-body">
-      <div class="greeting">Dear ${recipientName || 'Team Member'},</div>
-      <div class="intro">${introMessage}</div>
+          <!-- Main Content -->
+          <tr>
+            <td style="padding: 28px 30px;">
+              <div style="font-size: 15px; font-weight: 700; color: #0f172a; margin-bottom: 6px;">Dear ${recipientName || 'Valued Employee'},</div>
+              <div style="font-size: 14px; line-height: 1.6; color: #475569; margin-bottom: 20px;">${introMessage}</div>
 
-      <div class="ticket-card">
-        <div class="ticket-header">
-          <div class="ticket-id">${ticket.id}</div>
-          <div class="ticket-subject">${ticket.subject}</div>
-        </div>
+              <!-- Ticket Overview Box -->
+              <table role="presentation" width="100%" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; margin-bottom: 20px;" border="0" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td style="padding: 16px 20px; border-bottom: 1px solid #e2e8f0; background: #f1f5f9; border-top-left-radius: 11px; border-top-right-radius: 11px;">
+                    <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0">
+                      <tr>
+                        <td>
+                          <span style="font-family: monospace; font-size: 16px; font-weight: 800; color: #0284c7; background: #e0f2fe; padding: 3px 10px; border-radius: 6px; border: 1px solid #bae6fd;">${ticket.id}</span>
+                        </td>
+                        <td align="right">
+                          <span style="display: inline-block; padding: 3px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; background-color: ${statusBg}; color: ${statusColor};">${ticket.status}</span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td colspan="2" style="padding-top: 10px;">
+                          <div style="font-size: 16px; font-weight: 800; color: #0f172a;">${ticket.subject}</div>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
 
-        <table class="info-grid">
-          <tr>
-            <td class="info-label">Status:</td>
-            <td class="info-value"><strong>${ticket.status}</strong></td>
+                <!-- Structured Table Details -->
+                <tr>
+                  <td style="padding: 16px 20px;">
+                    <table role="presentation" width="100%" style="border-collapse: collapse;" border="0" cellspacing="0" cellpadding="0">
+                      <tr>
+                        <td style="padding: 7px 0; font-size: 13px; color: #64748b; font-weight: 600; width: 38%; vertical-align: top;">Category:</td>
+                        <td style="padding: 7px 0; font-size: 13px; color: #0f172a; font-weight: 700; vertical-align: top;">
+                          ${ticket.category}${ticket.module ? ` &rsaquo; ${ticket.module}` : ''}${ticket.subCategory ? ` &rsaquo; ${ticket.subCategory}` : ''}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 7px 0; font-size: 13px; color: #64748b; font-weight: 600; vertical-align: top;">Priority:</td>
+                        <td style="padding: 7px 0; font-size: 13px; vertical-align: top;">
+                          <span style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 800; background-color: ${priorityBg}; color: ${priorityColor}; border: 1px solid ${priorityBorder};">${ticket.priority} Priority</span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 7px 0; font-size: 13px; color: #64748b; font-weight: 600; vertical-align: top;">Department & Branch:</td>
+                        <td style="padding: 7px 0; font-size: 13px; color: #0f172a; font-weight: 600; vertical-align: top;">
+                          ${ticket.department} &bull; ${ticket.location || 'Headquarters'}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 7px 0; font-size: 13px; color: #64748b; font-weight: 600; vertical-align: top;">Raised By:</td>
+                        <td style="padding: 7px 0; font-size: 13px; color: #0f172a; font-weight: 600; vertical-align: top;">
+                          ${ticket.employeeName} (${ticket.employeeEmail || 'No Email'}${ticket.contactNumber ? `, Ph: ${ticket.contactNumber}` : ''})
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 7px 0; font-size: 13px; color: #64748b; font-weight: 600; vertical-align: top;">Assigned Specialist:</td>
+                        <td style="padding: 7px 0; font-size: 13px; color: #0f172a; font-weight: 700; vertical-align: top;">
+                          ${ticket.assignedAgentName || 'IT Support Queue (Auto-Routing)'}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 7px 0; font-size: 13px; color: #64748b; font-weight: 600; vertical-align: top;">SLA Target Due:</td>
+                        <td style="padding: 7px 0; font-size: 13px; color: #0369a1; font-weight: 700; vertical-align: top;">
+                          ${formattedSlaDue}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 7px 0; font-size: 13px; color: #64748b; font-weight: 600; vertical-align: top;">Registered On:</td>
+                        <td style="padding: 7px 0; font-size: 13px; color: #475569; font-weight: 500; vertical-align: top;">
+                          ${formattedCreated}
+                        </td>
+                      </tr>
+                      ${additionalInfo.map(item => `
+                      <tr>
+                        <td style="padding: 7px 0; font-size: 13px; color: #64748b; font-weight: 600; vertical-align: top;">${item.label}:</td>
+                        <td style="padding: 7px 0; font-size: 13px; color: #0f172a; font-weight: 600; vertical-align: top;">${item.value}</td>
+                      </tr>
+                      `).join('')}
+                    </table>
+
+                    ${ticket.description ? `
+                    <div style="margin-top: 14px; padding-top: 12px; border-top: 1px dashed #cbd5e1;">
+                      <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 6px; letter-spacing: 0.5px;">Ticket Issue Description:</div>
+                      <div style="font-size: 13px; line-height: 1.55; color: #334155; background: #ffffff; padding: 12px 14px; border-radius: 8px; border: 1px solid #e2e8f0; white-space: pre-wrap;">${ticket.description}</div>
+                    </div>
+                    ` : ''}
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Call to action button -->
+              <div style="text-align: center; margin-top: 24px;">
+                <a href="${actionButtonUrl}" style="display: inline-block; background-color: #0284c7; color: #ffffff !important; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-size: 14px; font-weight: 700; letter-spacing: 0.3px;" target="_blank">${actionButtonText}</a>
+              </div>
+            </td>
           </tr>
+
+          <!-- Footer -->
           <tr>
-            <td class="info-label">Priority:</td>
-            <td class="info-value"><span class="priority-${ticket.priority}">${ticket.priority}</span></td>
+            <td style="background: #f8fafc; padding: 20px 30px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; line-height: 1.6;">
+              <div style="font-weight: 700; color: #334155; margin-bottom: 4px;">Rathi Buildmart HelpDesk Portal</div>
+              <div>Support & Escalations: <a href="mailto:misrpr@rathibuildmart.com" style="color: #0284c7; text-decoration: none; font-weight: 600;">misrpr@rathibuildmart.com</a></div>
+              <div style="font-size: 11px; color: #94a3b8; margin-top: 8px;">${footerNote}</div>
+            </td>
           </tr>
-          <tr>
-            <td class="info-label">Category:</td>
-            <td class="info-value">${ticket.category} &rsaquo; ${ticket.subCategory || 'General'}</td>
-          </tr>
-          <tr>
-            <td class="info-label">Department / Branch:</td>
-            <td class="info-value">${ticket.department} (${ticket.location})</td>
-          </tr>
-          <tr>
-            <td class="info-label">Raised By:</td>
-            <td class="info-value">${ticket.employeeName} (${ticket.employeeEmail})</td>
-          </tr>
-          <tr>
-            <td class="info-label">Assigned Agent:</td>
-            <td class="info-value"><strong>${ticket.assignedAgentName || 'Assigned Support Specialist'}</strong></td>
-          </tr>
-          <tr>
-            <td class="info-label">SLA Target Due:</td>
-            <td class="info-value">${ticket.slaDueDate ? new Date(ticket.slaDueDate).toLocaleString() : 'Standard 24h SLA'}</td>
-          </tr>
-          ${additionalInfo.map(item => `
-          <tr>
-            <td class="info-label">${item.label}:</td>
-            <td class="info-value">${item.value}</td>
-          </tr>
-          `).join('')}
         </table>
-
-        ${ticket.description ? `
-        <div class="description-box">
-          <div class="description-title">Ticket Description:</div>
-          <div class="description-text">${ticket.description}</div>
-        </div>
-        ` : ''}
-      </div>
-
-      <div style="text-align: center;">
-        <a href="${actionButtonUrl}" class="action-btn" target="_blank">${actionButtonText}</a>
-      </div>
-    </div>
-
-    <div class="footer">
-      <p style="margin: 0 0 6px 0;"><strong>Rathi Buildmart HelpDesk Portal</strong></p>
-      <p style="margin: 0 0 4px 0;">Support Email: <a href="mailto:misrpr@rathibuildmart.com" style="color: #0284c7;">misrpr@rathibuildmart.com</a></p>
-      <p style="margin: 0; font-size: 11px; color: #94a3b8;">${footerNote}</p>
-    </div>
-  </div>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>
   `;
@@ -161,13 +394,26 @@ export async function sendEmailNotification(
   payload: EmailPayload,
   webAppUrl?: string,
   smtpConfig?: { host?: string; port?: number; user?: string; pass?: string; secure?: boolean; senderName?: string }
-): Promise<{ success: boolean; message: string; deliveredVia?: string; mailtoUrl?: string; webGmailUrl?: string }> {
+): Promise<{ success: boolean; message: string; deliveredVia?: string; mailtoUrl?: string; webGmailUrl?: string; error?: string }> {
   try {
+    // Ensure htmlBody is populated with rich HTML if not explicitly supplied
+    const finalHtmlBody = payload.htmlBody && payload.htmlBody.includes('<') 
+      ? payload.htmlBody 
+      : generateRichHtmlFromText({
+          subject: payload.subject,
+          recipientName: payload.recipientName || 'Team Member',
+          textBody: payload.body,
+          ticketId: payload.ticketId,
+          badgeText: payload.eventType === 'ticket_created' ? 'TICKET REGISTERED' : (payload.eventType === 'ticket_closed' ? 'TICKET COMPLETED' : 'HELPDESK ALERT'),
+          badgeColor: payload.eventType === 'ticket_created' ? '#059669' : (payload.eventType === 'ticket_closed' ? '#16a34a' : '#0284c7')
+        });
+
     const res = await fetch('/api/google/send-email', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         ...payload,
+        htmlBody: finalHtmlBody,
         webAppUrl,
         smtpConfig
       })
@@ -205,7 +451,7 @@ export async function sendTicketRaisedEmails(
 
   // 1. Resolve Assigned Agent Email
   let assignedAgentEmail = adminEmail;
-  let assignedAgentName = ticket.assignedAgentName || 'Support Team Specialist';
+  let assignedAgentName = ticket.assignedAgentName || 'IT Support Team Specialist';
 
   if (ticket.assignedAgentId || ticket.assignedAgentName) {
     const agentUser = allUsers.find(
@@ -218,6 +464,8 @@ export async function sendTicketRaisedEmails(
   }
 
   const results = { employeeSent: false, agentSent: false };
+  const formattedSlaDue = formatISTDate(ticket.slaDueDate);
+  const formattedCreated = formatISTDate(ticket.createdDate);
 
   // 2. Email to EMPLOYEE (Ticket Creator Confirmation)
   if (ticket.employeeEmail) {
@@ -230,14 +478,36 @@ export async function sendTicketRaisedEmails(
       introMessage: `Your support ticket has been received and registered in our queue. Our IT & Operations team has been notified and will address your request within the SLA timeframe.`,
       ticket,
       additionalInfo: [
-        { label: 'Registered On', value: new Date(ticket.createdDate).toLocaleString() },
-        { label: 'Contact Number', value: ticket.contactNumber || 'Provided during submission' }
+        { label: 'Registered Date', value: formattedCreated },
+        { label: 'Contact Phone', value: ticket.contactNumber || 'Provided during submission' }
       ],
-      actionButtonText: 'Track Your Ticket Status',
+      actionButtonText: 'Track Your Ticket in HelpDesk',
       footerNote: 'You will receive another email confirmation as soon as your ticket is resolved or closed.'
     });
 
-    const employeePlain = `Dear ${ticket.employeeName},\n\nYour support ticket ${ticket.id} ("${ticket.subject}") has been successfully registered.\n\nDetails:\n- Ticket ID: ${ticket.id}\n- Category: ${ticket.category} (${ticket.subCategory})\n- Priority: ${ticket.priority}\n- Assigned Specialist: ${assignedAgentName}\n- SLA Target: ${ticket.slaDueDate}\n\nOur team is working on your request.\n\nBest regards,\nRathi Buildmart HelpDesk Team`;
+    const employeePlain = `Dear ${ticket.employeeName || 'Employee'},
+
+Your support ticket ${ticket.id} ("${ticket.subject}") has been successfully registered in our queue.
+
+--------------------------------------------------
+TICKET DETAILS:
+--------------------------------------------------
+- Ticket ID: ${ticket.id}
+- Subject: ${ticket.subject}
+- Category: ${ticket.category}${ticket.module ? ` > ${ticket.module}` : ''}${ticket.subCategory ? ` > ${ticket.subCategory}` : ''}
+- Priority: ${ticket.priority}
+- Department: ${ticket.department} (${ticket.location || 'Headquarters'})
+- Assigned Specialist: ${assignedAgentName}
+- SLA Target Due: ${formattedSlaDue}
+- Registered On: ${formattedCreated}
+${ticket.description ? `\nDescription:\n${ticket.description}\n` : ''}
+--------------------------------------------------
+
+Our support team is actively reviewing your request. You will receive further notifications as progress is made.
+
+Best regards,
+Rathi Buildmart IT Operations & HelpDesk Team
+Support Email: misrpr@rathibuildmart.com`;
 
     const empRes = await sendEmailNotification(
       {
@@ -249,7 +519,8 @@ export async function sendTicketRaisedEmails(
         ticketId: ticket.id,
         eventType: 'ticket_created'
       },
-      scriptUrl
+      scriptUrl,
+      smtpConfig
     );
     results.employeeSent = empRes.success;
   }
@@ -268,13 +539,33 @@ export async function sendTicketRaisedEmails(
       additionalInfo: [
         { label: 'Employee Email', value: ticket.employeeEmail || 'N/A' },
         { label: 'Employee Phone', value: ticket.contactNumber || 'N/A' },
-        { label: 'SLA Target Due', value: ticket.slaDueDate ? new Date(ticket.slaDueDate).toLocaleString() : 'Standard 24h' }
+        { label: 'SLA Target Due', value: formattedSlaDue }
       ],
       actionButtonText: 'Open & Work on Ticket',
       footerNote: 'Please update the ticket status and add notes as you make progress.'
     });
 
-    const agentPlain = `Hello ${assignedAgentName},\n\nA new ticket ${ticket.id} ("${ticket.subject}") has been assigned to you.\n\nRaised By: ${ticket.employeeName} (${ticket.employeeEmail}, Phone: ${ticket.contactNumber || 'N/A'})\nDepartment: ${ticket.department} (${ticket.location})\nCategory: ${ticket.category} - ${ticket.subCategory}\nPriority: ${ticket.priority}\nSLA Due: ${ticket.slaDueDate}\n\nDescription:\n${ticket.description}\n\nPlease take appropriate action in the HelpDesk portal.\n\nBest regards,\nHelpDesk System`;
+    const agentPlain = `Hello ${assignedAgentName},
+
+A new support ticket ${ticket.id} ("${ticket.subject}") has been assigned to your queue.
+
+--------------------------------------------------
+TICKET SPECIFICATIONS:
+--------------------------------------------------
+- Ticket ID: ${ticket.id}
+- Subject: ${ticket.subject}
+- Priority: ${ticket.priority} (Action Required)
+- Category: ${ticket.category} > ${ticket.subCategory || 'General'}
+- Raised By: ${ticket.employeeName} (${ticket.employeeEmail || 'N/A'}, Phone: ${ticket.contactNumber || 'N/A'})
+- Department: ${ticket.department} (${ticket.location || 'Headquarters'})
+- SLA Resolution Due: ${formattedSlaDue}
+${ticket.description ? `\nDescription:\n${ticket.description}\n` : ''}
+--------------------------------------------------
+
+Please log in to the HelpDesk portal to acknowledge and begin work on this ticket.
+
+Best regards,
+Rathi Buildmart HelpDesk System`;
 
     const agentRes = await sendEmailNotification(
       {
@@ -318,7 +609,7 @@ export async function sendTicketClosedEmails(
 
   // 1. Resolve Assigned Agent Email
   let assignedAgentEmail = adminEmail;
-  let assignedAgentName = ticket.assignedAgentName || 'Support Team Specialist';
+  let assignedAgentName = ticket.assignedAgentName || 'IT Support Team Specialist';
 
   if (ticket.assignedAgentId || ticket.assignedAgentName) {
     const agentUser = allUsers.find(
@@ -331,7 +622,7 @@ export async function sendTicketClosedEmails(
   }
 
   const results = { employeeSent: false, agentSent: false };
-  const closedTimeFormatted = new Date().toLocaleString();
+  const closedTimeFormatted = formatISTDate(ticket.closedDate || ticket.resolvedDate || new Date());
 
   // 2. Email to EMPLOYEE (Ticket Closed / Resolved Confirmation + Rating Request)
   if (ticket.employeeEmail) {
@@ -352,7 +643,26 @@ export async function sendTicketClosedEmails(
       footerNote: 'Please take 10 seconds to submit your satisfaction rating in the HelpDesk portal.'
     });
 
-    const employeePlain = `Dear ${ticket.employeeName},\n\nYour support ticket ${ticket.id} ("${ticket.subject}") has been marked as ${ticket.status}.\n\nClosed Date: ${closedTimeFormatted}\nHandled By: ${assignedAgentName}\nResolution Notes: ${closureNotes || 'Issue verified and resolved.'}\n\nWe value your feedback! Please log in to rate our service.\n\nBest regards,\nRathi Buildmart HelpDesk Team`;
+    const employeePlain = `Dear ${ticket.employeeName || 'Employee'},
+
+Your support ticket ${ticket.id} ("${ticket.subject}") has been officially marked as ${ticket.status}.
+
+--------------------------------------------------
+COMPLETION SUMMARY:
+--------------------------------------------------
+- Ticket ID: ${ticket.id}
+- Subject: ${ticket.subject}
+- Status: ${ticket.status}
+- Completed Date: ${closedTimeFormatted}
+- Handled By: ${assignedAgentName}
+- Resolution Notes: ${closureNotes || 'Issue verified and resolved successfully.'}
+--------------------------------------------------
+
+We value your feedback! Please log in to the HelpDesk portal to rate our support service.
+
+Best regards,
+Rathi Buildmart IT Operations & HelpDesk Team
+Support Email: misrpr@rathibuildmart.com`;
 
     const empRes = await sendEmailNotification(
       {
@@ -390,7 +700,23 @@ export async function sendTicketClosedEmails(
       footerNote: 'Ticket record archived in Google Sheets with complete audit trail.'
     });
 
-    const agentPlain = `Hello ${assignedAgentName},\n\nTicket ${ticket.id} ("${ticket.subject}") raised by ${ticket.employeeName} has been closed (${ticket.status}) at ${closedTimeFormatted}.\n\nNotes: ${closureNotes || 'Issue resolved.'}\n\nBest regards,\nHelpDesk System`;
+    const agentPlain = `Hello ${assignedAgentName},
+
+Ticket ${ticket.id} ("${ticket.subject}") raised by ${ticket.employeeName} has been completed (${ticket.status}) at ${closedTimeFormatted}.
+
+--------------------------------------------------
+CLOSURE DETAILS:
+--------------------------------------------------
+- Ticket ID: ${ticket.id}
+- Subject: ${ticket.subject}
+- Employee: ${ticket.employeeName} (${ticket.employeeEmail || 'N/A'})
+- Status: ${ticket.status}
+- Closure Timestamp: ${closedTimeFormatted}
+- Notes: ${closureNotes || 'Issue resolved.'}
+--------------------------------------------------
+
+Best regards,
+Rathi Buildmart HelpDesk System`;
 
     const agentRes = await sendEmailNotification(
       {
@@ -410,3 +736,4 @@ export async function sendTicketClosedEmails(
 
   return results;
 }
+

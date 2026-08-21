@@ -66,6 +66,10 @@ export const MasterDropdownsView: React.FC = () => {
     addCategory,
     editCategory,
     deleteCategory,
+    ticketTypes,
+    hierarchyItems,
+    updateHierarchy,
+    updateTicketTypes,
     syncWithGoogleSheets,
     syncDirectActionToSheets,
     pullDataFromGoogleSheets,
@@ -76,36 +80,8 @@ export const MasterDropdownsView: React.FC = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
-  // Hierarchy Data State
-  const [hierarchyItems, setHierarchyItems] = useState<HierarchyItem[]>(() => getStoredHierarchy());
-  const [ticketTypes, setTicketTypes] = useState<string[]>(() => getStoredTicketTypes());
-
-  // Save hierarchy whenever changed
-  const updateHierarchy = (newItems: HierarchyItem[]) => {
-    setHierarchyItems(newItems);
-    saveStoredHierarchy(newItems);
-    if (syncDirectActionToSheets) {
-      syncDirectActionToSheets({
-        action: 'updateTicketHierarchy',
-        hierarchy: newItems
-      });
-    }
-  };
-
   const updateTypes = (newTypes: string[]) => {
-    setTicketTypes(newTypes);
-    saveStoredTicketTypes(newTypes);
-    if (syncDirectActionToSheets) {
-      syncDirectActionToSheets({
-        action: 'updateDropdowns',
-        ticketTypes: newTypes,
-        branches,
-        prioritiesList,
-        statusesList,
-        rolesList,
-        designationsList
-      });
-    }
+    updateTicketTypes(newTypes);
   };
 
   const handlePushAllDropdownsToGoogleSheet = async () => {
@@ -142,8 +118,6 @@ export const MasterDropdownsView: React.FC = () => {
     try {
       if (pullDataFromGoogleSheets) {
         await pullDataFromGoogleSheets();
-        setHierarchyItems(getStoredHierarchy());
-        setTicketTypes(getStoredTicketTypes());
         setSyncMessage('Successfully pulled latest dropdown options and branch locations from Google Sheets!');
       }
     } catch (err: any) {
