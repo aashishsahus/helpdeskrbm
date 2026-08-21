@@ -249,6 +249,12 @@ export const MasterDropdownsView: React.FC = () => {
 
     const updated = [newItem, ...hierarchyItems];
     updateHierarchy(updated);
+    if (syncDirectActionToSheets) {
+      syncDirectActionToSheets({
+        action: 'addHierarchyItem',
+        item: newItem
+      });
+    }
     setNewHierarchySubCat('');
     setSyncMessage(`Action Item "${newItem.subCategory}" added under ${newItem.category} → ${newItem.module}!`);
   };
@@ -257,13 +263,29 @@ export const MasterDropdownsView: React.FC = () => {
   const handleSaveEditHierarchy = () => {
     if (!editHierarchyModal) return;
     const updated = [...hierarchyItems];
-    updated[editHierarchyModal.index] = {
+    const oldItem = updated[editHierarchyModal.index];
+    const newItem: HierarchyItem = {
       type: editHierarchyModal.type,
       category: editHierarchyModal.category,
       module: editHierarchyModal.module,
       subCategory: editHierarchyModal.subCategory
     };
+    updated[editHierarchyModal.index] = newItem;
     updateHierarchy(updated);
+    if (syncDirectActionToSheets) {
+      if (oldItem) {
+        syncDirectActionToSheets({
+          action: 'deleteHierarchyItem',
+          type: oldItem.type,
+          category: oldItem.category,
+          subCategory: oldItem.subCategory
+        });
+      }
+      syncDirectActionToSheets({
+        action: 'addHierarchyItem',
+        item: newItem
+      });
+    }
     setEditHierarchyModal(null);
     setSyncMessage(`Hierarchy Item updated successfully!`);
   };
@@ -273,6 +295,14 @@ export const MasterDropdownsView: React.FC = () => {
     const item = hierarchyItems[index];
     const updated = hierarchyItems.filter((_, i) => i !== index);
     updateHierarchy(updated);
+    if (syncDirectActionToSheets && item) {
+      syncDirectActionToSheets({
+        action: 'deleteHierarchyItem',
+        type: item.type,
+        category: item.category,
+        subCategory: item.subCategory
+      });
+    }
     setSyncMessage(`Deleted "${item?.subCategory}" from ${item?.category} → ${item?.module}`);
   };
 

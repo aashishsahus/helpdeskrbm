@@ -465,7 +465,8 @@ function doPost(e) {
             department: uRow[5] ? uRow[5].toString() : "",
             designation: uRow[6] ? uRow[6].toString() : "",
             location: uRow[7] ? uRow[7].toString() : "",
-            status: uRow[8] ? uRow[8].toString() : "Active"
+            status: uRow[8] ? uRow[8].toString() : "Active",
+            mobile: uRow[9] ? uRow[9].toString().trim() : ""
           });
         }
       }
@@ -787,6 +788,10 @@ function doPost(e) {
 
     if (action === "addUser" || action === "updateUser") {
       var uSheet = ss.getSheetByName("Users");
+      if (!uSheet) {
+        uSheet = ss.insertSheet("Users");
+        uSheet.appendRow(["User ID", "Emp ID", "Name", "Email", "Role", "Dept", "Designation", "Location", "Status", "Mobile Number"]);
+      }
       var u = contents.user;
       if (u && uSheet) {
         var existingUsersData = uSheet.getDataRange().getValues();
@@ -804,7 +809,8 @@ function doPost(e) {
         var uRow = [
           u.id || "", u.employeeId || "", u.name || "", u.email || "",
           u.role || "", u.department || "", u.designation || "", u.location || "",
-          u.status || "Active"
+          u.status || "Active",
+          u.mobile || u.phone || ""
         ];
         if (foundURow > 0) {
           uSheet.getRange(foundURow, 1, 1, uRow.length).setValues([uRow]);
@@ -816,12 +822,34 @@ function doPost(e) {
         .setMimeType(ContentService.MimeType.JSON);
     }
 
+    if (action === "updateUsers") {
+      var uSheet = ss.getSheetByName("Users");
+      if (!uSheet) {
+        uSheet = ss.insertSheet("Users");
+      }
+      var usersList = contents.users || [];
+      if (uSheet && usersList.length > 0) {
+        uSheet.clearContents();
+        uSheet.appendRow(["User ID", "Emp ID", "Name", "Email", "Role", "Dept", "Designation", "Location", "Status", "Mobile Number"]);
+        usersList.forEach(function(u) {
+          uSheet.appendRow([
+            u.id || "", u.employeeId || "", u.name || "", u.email || "",
+            u.role || "", u.department || "", u.designation || "", u.location || "",
+            u.status || "Active",
+            u.mobile || u.phone || ""
+          ]);
+        });
+      }
+      return ContentService.createTextOutput(JSON.stringify({ success: true, message: "All users synchronized to Google Sheet." }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
     if (action === "deleteUser" || action === "deleteUserAndArchive") {
       var uSheet = ss.getSheetByName("Users");
       var archUSheet = ss.getSheetByName("ArchivedUsers");
       if (!archUSheet) {
         archUSheet = ss.insertSheet("ArchivedUsers");
-        archUSheet.appendRow(["Archived At", "Archived By", "Reason", "User ID", "Emp ID", "Name", "Email", "Role", "Dept", "Designation", "Location", "Status"]);
+        archUSheet.appendRow(["Archived At", "Archived By", "Reason", "User ID", "Emp ID", "Name", "Email", "Role", "Dept", "Designation", "Location", "Status", "Mobile Number"]);
       }
 
       var targetUserId = (contents.userId || (contents.user && contents.user.id) || "").toString().trim().toLowerCase();
@@ -840,7 +868,8 @@ function doPost(e) {
           archU.department || "",
           archU.designation || "",
           archU.location || "",
-          archU.status || "Disabled"
+          archU.status || "Disabled",
+          archU.mobile || archU.phone || ""
         ];
         archUSheet.appendRow(archURow);
       }
@@ -952,7 +981,8 @@ function doPost(e) {
         var uRow = [
           u.id || "", u.employeeId || "", u.name || "", u.email || "",
           u.role || "", u.department || "", u.designation || "", u.location || "",
-          u.status || "Active"
+          u.status || "Active",
+          u.mobile || u.phone || ""
         ];
         uSheet.appendRow(uRow);
       }
@@ -1036,6 +1066,132 @@ function doPost(e) {
         });
       }
       return ContentService.createTextOutput(JSON.stringify({ success: true, message: "Categories synced to Google Sheets" }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (action === "addDropdownOption" || action === "addMasterDropdown") {
+      var mSheet = ss.getSheetByName("MasterDropdowns") || ss.getSheetByName("DropdownOptions");
+      if (!mSheet) {
+        mSheet = ss.insertSheet("MasterDropdowns");
+        mSheet.appendRow(["Option ID", "Dropdown Type", "Option Code", "Option Value", "Status", "Updated At"]);
+      }
+      var dType = (contents.dropdownType || contents.type || "General").toString().trim();
+      var dVal = (contents.optionValue || contents.value || "").toString().trim();
+      var dCode = (contents.optionCode || contents.code || dVal.toUpperCase().replace(/[^A-Z0-9]/g, "_")).toString().trim();
+      var dPrefix = "OPT";
+      var dTypeLower = dType.toLowerCase();
+      if (dTypeLower.indexOf("branch") !== -1 || dTypeLower.indexOf("location") !== -1) dPrefix = "LOC";
+      else if (dTypeLower.indexOf("priority") !== -1) dPrefix = "PRI";
+      else if (dTypeLower.indexOf("status") !== -1) dPrefix = "STS";
+      else if (dTypeLower.indexOf("role") !== -1) dPrefix = "ROL";
+      else if (dTypeLower.indexOf("designation") !== -1) dPrefix = "DSG";
+      else if (dTypeLower.indexOf("type") !== -1) dPrefix = "TYP";
+
+      if (dVal && mSheet) {
+        var existingMData = mSheet.getDataRange().getValues();
+        var alreadyExists = false;
+        var maxIdx = 0;
+        for (var mi = 1; mi < existingMData.length; mi++) {
+          var rowType = (existingMData[mi][1] || "").toString().trim().toLowerCase();
+          var rowVal = (existingMData[mi][3] || "").toString().trim().toLowerCase();
+          if (rowType === dTypeLower && rowVal === dVal.toLowerCase()) {
+            alreadyExists = true;
+            break;
+          }
+          var rowId = (existingMData[mi][0] || "").toString();
+          if (rowId.indexOf(dPrefix) !== -1) {
+            var numPart = parseInt(rowId.replace(/[^\d]/g, ""), 10);
+            if (!isNaN(numPart) && numPart > maxIdx) maxIdx = numPart;
+          }
+        }
+
+        if (!alreadyExists) {
+          var nextNum = maxIdx + 1;
+          var newOptId = dPrefix + "-" + (nextNum < 10 ? "00" + nextNum : (nextNum < 100 ? "0" + nextNum : nextNum));
+          mSheet.appendRow([newOptId, dType, dCode, dVal, "Active", new Date().toISOString()]);
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({ success: true, message: "Option saved to Google Sheet MasterDropdowns." }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (action === "editDropdownOption" || action === "editMasterDropdown") {
+      var mSheet = ss.getSheetByName("MasterDropdowns") || ss.getSheetByName("DropdownOptions");
+      if (mSheet) {
+        var dType = (contents.dropdownType || contents.type || "").toString().trim().toLowerCase();
+        var oldVal = (contents.oldValue || contents.oldVal || "").toString().trim().toLowerCase();
+        var newVal = (contents.newValue || contents.newVal || "").toString().trim();
+        var newCode = (contents.optionCode || newVal.toUpperCase().replace(/[^A-Z0-9]/g, "_")).toString().trim();
+        var mData = mSheet.getDataRange().getValues();
+        for (var mRowIdx = 1; mRowIdx < mData.length; mRowIdx++) {
+          var curType = (mData[mRowIdx][1] || "").toString().trim().toLowerCase();
+          var curVal = (mData[mRowIdx][3] || "").toString().trim().toLowerCase();
+          if ((!dType || curType === dType) && curVal === oldVal) {
+            mSheet.getRange(mRowIdx + 1, 3).setValue(newCode);
+            mSheet.getRange(mRowIdx + 1, 4).setValue(newVal);
+            mSheet.getRange(mRowIdx + 1, 6).setValue(new Date().toISOString());
+            break;
+          }
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({ success: true, message: "Option updated in Google Sheet." }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (action === "deleteDropdownOption" || action === "deleteMasterDropdown") {
+      var mSheet = ss.getSheetByName("MasterDropdowns") || ss.getSheetByName("DropdownOptions");
+      if (mSheet) {
+        var dType = (contents.dropdownType || contents.type || "").toString().trim().toLowerCase();
+        var targetVal = (contents.optionValue || contents.value || "").toString().trim().toLowerCase();
+        var mData = mSheet.getDataRange().getValues();
+        for (var mRowIdx = mData.length - 1; mRowIdx >= 1; mRowIdx--) {
+          var curType = (mData[mRowIdx][1] || "").toString().trim().toLowerCase();
+          var curVal = (mData[mRowIdx][3] || "").toString().trim().toLowerCase();
+          if ((!dType || curType === dType) && curVal === targetVal) {
+            mSheet.deleteRow(mRowIdx + 1);
+          }
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({ success: true, message: "Option deleted from Google Sheet." }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (action === "addHierarchyItem") {
+      var hSheet = ss.getSheetByName("TicketHierarchy");
+      if (!hSheet) {
+        hSheet = ss.insertSheet("TicketHierarchy");
+        hSheet.appendRow(["Hierarchy ID", "Ticket Type", "Category", "Module", "Sub-Category / Action Item", "Status"]);
+      }
+      var hItem = contents.item || contents.hierarchyItem || {};
+      if (hSheet && (hItem.category || hItem.module || hItem.subCategory)) {
+        var hData = hSheet.getDataRange().getValues();
+        var nextHNum = hData.length;
+        var newHid = "HRY-" + (nextHNum < 10 ? "00" + nextHNum : (nextHNum < 100 ? "0" + nextHNum : nextHNum));
+        hSheet.appendRow([newHid, hItem.type || "Support / How-To", hItem.category || "", hItem.module || "", hItem.subCategory || "", "Active"]);
+      }
+      return ContentService.createTextOutput(JSON.stringify({ success: true, message: "Hierarchy item added to Google Sheet." }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (action === "deleteHierarchyItem") {
+      var hSheet = ss.getSheetByName("TicketHierarchy");
+      if (hSheet) {
+        var targetHid = (contents.id || "").toString().trim().toLowerCase();
+        var targetType = (contents.type || "").toString().trim().toLowerCase();
+        var targetCat = (contents.category || "").toString().trim().toLowerCase();
+        var targetSub = (contents.subCategory || "").toString().trim().toLowerCase();
+        var hData = hSheet.getDataRange().getValues();
+        for (var hrIdx = hData.length - 1; hrIdx >= 1; hrIdx--) {
+          var curHid = (hData[hrIdx][0] || "").toString().trim().toLowerCase();
+          var curType = (hData[hrIdx][1] || "").toString().trim().toLowerCase();
+          var curCat = (hData[hrIdx][2] || "").toString().trim().toLowerCase();
+          var curSub = (hData[hrIdx][4] || "").toString().trim().toLowerCase();
+          if ((targetHid && curHid === targetHid) || (curType === targetType && curCat === targetCat && curSub === targetSub)) {
+            hSheet.deleteRow(hrIdx + 1);
+          }
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({ success: true, message: "Hierarchy item removed from Google Sheet." }))
         .setMimeType(ContentService.MimeType.JSON);
     }
 
@@ -1472,7 +1628,7 @@ function setupHelpDeskSheets(ss) {
       } else if (tabName === "TicketAttachments") {
         sheet.appendRow(["Attachment ID", "Ticket ID", "File Name", "Drive URL", "Drive File ID", "File Type", "File Size (Bytes)", "Uploaded By", "Uploaded Date"]);
       } else if (tabName === "Users") {
-        sheet.appendRow(["User ID", "Emp ID", "Name", "Email", "Role", "Dept", "Designation", "Location", "Status"]);
+        sheet.appendRow(["User ID", "Emp ID", "Name", "Email", "Role", "Dept", "Designation", "Location", "Status", "Mobile Number"]);
       } else if (tabName === "Departments") {
         sheet.appendRow(["Department ID", "Department Name", "Department Head", "Support Team"]);
         sheet.appendRow(["d_it", "IT & ERP Operations", "Ashish Sharma", "Orbit & FMS Core Team"]);

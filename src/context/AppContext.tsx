@@ -1001,11 +1001,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     statusesList?: string[];
     rolesList?: string[];
     designationsList?: string[];
+    dropdownType?: string;
+    optionValue?: string;
+    optionCode?: string;
+    oldValue?: string;
+    newValue?: string;
+    item?: any;
+    hierarchyItem?: any;
+    category?: string;
+    module?: string;
+    subCategory?: string;
+    type?: string;
+    id?: string;
     settings?: SystemSettings;
     method?: string;
   }) => {
     // Generate unique key for deduplication
-    const syncKey = `${payload.action}_${payload.ticket?.id || payload.user?.id || payload.userId || payload.comment?.id || payload.archivedTicket?.id || payload.archivedUser?.id || 'general'}`;
+    const syncKey = `${payload.action}_${payload.ticket?.id || payload.user?.id || payload.userId || payload.comment?.id || payload.archivedTicket?.id || payload.archivedUser?.id || payload.optionValue || payload.newValue || 'general'}`;
     const now = Date.now();
     if (inFlightSyncRef.current[syncKey] && (now - inFlightSyncRef.current[syncKey]) < 1200) {
       // Ignore duplicate request triggered within 1.2s
@@ -1046,6 +1058,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } else if (payload.action === 'updateRolePermissions') {
       targetTab = 'RolePermissions';
       recordName = `Role Permissions Access Matrix`;
+    } else if (payload.action === 'addDropdownOption') {
+      targetTab = 'MasterDropdowns';
+      recordName = `Added Option "${payload.optionValue || ''}" to ${payload.dropdownType || 'Dropdowns'}`;
+    } else if (payload.action === 'editDropdownOption') {
+      targetTab = 'MasterDropdowns';
+      recordName = `Updated Option "${payload.oldValue || ''}" → "${payload.newValue || ''}" in ${payload.dropdownType || 'Dropdowns'}`;
+    } else if (payload.action === 'deleteDropdownOption') {
+      targetTab = 'MasterDropdowns';
+      recordName = `Deleted Option "${payload.optionValue || ''}" from ${payload.dropdownType || 'Dropdowns'}`;
+    } else if (payload.action === 'addHierarchyItem') {
+      targetTab = 'MasterDropdowns';
+      recordName = `Added Hierarchy Item: ${payload.item?.category || ''} → ${payload.item?.module || ''} (${payload.item?.subCategory || ''})`;
+    } else if (payload.action === 'deleteHierarchyItem') {
+      targetTab = 'MasterDropdowns';
+      recordName = `Deleted Hierarchy Item: ${payload.category || ''} → ${payload.module || ''} (${payload.subCategory || ''})`;
     } else if (payload.action === 'addComment') {
       targetTab = 'TicketComments';
       recordName = `Comment on Ticket ${payload.ticket?.id || ''}`;
@@ -1722,6 +1749,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     const updatedUsers = [...users, newUser];
     setUsers(updatedUsers);
+    try {
+      localStorage.setItem('hd_users_v2', JSON.stringify(updatedUsers));
+    } catch (e) {}
     syncDirectActionToSheets({
       action: 'addUser',
       user: newUser,
@@ -2157,8 +2187,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!branch.trim() || branches.includes(branch.trim())) return;
     const updatedBranches = [...branches, branch.trim()];
     setBranches(updatedBranches);
+    try {
+      localStorage.setItem('hd_branches_v1', JSON.stringify(updatedBranches));
+    } catch {}
     syncDirectActionToSheets({
-      action: 'updateDropdowns',
+      action: 'addDropdownOption',
+      dropdownType: 'Branch / Location',
+      optionValue: branch.trim(),
+      optionCode: branch.trim().toUpperCase().replace(/\s+/g, '_'),
       branches: updatedBranches
     });
     addAuditLog('BRANCH_ADDED', 'Master Settings', `Added branch/location: ${branch}`);
@@ -2168,8 +2204,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!newBranch.trim()) return;
     const updatedBranches = branches.map(b => (b === oldBranch ? newBranch.trim() : b));
     setBranches(updatedBranches);
+    try {
+      localStorage.setItem('hd_branches_v1', JSON.stringify(updatedBranches));
+    } catch {}
     syncDirectActionToSheets({
-      action: 'updateDropdowns',
+      action: 'editDropdownOption',
+      dropdownType: 'Branch / Location',
+      oldValue: oldBranch,
+      newValue: newBranch.trim(),
+      optionCode: newBranch.trim().toUpperCase().replace(/\s+/g, '_'),
       branches: updatedBranches
     });
     addAuditLog('BRANCH_EDITED', 'Master Settings', `Renamed branch ${oldBranch} to ${newBranch}`);
@@ -2178,8 +2221,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deleteBranch = (branch: string) => {
     const updatedBranches = branches.filter(b => b !== branch);
     setBranches(updatedBranches);
+    try {
+      localStorage.setItem('hd_branches_v1', JSON.stringify(updatedBranches));
+    } catch {}
     syncDirectActionToSheets({
-      action: 'updateDropdowns',
+      action: 'deleteDropdownOption',
+      dropdownType: 'Branch / Location',
+      optionValue: branch,
       branches: updatedBranches
     });
     addAuditLog('BRANCH_DELETED', 'Master Settings', `Deleted branch ${branch}`);
@@ -2189,8 +2237,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!priority.trim() || prioritiesList.includes(priority.trim())) return;
     const updatedPriorities = [...prioritiesList, priority.trim()];
     setPrioritiesList(updatedPriorities);
+    try {
+      localStorage.setItem('hd_priorities_v1', JSON.stringify(updatedPriorities));
+    } catch {}
     syncDirectActionToSheets({
-      action: 'updateDropdowns',
+      action: 'addDropdownOption',
+      dropdownType: 'Ticket Priority',
+      optionValue: priority.trim(),
+      optionCode: priority.trim().toUpperCase().replace(/\s+/g, '_'),
       prioritiesList: updatedPriorities
     });
     addAuditLog('PRIORITY_ADDED', 'Master Settings', `Added priority option: ${priority}`);
@@ -2200,8 +2254,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!newPriority.trim()) return;
     const updatedPriorities = prioritiesList.map(p => (p === oldPriority ? newPriority.trim() : p));
     setPrioritiesList(updatedPriorities);
+    try {
+      localStorage.setItem('hd_priorities_v1', JSON.stringify(updatedPriorities));
+    } catch {}
     syncDirectActionToSheets({
-      action: 'updateDropdowns',
+      action: 'editDropdownOption',
+      dropdownType: 'Ticket Priority',
+      oldValue: oldPriority,
+      newValue: newPriority.trim(),
+      optionCode: newPriority.trim().toUpperCase().replace(/\s+/g, '_'),
       prioritiesList: updatedPriorities
     });
     addAuditLog('PRIORITY_EDITED', 'Master Settings', `Renamed priority ${oldPriority} to ${newPriority}`);
@@ -2210,8 +2271,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deletePriority = (priority: string) => {
     const updatedPriorities = prioritiesList.filter(p => p !== priority);
     setPrioritiesList(updatedPriorities);
+    try {
+      localStorage.setItem('hd_priorities_v1', JSON.stringify(updatedPriorities));
+    } catch {}
     syncDirectActionToSheets({
-      action: 'updateDropdowns',
+      action: 'deleteDropdownOption',
+      dropdownType: 'Ticket Priority',
+      optionValue: priority,
       prioritiesList: updatedPriorities
     });
     addAuditLog('PRIORITY_DELETED', 'Master Settings', `Deleted priority ${priority}`);
@@ -2221,8 +2287,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!status.trim() || statusesList.includes(status.trim())) return;
     const updatedStatuses = [...statusesList, status.trim()];
     setStatusesList(updatedStatuses);
+    try {
+      localStorage.setItem('hd_statuses_v1', JSON.stringify(updatedStatuses));
+    } catch {}
     syncDirectActionToSheets({
-      action: 'updateDropdowns',
+      action: 'addDropdownOption',
+      dropdownType: 'Ticket Status',
+      optionValue: status.trim(),
+      optionCode: status.trim().toUpperCase().replace(/\s+/g, '_'),
       statusesList: updatedStatuses
     });
     addAuditLog('STATUS_ADDED', 'Master Settings', `Added ticket status option: ${status}`);
@@ -2232,8 +2304,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!newStatus.trim()) return;
     const updatedStatuses = statusesList.map(s => (s === oldStatus ? newStatus.trim() : s));
     setStatusesList(updatedStatuses);
+    try {
+      localStorage.setItem('hd_statuses_v1', JSON.stringify(updatedStatuses));
+    } catch {}
     syncDirectActionToSheets({
-      action: 'updateDropdowns',
+      action: 'editDropdownOption',
+      dropdownType: 'Ticket Status',
+      oldValue: oldStatus,
+      newValue: newStatus.trim(),
+      optionCode: newStatus.trim().toUpperCase().replace(/\s+/g, '_'),
       statusesList: updatedStatuses
     });
     addAuditLog('STATUS_EDITED', 'Master Settings', `Renamed ticket status ${oldStatus} to ${newStatus}`);
@@ -2242,8 +2321,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deleteStatus = (status: string) => {
     const updatedStatuses = statusesList.filter(s => s !== status);
     setStatusesList(updatedStatuses);
+    try {
+      localStorage.setItem('hd_statuses_v1', JSON.stringify(updatedStatuses));
+    } catch {}
     syncDirectActionToSheets({
-      action: 'updateDropdowns',
+      action: 'deleteDropdownOption',
+      dropdownType: 'Ticket Status',
+      optionValue: status,
       statusesList: updatedStatuses
     });
     addAuditLog('STATUS_DELETED', 'Master Settings', `Deleted ticket status ${status}`);
@@ -2253,8 +2337,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!role.trim() || rolesList.includes(role.trim())) return;
     const updatedRoles = [...rolesList, role.trim()];
     setRolesList(updatedRoles);
+    try {
+      localStorage.setItem('hd_roles_v1', JSON.stringify(updatedRoles));
+    } catch {}
     syncDirectActionToSheets({
-      action: 'updateDropdowns',
+      action: 'addDropdownOption',
+      dropdownType: 'User Role',
+      optionValue: role.trim(),
+      optionCode: role.trim().toUpperCase().replace(/\s+/g, '_'),
       rolesList: updatedRoles
     });
     addAuditLog('ROLE_ADDED', 'Master Settings', `Added user role: ${role}`);
@@ -2264,8 +2354,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!newRole.trim()) return;
     const updatedRoles = rolesList.map(r => (r === oldRole ? newRole.trim() : r));
     setRolesList(updatedRoles);
+    try {
+      localStorage.setItem('hd_roles_v1', JSON.stringify(updatedRoles));
+    } catch {}
     syncDirectActionToSheets({
-      action: 'updateDropdowns',
+      action: 'editDropdownOption',
+      dropdownType: 'User Role',
+      oldValue: oldRole,
+      newValue: newRole.trim(),
+      optionCode: newRole.trim().toUpperCase().replace(/\s+/g, '_'),
       rolesList: updatedRoles
     });
     addAuditLog('ROLE_EDITED', 'Master Settings', `Renamed role ${oldRole} to ${newRole}`);
@@ -2274,8 +2371,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deleteRole = (role: string) => {
     const updatedRoles = rolesList.filter(r => r !== role);
     setRolesList(updatedRoles);
+    try {
+      localStorage.setItem('hd_roles_v1', JSON.stringify(updatedRoles));
+    } catch {}
     syncDirectActionToSheets({
-      action: 'updateDropdowns',
+      action: 'deleteDropdownOption',
+      dropdownType: 'User Role',
+      optionValue: role,
       rolesList: updatedRoles
     });
     addAuditLog('ROLE_DELETED', 'Master Settings', `Deleted role ${role}`);
@@ -2285,8 +2387,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!designation.trim() || designationsList.includes(designation.trim())) return;
     const updatedDesigs = [...designationsList, designation.trim()];
     setDesignationsList(updatedDesigs);
+    try {
+      localStorage.setItem('hd_designations_v1', JSON.stringify(updatedDesigs));
+    } catch {}
     syncDirectActionToSheets({
-      action: 'updateDropdowns',
+      action: 'addDropdownOption',
+      dropdownType: 'Designation',
+      optionValue: designation.trim(),
+      optionCode: designation.trim().toUpperCase().replace(/\s+/g, '_'),
       designationsList: updatedDesigs
     });
     addAuditLog('DESIGNATION_ADDED', 'Master Settings', `Added designation: ${designation}`);
@@ -2296,8 +2404,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!newDesig.trim()) return;
     const updatedDesigs = designationsList.map(d => (d === oldDesig ? newDesig.trim() : d));
     setDesignationsList(updatedDesigs);
+    try {
+      localStorage.setItem('hd_designations_v1', JSON.stringify(updatedDesigs));
+    } catch {}
     syncDirectActionToSheets({
-      action: 'updateDropdowns',
+      action: 'editDropdownOption',
+      dropdownType: 'Designation',
+      oldValue: oldDesig,
+      newValue: newDesig.trim(),
+      optionCode: newDesig.trim().toUpperCase().replace(/\s+/g, '_'),
       designationsList: updatedDesigs
     });
     addAuditLog('DESIGNATION_EDITED', 'Master Settings', `Renamed designation ${oldDesig} to ${newDesig}`);
@@ -2306,8 +2421,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deleteDesignation = (designation: string) => {
     const updatedDesigs = designationsList.filter(d => d !== designation);
     setDesignationsList(updatedDesigs);
+    try {
+      localStorage.setItem('hd_designations_v1', JSON.stringify(updatedDesigs));
+    } catch {}
     syncDirectActionToSheets({
-      action: 'updateDropdowns',
+      action: 'deleteDropdownOption',
+      dropdownType: 'Designation',
+      optionValue: designation,
       designationsList: updatedDesigs
     });
     addAuditLog('DESIGNATION_DELETED', 'Master Settings', `Deleted designation ${designation}`);

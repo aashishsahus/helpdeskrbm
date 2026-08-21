@@ -38,6 +38,7 @@ export const UserManagement: React.FC = () => {
     deleteUserPermanentlyAndArchive,
     restoreDefaultUsers,
     pullDataFromGoogleSheets,
+    syncDirectActionToSheets,
     departments,
     branches,
     rolesList,
@@ -139,6 +140,27 @@ export const UserManagement: React.FC = () => {
     setIsSyncing(true);
     try {
       await pullDataFromGoogleSheets(undefined, undefined, false);
+      setRestoreSuccessMsg('Pulled latest user records from Google Sheet.');
+      setTimeout(() => setRestoreSuccessMsg(null), 4000);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handlePushUsersToSheet = async () => {
+    setIsSyncing(true);
+    try {
+      if (syncDirectActionToSheets) {
+        await syncDirectActionToSheets({
+          action: 'updateUsers',
+          users: users
+        });
+      }
+      setRestoreSuccessMsg(`Successfully stored all ${users.length} users with mobile numbers into Google Sheet.`);
+      setTimeout(() => setRestoreSuccessMsg(null), 4000);
+    } catch {
+      setRestoreSuccessMsg('Users saved to local storage and sync queued.');
+      setTimeout(() => setRestoreSuccessMsg(null), 4000);
     } finally {
       setIsSyncing(false);
     }
@@ -295,13 +317,23 @@ export const UserManagement: React.FC = () => {
           </button>
 
           <button
+            onClick={handlePushUsersToSheet}
+            disabled={isSyncing}
+            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-2xs transition-all disabled:opacity-50"
+            title="Store all user accounts and mobile numbers into Google Sheet tab Users"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span>{isSyncing ? 'Storing in Sheet...' : 'Store Users in Sheet'}</span>
+          </button>
+
+          <button
             onClick={handleSyncFromSheets}
             disabled={isSyncing}
-            className="px-3.5 py-2 bg-white hover:bg-gray-50 border border-emerald-300 text-emerald-800 font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-2xs transition-all disabled:opacity-50"
-            title="Sync users and tickets with connected Google Sheet"
+            className="px-3.5 py-2 bg-white hover:bg-gray-50 border border-blue-300 text-blue-800 font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-2xs transition-all disabled:opacity-50"
+            title="Sync latest user records from connected Google Sheet"
           >
-            <RefreshCw className={`w-3.5 h-3.5 text-emerald-700 ${isSyncing ? 'animate-spin' : ''}`} />
-            <span>{isSyncing ? 'Syncing Sheet...' : 'Sync with Sheet'}</span>
+            <RotateCcw className={`w-3.5 h-3.5 text-blue-700 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span>Pull Users</span>
           </button>
 
           <button
