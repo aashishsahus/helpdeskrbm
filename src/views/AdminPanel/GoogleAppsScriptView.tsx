@@ -31,19 +31,16 @@ export const GoogleAppsScriptView: React.FC = () => {
     designationsList,
     settings,
     updateSettings,
-    syncWithGoogleSheets
+    syncWithGoogleSheets,
+    setActiveView
   } = useApp();
 
   const [copied, setCopied] = useState(false);
   const [isForceSyncing, setIsForceSyncing] = useState(false);
   const [syncStatusMsg, setSyncStatusMsg] = useState('');
   
-  // Current active URL in settings
+  // Current active URL in settings (Single source of truth)
   const activeUrl = settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || '';
-  
-  // Editable input state
-  const [webAppUrlInput, setWebAppUrlInput] = useState(activeUrl);
-  const [isSavedUrl, setIsSavedUrl] = useState(false);
 
   // Diagnostic & Live Render State
   const [isDiagnosing, setIsDiagnosing] = useState(false);
@@ -65,7 +62,6 @@ export const GoogleAppsScriptView: React.FC = () => {
             spreadsheetId: data.config.spreadsheetId || settings.spreadsheetId,
             driveFolderId: data.config.driveFolderId || settings.driveFolderId
           });
-          setWebAppUrlInput(data.config.webAppUrl);
         }
       }
     } catch (e) {
@@ -74,17 +70,6 @@ export const GoogleAppsScriptView: React.FC = () => {
       setIsRefreshingServer(false);
     }
   };
-
-  // Keep input synchronized when settings change externally
-  useEffect(() => {
-    if (activeUrl) {
-      setWebAppUrlInput(activeUrl);
-    }
-  }, [activeUrl]);
-
-  // Check if input has unsaved changes
-  const isDirty = webAppUrlInput.trim() !== activeUrl.trim();
-  const isValidFormat = webAppUrlInput.trim().startsWith('https://script.google.com/macros/s/') && webAppUrlInput.trim().includes('/exec');
 
   const handleCleanDuplicates = async () => {
     setIsDeduplicating(true);
@@ -113,24 +98,8 @@ export const GoogleAppsScriptView: React.FC = () => {
     }
   };
 
-  const handleSaveUrl = async (urlToSave?: string) => {
-    const target = (urlToSave || webAppUrlInput).trim();
-    if (!target) return;
-
-    updateSettings({
-      googleAppsScriptWebAppUrl: target,
-      appsScriptUrl: target
-    });
-
-    setIsSavedUrl(true);
-    setTimeout(() => setIsSavedUrl(false), 3000);
-
-    // Automatically trigger a live connection test to verify the new endpoint
-    runDiagnosticTest(target);
-  };
-
   const runDiagnosticTest = async (testUrl?: string) => {
-    const url = (testUrl || webAppUrlInput || activeUrl).trim();
+    const url = (testUrl || activeUrl).trim();
     setIsDiagnosing(true);
     setDiagnosticResult(null);
     try {
@@ -267,7 +236,13 @@ function cleanDuplicateTickets() {
 }
 
 function doGet(e) {
-  return ContentService.createTextOutput(JSON.stringify({ status: "OK", service: "Apex Help Desk API", timestamp: new Date().toISOString() }))
+  var nowIst = "";
+  try {
+    nowIst = Utilities.formatDate(new Date(), "GMT+05:30", "yyyy-MM-dd HH:mm:ss");
+  } catch (err) {
+    nowIst = new Date().toISOString();
+  }
+  return ContentService.createTextOutput(JSON.stringify({ status: "OK", service: "Apex Help Desk API", timestamp: nowIst }))
     .setMimeType(ContentService.MimeType.JSON);
 }
 
@@ -292,7 +267,7 @@ function doPost(e) {
     }
 
     var action = contents.action || "createTicket";
-    var targetSpreadsheetId = contents.spreadsheetId || DEFAULT_SPREADSHEET_ID;
+    var targetSpreadsheetId = contents.spreadsheetId || DEFAULT_SPREADTREE_ID || DEFAULT_SPREADSHEET_ID;
     var ss;
     if (targetSpreadsheetId) {
       try {
@@ -308,22 +283,36 @@ function doPost(e) {
     // Ensure all database tabs exist
     setupHelpDeskSheets(ss);
 
-    // Format date in YYYY-MM-DD HH:mm format (e.g. 2026-08-18 00:00)
-    var formatSheetDate = function(dateVal) {
+    // Format date in Indian Standard Time (IST / GMT+5:30) (e.g. 2026-08-22 15:45:20)
+    var formatISTDate = function(dateVal, includeSeconds) {
       if (!dateVal) return "";
       try {
         var d = (typeof dateVal === "string" || typeof dateVal === "number") ? new Date(dateVal) : dateVal;
         if (isNaN(d.getTime())) return dateVal.toString();
-        var pad = function(n) { return (n < 10 ? "0" : "") + n; };
-        var year = d.getFullYear();
-        var month = pad(d.getMonth() + 1);
-        var day = pad(d.getDate());
-        var hours = pad(d.getHours());
-        var minutes = pad(d.getMinutes());
-        return year + "-" + month + "-" + day + " " + hours + ":" + minutes;
+        var pattern = includeSeconds === false ? "yyyy-MM-dd HH:mm" : "yyyy-MM-dd HH:mm:ss";
+        return Utilities.formatDate(d, "GMT+05:30", pattern);
       } catch (e) {
-        return dateVal.toString();
+        try {
+          var istOffsetMs = 5.5 * 60 * 60 * 1000;
+          var istD = new Date(d.getTime() + istOffsetMs);
+          var pad = function(n) { return (n < 10 ? "0" : "") + n; };
+          var year = istD.getUTCFullYear();
+          var month = pad(istD.getUTCMonth() + 1);
+          var day = pad(istD.getUTCDate());
+          var hours = pad(istD.getUTCHours());
+          var minutes = pad(istD.getUTCMinutes());
+          var seconds = pad(istD.getUTCSeconds());
+          return year + "-" + month + "-" + day + " " + hours + ":" + minutes + (includeSeconds === false ? "" : ":" + seconds);
+        } catch (err) {
+          return dateVal.toString();
+        }
       }
+    };
+    var formatSheetDate = function(dateVal) {
+      return formatISTDate(dateVal, false);
+    };
+    var getNowIST = function(includeSeconds) {
+      return formatISTDate(new Date(), includeSeconds !== false);
     };
 
     if (action === "testConnection") {
@@ -332,7 +321,7 @@ function doPost(e) {
         status: "OK",
         message: "Google Apps Script successfully communicated with Spreadsheet!",
         sheetName: ss ? ss.getName() : "Spreadsheet",
-        timestamp: new Date().toISOString()
+        timestamp: getNowIST(true)
       })).setMimeType(ContentService.MimeType.JSON);
     }
 
@@ -647,7 +636,7 @@ function doPost(e) {
         rolePermissions: resultRolePermissions,
         archivedTickets: resultArchivedTickets,
         totalTickets: resultTickets.length,
-        timestamp: new Date().toISOString()
+        timestamp: getNowIST(true)
       })).setMimeType(ContentService.MimeType.JSON);
     }
 
@@ -698,7 +687,7 @@ function doPost(e) {
               att.fileType || "",
               att.fileSize || 0,
               att.uploadedBy || t.employeeName || "",
-              new Date().toISOString()
+              getNowIST(true)
             ]);
           }
         }
@@ -719,7 +708,7 @@ function doPost(e) {
           c.authorRole,
           c.content,
           c.isInternalNote ? "Yes" : "No",
-          c.createdAt || new Date().toISOString()
+          c.createdAt || getNowIST(true)
         ]);
       }
 
@@ -729,7 +718,7 @@ function doPost(e) {
         var data = ticketSheet.getDataRange().getValues();
         for (var r = 1; r < data.length; r++) {
           if (data[r][0] == t.id) {
-            ticketSheet.getRange(r + 1, 14, 1, 1).setValue(t.updatedDate || new Date().toISOString());
+            ticketSheet.getRange(r + 1, 14, 1, 1).setValue(t.updatedDate || getNowIST(true));
             break;
           }
         }
@@ -774,7 +763,7 @@ function doPost(e) {
           fileType,
           contents.fileSize || 0,
           "System",
-          new Date().toISOString()
+          getNowIST(true)
         ]);
       }
 
@@ -857,7 +846,7 @@ function doPost(e) {
 
       if (archU && archUSheet) {
         var archURow = [
-          archU.archivedAt || new Date().toISOString(),
+          archU.archivedAt || getNowIST(true),
           archU.archivedBy || "Super Admin",
           archU.archiveReason || "Permanent deletion & archival",
           archU.id || "",
@@ -902,7 +891,7 @@ function doPost(e) {
 
       if (archT && archTSheet) {
         var archTRow = [
-          archT.archivedAt || new Date().toISOString(),
+          archT.archivedAt || getNowIST(true),
           archT.archivedBy || "Super Admin",
           archT.archiveReason || "Permanent deletion & archival",
           archT.id || "",
@@ -1108,7 +1097,7 @@ function doPost(e) {
         if (!alreadyExists) {
           var nextNum = maxIdx + 1;
           var newOptId = dPrefix + "-" + (nextNum < 10 ? "00" + nextNum : (nextNum < 100 ? "0" + nextNum : nextNum));
-          mSheet.appendRow([newOptId, dType, dCode, dVal, "Active", new Date().toISOString()]);
+          mSheet.appendRow([newOptId, dType, dCode, dVal, "Active", getNowIST(true)]);
         }
       }
       return ContentService.createTextOutput(JSON.stringify({ success: true, message: "Option saved to Google Sheet MasterDropdowns." }))
@@ -1129,7 +1118,7 @@ function doPost(e) {
           if ((!dType || curType === dType) && curVal === oldVal) {
             mSheet.getRange(mRowIdx + 1, 3).setValue(newCode);
             mSheet.getRange(mRowIdx + 1, 4).setValue(newVal);
-            mSheet.getRange(mRowIdx + 1, 6).setValue(new Date().toISOString());
+            mSheet.getRange(mRowIdx + 1, 6).setValue(getNowIST(true));
             break;
           }
         }
@@ -1218,83 +1207,113 @@ function doPost(e) {
       var mSheet = ss.getSheetByName("MasterDropdowns") || ss.getSheetByName("DropdownOptions");
       if (!mSheet) {
         mSheet = ss.insertSheet("MasterDropdowns");
+        mSheet.appendRow(["Option ID", "Dropdown Type", "Option Code", "Option Value", "Status", "Updated At"]);
       }
       if (mSheet) {
-        var nowStr = new Date().toISOString();
-        var formatOptionId = function(prefix, idx) {
-          var num = idx + 1;
-          return prefix + "-" + (num < 10 ? "00" + num : (num < 100 ? "0" + num : num));
-        };
+        var existingMData = mSheet.getDataRange().getValues();
+        if (existingMData.length === 0 || !existingMData[0] || existingMData[0].length === 0) {
+          mSheet.appendRow(["Option ID", "Dropdown Type", "Option Code", "Option Value", "Status", "Updated At"]);
+          existingMData = mSheet.getDataRange().getValues();
+        }
+
+        var existingMap = {};
+        var maxIdMap = { LOC: 0, PRI: 0, STS: 0, ROL: 0, DSG: 0, TYP: 0, OPT: 0 };
+
+        for (var ex = 1; ex < existingMData.length; ex++) {
+          var er = existingMData[ex];
+          var eId = (er[0] || "").toString().trim();
+          var eType = (er[1] || "").toString().trim();
+          var eCode = (er[2] || "").toString().trim();
+          var eVal = (er[3] || "").toString().trim();
+          var eStatus = (er[4] || "Active").toString().trim();
+          var eUpdated = (er[5] || "").toString().trim();
+
+          if (eVal) {
+            var key = eType.toLowerCase() + "___" + eVal.toLowerCase();
+            existingMap[key] = {
+              rowIndex: ex + 1,
+              id: eId,
+              type: eType,
+              code: eCode,
+              val: eVal,
+              status: eStatus,
+              updatedAt: eUpdated
+            };
+          }
+
+          if (eId) {
+            var pfxMatch = eId.match(/^([A-Z]+)-(\d+)$/i);
+            if (pfxMatch) {
+              var pfx = pfxMatch[1].toUpperCase();
+              var numVal = parseInt(pfxMatch[2], 10);
+              if (!isNaN(numVal) && (maxIdMap[pfx] === undefined || numVal > maxIdMap[pfx])) {
+                maxIdMap[pfx] = numVal;
+              }
+            }
+          }
+        }
+
         var formatOptionCode = function(val) {
           return (val || "").toString().toUpperCase().replace(/[^A-Z0-9]/g, "_").replace(/__+/g, "_").slice(0, 20);
         };
 
-        // Read existing options to preserve other dropdown types if only one type was updated
-        var existingOptions = [];
-        var existingMData = mSheet.getDataRange().getValues();
-        for (var ex = 1; ex < existingMData.length; ex++) {
-          var er = existingMData[ex];
-          if (er[3]) {
-            existingOptions.push({
-              id: er[0] || "",
-              type: (er[1] || "").toString(),
-              code: (er[2] || "").toString(),
-              val: (er[3] || "").toString().trim(),
-              status: (er[4] || "Active").toString()
-            });
+        var nextOptionId = function(prefix) {
+          var p = prefix.toUpperCase();
+          if (maxIdMap[p] === undefined) maxIdMap[p] = 0;
+          maxIdMap[p]++;
+          var num = maxIdMap[p];
+          return p + "-" + (num < 10 ? "00" + num : (num < 100 ? "0" + num : num));
+        };
+
+        var upsertItem = function(dType, dVal, prefix) {
+          if (!dVal || !dVal.toString().trim()) return;
+          var valStr = dVal.toString().trim();
+          var key = dType.toLowerCase() + "___" + valStr.toLowerCase();
+          var existing = existingMap[key];
+
+          if (existing) {
+            // Already in sheet: preserve original Option ID and original timestamp
+            if (existing.status !== "Active") {
+              mSheet.getRange(existing.rowIndex, 5).setValue("Active");
+            }
+          } else {
+            // Brand new item: assign next ID and current timestamp
+            var newId = nextOptionId(prefix);
+            var newCode = formatOptionCode(valStr);
+            var nowIso = getNowIST(true);
+            mSheet.appendRow([newId, dType, newCode, valStr, "Active", nowIso]);
+            existingMap[key] = {
+              rowIndex: mSheet.getLastRow(),
+              id: newId,
+              type: dType,
+              code: newCode,
+              val: valStr,
+              status: "Active",
+              updatedAt: nowIso
+            };
           }
+        };
+
+        if (Array.isArray(contents.ticketTypes)) {
+          contents.ticketTypes.forEach(function(t) { upsertItem("Ticket Request Type", t, "TYP"); });
         }
-
-        var newTypes = contents.ticketTypes;
-        var newBranches = contents.branches;
-        var newPriorities = contents.prioritiesList;
-        var newStatuses = contents.statusesList;
-        var newRoles = contents.rolesList;
-        var newDesigs = contents.designationsList;
-
-        // If all or most are passed, rebuild completely. If single category passed, update only that category.
-        var hasMultiple = [newTypes, newBranches, newPriorities, newStatuses, newRoles, newDesigs].filter(function(a) { return Array.isArray(a); }).length >= 2;
-
-        mSheet.clearContents();
-        mSheet.appendRow(["Option ID", "Dropdown Type", "Option Code", "Option Value", "Status", "Updated At"]);
-
-        // 1. Ticket Request Types
-        var typesList = Array.isArray(newTypes) ? newTypes : (hasMultiple ? [] : existingOptions.filter(function(o) { return o.type.indexOf("Type") !== -1; }).map(function(o) { return o.val; }));
-        typesList.forEach(function(t, idx) {
-          mSheet.appendRow([formatOptionId("TYP", idx), "Ticket Request Type", formatOptionCode(t), t, "Active", nowStr]);
-        });
-
-        // 2. Branches / Locations
-        var branchesList = Array.isArray(newBranches) ? newBranches : (hasMultiple ? [] : existingOptions.filter(function(o) { return o.type.indexOf("Branch") !== -1 || o.type.indexOf("Location") !== -1; }).map(function(o) { return o.val; }));
-        branchesList.forEach(function(b, idx) {
-          mSheet.appendRow([formatOptionId("LOC", idx), "Branch / Location", formatOptionCode(b), b, "Active", nowStr]);
-        });
-
-        // 3. Ticket Priorities
-        var priList = Array.isArray(newPriorities) ? newPriorities : (hasMultiple ? [] : existingOptions.filter(function(o) { return o.type.indexOf("Priority") !== -1; }).map(function(o) { return o.val; }));
-        priList.forEach(function(p, idx) {
-          mSheet.appendRow([formatOptionId("PRI", idx), "Ticket Priority", formatOptionCode(p), p, "Active", nowStr]);
-        });
-
-        // 4. Ticket Statuses
-        var stsList = Array.isArray(newStatuses) ? newStatuses : (hasMultiple ? [] : existingOptions.filter(function(o) { return o.type.indexOf("Status") !== -1; }).map(function(o) { return o.val; }));
-        stsList.forEach(function(s, idx) {
-          mSheet.appendRow([formatOptionId("STS", idx), "Ticket Status", formatOptionCode(s), s, "Active", nowStr]);
-        });
-
-        // 5. User Roles
-        var rList = Array.isArray(newRoles) ? newRoles : (hasMultiple ? [] : existingOptions.filter(function(o) { return o.type.indexOf("Role") !== -1; }).map(function(o) { return o.val; }));
-        rList.forEach(function(r, idx) {
-          mSheet.appendRow([formatOptionId("ROL", idx), "User Role", formatOptionCode(r), r, "Active", nowStr]);
-        });
-
-        // 6. Designations
-        var dsgList = Array.isArray(newDesigs) ? newDesigs : (hasMultiple ? [] : existingOptions.filter(function(o) { return o.type.indexOf("Designation") !== -1; }).map(function(o) { return o.val; }));
-        dsgList.forEach(function(d, idx) {
-          mSheet.appendRow([formatOptionId("DSG", idx), "Designation", formatOptionCode(d), d, "Active", nowStr]);
-        });
+        if (Array.isArray(contents.branches)) {
+          contents.branches.forEach(function(b) { upsertItem("Branch / Location", b, "LOC"); });
+        }
+        if (Array.isArray(contents.prioritiesList)) {
+          contents.prioritiesList.forEach(function(p) { upsertItem("Ticket Priority", p, "PRI"); });
+        }
+        if (Array.isArray(contents.statusesList)) {
+          contents.statusesList.forEach(function(s) { upsertItem("Ticket Status", s, "STS"); });
+        }
+        if (Array.isArray(contents.rolesList)) {
+          contents.rolesList.forEach(function(r) { upsertItem("User Role", r, "ROL"); });
+        }
+        if (Array.isArray(contents.designationsList)) {
+          contents.designationsList.forEach(function(d) { upsertItem("Designation", d, "DSG"); });
+        }
       }
-      return ContentService.createTextOutput(JSON.stringify({ success: true, message: "Dropdown options synced with unique Option IDs to Google Sheets" }))
+      return ContentService.createTextOutput(JSON.stringify({ success: true, message: "Dropdown options safely synced to Google Sheet without erasing existing items." }))
         .setMimeType(ContentService.MimeType.JSON);
     }
 
@@ -1398,44 +1417,131 @@ function doPost(e) {
       if (hSheet || hierarchy.length > 0) {
         if (!hSheet) {
           hSheet = ss.insertSheet("TicketHierarchy");
+          hSheet.appendRow(["Hierarchy ID", "Ticket Type", "Category", "Module", "Sub-Category / Action Item", "Status"]);
         }
-        hSheet.clearContents();
-        hSheet.appendRow(["Hierarchy ID", "Ticket Type", "Category", "Module", "Sub-Category / Action Item", "Status"]);
+        var existingHData = hSheet.getDataRange().getValues();
+        if (existingHData.length === 0 || !existingHData[0] || existingHData[0].length === 0) {
+          hSheet.appendRow(["Hierarchy ID", "Ticket Type", "Category", "Module", "Sub-Category / Action Item", "Status"]);
+          existingHData = hSheet.getDataRange().getValues();
+        }
+        var existingHMap = {};
+        for (var eh = 1; eh < existingHData.length; eh++) {
+          var eRow = existingHData[eh];
+          var hKey = (eRow[1] || "").toString().trim().toLowerCase() + "___" +
+                     (eRow[2] || "").toString().trim().toLowerCase() + "___" +
+                     (eRow[3] || "").toString().trim().toLowerCase() + "___" +
+                     (eRow[4] || "").toString().trim().toLowerCase();
+          existingHMap[hKey] = true;
+        }
+
         var hList = (hierarchy && hierarchy.length > 0) ? hierarchy : [];
-        hList.forEach(function(h, idx) {
-          var num = idx + 1;
-          var hid = "HRY-" + (num < 10 ? "00" + num : (num < 100 ? "0" + num : num));
-          hSheet.appendRow([hid, h.type || "", h.category || "", h.module || "", h.subCategory || "", "Active"]);
+        var maxHNum = existingHData.length - 1;
+        hList.forEach(function(h) {
+          if (!h || (!h.category && !h.module && !h.subCategory)) return;
+          var hKey = (h.type || "Support / How-To").toString().trim().toLowerCase() + "___" +
+                     (h.category || "").toString().trim().toLowerCase() + "___" +
+                     (h.module || "").toString().trim().toLowerCase() + "___" +
+                     (h.subCategory || "").toString().trim().toLowerCase();
+          if (!existingHMap[hKey]) {
+            maxHNum++;
+            var hid = "HRY-" + (maxHNum < 10 ? "00" + maxHNum : (maxHNum < 100 ? "0" + maxHNum : maxHNum));
+            hSheet.appendRow([hid, h.type || "Support / How-To", h.category || "", h.module || "", h.subCategory || "", "Active"]);
+            existingHMap[hKey] = true;
+          }
         });
       }
 
       if (mSheet) {
-        mSheet.clearContents();
-        mSheet.appendRow(["Option ID", "Dropdown Type", "Option Code", "Option Value", "Status", "Updated At"]);
-        var nowStr = new Date().toISOString();
-        var formatOptionId = function(prefix, idx) {
-          var num = idx + 1;
-          return prefix + "-" + (num < 10 ? "00" + num : (num < 100 ? "0" + num : num));
-        };
+        var existingMData = mSheet.getDataRange().getValues();
+        if (existingMData.length === 0 || !existingMData[0] || existingMData[0].length === 0) {
+          mSheet.appendRow(["Option ID", "Dropdown Type", "Option Code", "Option Value", "Status", "Updated At"]);
+          existingMData = mSheet.getDataRange().getValues();
+        }
+
+        var existingMap = {};
+        var maxIdMap = { LOC: 0, PRI: 0, STS: 0, ROL: 0, DSG: 0, TYP: 0, OPT: 0 };
+
+        for (var ex = 1; ex < existingMData.length; ex++) {
+          var er = existingMData[ex];
+          var eId = (er[0] || "").toString().trim();
+          var eType = (er[1] || "").toString().trim();
+          var eCode = (er[2] || "").toString().trim();
+          var eVal = (er[3] || "").toString().trim();
+          var eStatus = (er[4] || "Active").toString().trim();
+          var eUpdated = (er[5] || "").toString().trim();
+
+          if (eVal) {
+            var key = eType.toLowerCase() + "___" + eVal.toLowerCase();
+            existingMap[key] = {
+              rowIndex: ex + 1,
+              id: eId,
+              type: eType,
+              code: eCode,
+              val: eVal,
+              status: eStatus,
+              updatedAt: eUpdated
+            };
+          }
+
+          if (eId) {
+            var pfxMatch = eId.match(/^([A-Z]+)-(\d+)$/i);
+            if (pfxMatch) {
+              var pfx = pfxMatch[1].toUpperCase();
+              var numVal = parseInt(pfxMatch[2], 10);
+              if (!isNaN(numVal) && (maxIdMap[pfx] === undefined || numVal > maxIdMap[pfx])) {
+                maxIdMap[pfx] = numVal;
+              }
+            }
+          }
+        }
+
         var formatOptionCode = function(val) {
           return (val || "").toString().toUpperCase().replace(/[^A-Z0-9]/g, "_").replace(/__+/g, "_").slice(0, 20);
         };
 
-        (contents.branches || []).forEach(function(b, idx) {
-          mSheet.appendRow([formatOptionId("LOC", idx), "Branch / Location", formatOptionCode(b), b, "Active", nowStr]);
-        });
-        (contents.prioritiesList || []).forEach(function(p, idx) {
-          mSheet.appendRow([formatOptionId("PRI", idx), "Ticket Priority", formatOptionCode(p), p, "Active", nowStr]);
-        });
-        (contents.statusesList || []).forEach(function(s, idx) {
-          mSheet.appendRow([formatOptionId("STS", idx), "Ticket Status", formatOptionCode(s), s, "Active", nowStr]);
-        });
-        (contents.rolesList || []).forEach(function(r, idx) {
-          mSheet.appendRow([formatOptionId("ROL", idx), "User Role", formatOptionCode(r), r, "Active", nowStr]);
-        });
-        (contents.designationsList || []).forEach(function(d, idx) {
-          mSheet.appendRow([formatOptionId("DSG", idx), "Designation", formatOptionCode(d), d, "Active", nowStr]);
-        });
+        var nextOptionId = function(prefix) {
+          var p = prefix.toUpperCase();
+          if (maxIdMap[p] === undefined) maxIdMap[p] = 0;
+          maxIdMap[p]++;
+          var num = maxIdMap[p];
+          return p + "-" + (num < 10 ? "00" + num : (num < 100 ? "0" + num : num));
+        };
+
+        var upsertSyncItem = function(dType, dVal, prefix) {
+          if (!dVal || !dVal.toString().trim()) return;
+          var valStr = dVal.toString().trim();
+          var key = dType.toLowerCase() + "___" + valStr.toLowerCase();
+          var existing = existingMap[key];
+
+          if (existing) {
+            // Already in sheet: preserve original Option ID and original timestamp
+            if (existing.status !== "Active") {
+              mSheet.getRange(existing.rowIndex, 5).setValue("Active");
+            }
+          } else {
+            // Brand new item: assign next sequential ID and set current timestamp
+            var newId = nextOptionId(prefix);
+            var newCode = formatOptionCode(valStr);
+            var nowIso = getNowIST(true);
+            mSheet.appendRow([newId, dType, newCode, valStr, "Active", nowIso]);
+            existingMap[key] = {
+              rowIndex: mSheet.getLastRow(),
+              id: newId,
+              type: dType,
+              code: newCode,
+              val: valStr,
+              status: "Active",
+              updatedAt: nowIso
+            };
+          }
+        };
+
+        (contents.ticketTypes || []).forEach(function(t) { upsertSyncItem("Ticket Request Type", t, "TYP"); });
+        (contents.branches || []).forEach(function(b) { upsertSyncItem("Branch / Location", b, "LOC"); });
+        (contents.prioritiesList || []).forEach(function(p) { upsertSyncItem("Ticket Priority", p, "PRI"); });
+        (contents.statusesList || []).forEach(function(s) { upsertSyncItem("Ticket Status", s, "STS"); });
+        (contents.rolesList || []).forEach(function(r) { upsertSyncItem("User Role", r, "ROL"); });
+        (contents.designationsList || []).forEach(function(d) { upsertSyncItem("Designation", d, "DSG"); });
       }
 
       var setSheet = ss.getSheetByName("Settings");
@@ -1610,6 +1716,13 @@ function getOrCreateTicketsFolder() {
 /** Setup Spreadsheet Tabs */
 function setupHelpDeskSheets(ss) {
   var targetSS = ss || SpreadsheetApp.getActiveSpreadsheet();
+  var formatISTDateHelper = function(dVal, includeSec) {
+    try {
+      return Utilities.formatDate(dVal || new Date(), "GMT+05:30", includeSec !== false ? "yyyy-MM-dd HH:mm:ss" : "yyyy-MM-dd HH:mm");
+    } catch (e) {
+      return (dVal || new Date()).toString();
+    }
+  };
   var tabs = ["Users", "Tickets", "ArchivedTickets", "ArchivedUsers", "RolePermissions", "TicketComments", "TicketAttachments", "TicketHistory", "Departments", "Categories", "TicketHierarchy", "MasterDropdowns", "SLARules", "Notifications", "KnowledgeBase", "AuditLogs", "Settings"];
   
   tabs.forEach(function(tabName) {
@@ -1693,7 +1806,7 @@ function setupHelpDeskSheets(ss) {
         sheet.appendRow(["HRY-043", "New Request", "Orbit", "Consignment", "New Consignment", "Active"]);
       } else if (tabName === "MasterDropdowns" || tabName === "DropdownOptions") {
         sheet.appendRow(["Option ID", "Dropdown Type", "Option Code", "Option Value", "Status", "Updated At"]);
-        var sNow = new Date().toISOString();
+        var sNow = formatISTDateHelper(new Date(), true);
         var seedLocations = ["Raipur", "Bilaspur", "Durg", "Bhilai", "Korba", "Rajnandgaon", "Jagdalpur", "Head Office", "Plant Unit 1", "Plant Unit 2", "Warehouse 1", "Warehouse 2", "Central Logistics"];
         seedLocations.forEach(function(loc, idx) {
           var n = idx + 1;
@@ -1734,7 +1847,7 @@ function setupHelpDeskSheets(ss) {
         sheet.appendRow(["Log ID", "Action", "Module", "User", "Details", "Timestamp"]);
       } else if (tabName === "Settings") {
         sheet.appendRow(["Setting Key", "Setting Value", "Description", "Last Updated"]);
-        var nowStr = formatSheetDate(new Date());
+        var nowStr = formatISTDateHelper(new Date(), false);
         sheet.appendRow(["System Name", "Apex HelpDesk Pro", "Primary Help Desk Application Name", nowStr]);
         sheet.appendRow(["Company Name", "Rathi Buildmart", "Organization Name", nowStr]);
         sheet.appendRow(["Support Email", "misrpr@rathibuildmart.com", "Default Support & Escalation Email", nowStr]);
@@ -1831,23 +1944,30 @@ function setupHelpDeskSheets(ss) {
           </div>
         </div>
 
-        {/* Current Active Endpoint Display */}
+        {/* Current Active Endpoint Display & Central Management Card */}
         <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 space-y-3">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
               <CheckCircle2 className="w-4 h-4 text-emerald-600" />
               <span>Current Active System Web App URL (Live Render View):</span>
             </div>
-            {activeUrl && (
+            <div className="flex items-center gap-2">
               <span className="text-[11px] font-mono px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded font-bold">
-                Source of Truth
+                Configured in System Settings
               </span>
-            )}
+              <button
+                type="button"
+                onClick={() => setActiveView('settings')}
+                className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs transition-colors flex items-center gap-1"
+              >
+                <span>Edit / Change URL in System Settings ⚙️</span>
+              </button>
+            </div>
           </div>
 
           <div className="p-3 bg-white border border-gray-300 rounded-lg flex items-center justify-between gap-3 overflow-hidden">
             <code className="text-xs font-mono text-gray-800 break-all select-all flex-1">
-              {activeUrl || 'No Web App URL set yet. Please paste your Google Apps Script URL below.'}
+              {activeUrl || 'No Web App URL set yet. Please configure your Google Apps Script URL in System Settings.'}
             </code>
             {activeUrl && (
               <button
@@ -1864,60 +1984,6 @@ function setupHelpDeskSheets(ss) {
               </button>
             )}
           </div>
-        </div>
-
-        {/* Edit / Update Endpoint URL Input */}
-        <div className="p-4 bg-blue-50/60 border border-blue-200 rounded-xl space-y-3">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <label className="block text-xs font-extrabold text-blue-950 uppercase tracking-wider">
-              Paste New / Updated Google Apps Script Web App URL:
-            </label>
-            {isDirty && (
-              <span className="text-[10px] px-2 py-0.5 bg-amber-100 text-amber-800 font-extrabold rounded-full border border-amber-300 animate-pulse">
-                ● Unsaved Changes
-              </span>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-            <input
-              type="text"
-              value={webAppUrlInput}
-              onChange={(e) => setWebAppUrlInput(e.target.value)}
-              placeholder="https://script.google.com/macros/s/AKfy.../exec"
-              className="flex-1 text-xs font-mono px-3.5 py-2.5 bg-white border border-blue-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-hidden text-gray-900 shadow-2xs"
-            />
-            <button
-              onClick={() => handleSaveUrl()}
-              disabled={!webAppUrlInput.trim()}
-              className={`px-5 py-2.5 font-extrabold text-xs rounded-xl transition-all shrink-0 flex items-center gap-1.5 shadow-sm disabled:opacity-50 ${
-                isSavedUrl
-                  ? 'bg-emerald-600 text-white'
-                  : 'bg-blue-600 hover:bg-blue-700 text-white'
-              }`}
-            >
-              {isSavedUrl ? (
-                <>
-                  <CheckCircle2 className="w-4 h-4 text-white" />
-                  <span>✓ URL Saved & Applied!</span>
-                </>
-              ) : (
-                <>
-                  <Code2 className="w-4 h-4" />
-                  <span>💾 Save & Apply Endpoint</span>
-                </>
-              )}
-            </button>
-          </div>
-
-          {webAppUrlInput.trim() && !isValidFormat && (
-            <div className="text-[11px] text-amber-800 bg-amber-50 p-2.5 rounded-lg border border-amber-300 flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-              <span>
-                <strong>Warning:</strong> URL must start with <code>https://script.google.com/macros/s/</code> and end with <code>/exec</code> (not <code>/edit</code> or <code>/dev</code>).
-              </span>
-            </div>
-          )}
         </div>
 
         {/* Critical Explanation: Do I need to update link every time? & Data Persistence Fix */}

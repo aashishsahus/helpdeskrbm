@@ -62,7 +62,7 @@ export const SyncActivityModal: React.FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          webAppUrl: customWebAppUrl.trim() || webAppUrl,
+          webAppUrl,
           spreadsheetId: sheetId
         })
       });
@@ -87,31 +87,12 @@ export const SyncActivityModal: React.FC = () => {
     }
   };
 
-  const [customWebAppUrl, setCustomWebAppUrl] = useState(settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || '');
-  const [showUrlEdit, setShowUrlEdit] = useState(false);
-  const [isUrlSaved, setIsUrlSaved] = useState(false);
-
-  useEffect(() => {
-    if (settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl) {
-      setCustomWebAppUrl(settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || '');
-    }
-  }, [settings.googleAppsScriptWebAppUrl, settings.appsScriptUrl]);
-
   // Restrict to Admin / Super Admin only
   if (!isSyncModalOpen || !isAdmin) return null;
 
   const sheetId = settings.spreadsheetId || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
-  const webAppUrl = customWebAppUrl || settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || '';
+  const webAppUrl = settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || '';
   const sheetUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/edit`;
-
-  const handleSaveWebAppUrl = () => {
-    updateSettings({
-      googleAppsScriptWebAppUrl: customWebAppUrl.trim(),
-      appsScriptUrl: customWebAppUrl.trim()
-    });
-    setIsUrlSaved(true);
-    setTimeout(() => setIsUrlSaved(false), 2000);
-  };
 
   const handleTestConnection = async () => {
     setIsPushing(true);
@@ -121,7 +102,7 @@ export const SyncActivityModal: React.FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          webAppUrl: customWebAppUrl.trim() || webAppUrl,
+          webAppUrl,
           spreadsheetId: sheetId
         })
       });
@@ -154,7 +135,7 @@ export const SyncActivityModal: React.FC = () => {
   const handlePullRealData = async () => {
     setIsPulling(true);
     try {
-      const res = await pullDataFromGoogleSheets(sheetId, customWebAppUrl.trim() || webAppUrl, false);
+      const res = await pullDataFromGoogleSheets(sheetId, webAppUrl, false);
       setTestResult({
         tested: true,
         success: res.success,
@@ -174,7 +155,7 @@ export const SyncActivityModal: React.FC = () => {
   const handleForceFullSync = async () => {
     setIsPushing(true);
     try {
-      const res = await syncWithGoogleSheets(sheetId, customWebAppUrl.trim() || webAppUrl);
+      const res = await syncWithGoogleSheets(sheetId, webAppUrl);
       setTestResult({
         tested: true,
         success: res.success,
@@ -244,49 +225,43 @@ export const SyncActivityModal: React.FC = () => {
               </div>
             </div>
 
-            {/* Web App URL Box */}
+            {/* Central Web App Endpoint Display */}
             <div className="pt-2 border-t border-gray-200/80 space-y-2">
               <div className="flex items-center justify-between text-xs">
                 <span className="font-bold text-gray-800 flex items-center gap-1.5">
                   <Code className="w-4 h-4 text-emerald-700" />
-                  <span>Google Apps Script Web App URL (Live Endpoint)</span>
+                  <span>Google Apps Script Live Endpoint</span>
                 </span>
                 <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200">
-                  Target: /exec
+                  Configured in System Settings
                 </span>
               </div>
 
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                <div className="relative flex-1">
-                  <input
-                    type="url"
-                    value={customWebAppUrl}
-                    onChange={(e) => setCustomWebAppUrl(e.target.value)}
-                    placeholder="https://script.google.com/macros/s/AKfycb.../exec"
-                    className="w-full px-3 py-2 text-xs font-mono border-2 border-emerald-300 rounded-xl bg-white focus:outline-hidden focus:ring-2 focus:ring-emerald-500 shadow-inner"
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={handleSaveWebAppUrl}
-                    className="px-4 py-2 bg-[#063B2C] hover:bg-[#084D3A] text-white rounded-xl font-extrabold text-xs shrink-0 transition-colors shadow-xs flex items-center gap-1.5"
-                  >
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>{isUrlSaved ? 'Saved!' : 'Save URL'}</span>
-                  </button>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 p-3 bg-white rounded-xl border border-gray-200">
+                <code className="text-xs font-mono text-gray-800 break-all select-all flex-1">
+                  {webAppUrl || 'No Web App URL configured. Please configure in System Settings.'}
+                </code>
+                <div className="flex items-center gap-2 shrink-0">
                   <button
                     onClick={handleTestConnection}
-                    disabled={isPushing}
-                    className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl font-bold text-xs shrink-0 transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                    disabled={isPushing || !webAppUrl}
+                    className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg font-bold text-xs transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                    title="Test ping against Google Apps Script"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${isPushing ? 'animate-spin text-emerald-700' : ''}`} />
                     <span>Test Connection</span>
                   </button>
+                  <button
+                    onClick={() => {
+                      setIsSyncModalOpen(false);
+                      setActiveView('settings');
+                    }}
+                    className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-bold text-xs transition-colors"
+                  >
+                    Manage URL ⚙️
+                  </button>
                 </div>
               </div>
-              <p className="text-[11px] text-gray-500 leading-relaxed">
-                👉 <strong>Single Global Setup:</strong> Ye URL sirf <strong>ek baar</strong> yahan ya <em>Admin Settings</em> me save karna hota hai. Save hote hi poore system ke sabhi tickets, departments, comments aur users me yahi live endpoint automatically apply ho jata hai.
-              </p>
             </div>
 
             {/* Apps Script Status & Live Sync Actions */}

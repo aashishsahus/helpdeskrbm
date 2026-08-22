@@ -210,7 +210,15 @@ export function generateHtmlEmailTemplate(options: {
   let priorityBg = '#fef2f2';
   let priorityColor = '#dc2626';
   let priorityBorder = '#fecaca';
-  if (ticket.priority === 'Medium') {
+  if (ticket.priority === 'Critical') {
+    priorityBg = '#faf5ff';
+    priorityColor = '#7e22ce';
+    priorityBorder = '#e9d5ff';
+  } else if (ticket.priority === 'High') {
+    priorityBg = '#fef2f2';
+    priorityColor = '#dc2626';
+    priorityBorder = '#fecaca';
+  } else if (ticket.priority === 'Medium') {
     priorityBg = '#fffbeb';
     priorityColor = '#b45309';
     priorityBorder = '#fde68a';
@@ -218,10 +226,6 @@ export function generateHtmlEmailTemplate(options: {
     priorityBg = '#f0fdf4';
     priorityColor = '#15803d';
     priorityBorder = '#bbf7d0';
-  } else if (ticket.priority === 'Urgent') {
-    priorityBg = '#faf5ff';
-    priorityColor = '#7e22ce';
-    priorityBorder = '#e9d5ff';
   }
 
   // Status color config
@@ -233,7 +237,7 @@ export function generateHtmlEmailTemplate(options: {
   } else if (ticket.status === 'In Progress') {
     statusBg = '#f0f9ff';
     statusColor = '#0369a1';
-  } else if (ticket.status === 'On Hold') {
+  } else if (ticket.status === 'Pending') {
     statusBg = '#fff7ed';
     statusColor = '#c2410c';
   }

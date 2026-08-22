@@ -199,7 +199,7 @@ export const ReportsView: React.FC = () => {
         rows = categories.map(c => {
           const catTickets = filteredTickets.filter(t => t.category === c.name);
           const activeModules = Array.from(new Set(catTickets.map(t => t.module).filter(Boolean))).join(', ') || 'Standard';
-          return [c.name, c.department, catTickets.length, `${c.defaultSLAHours} Hours`, `${c.subCategories.slice(0, 3).join(', ')} (Modules: ${activeModules})`];
+          return [c.name, c.department, catTickets.length, `${c.defaultSLAHours || 24} Hours`, `${(c.subCategories || []).slice(0, 3).join(', ')} (Modules: ${activeModules})`];
         });
         break;
 

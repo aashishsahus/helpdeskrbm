@@ -96,7 +96,7 @@ export const FeedbackDashboardView: React.FC = () => {
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
-        const matchId = t.id.toLowerCase().includes(q);
+        const matchId = (t.id || '').toLowerCase().includes(q);
         const matchEmail = (t.employeeEmail || '').toLowerCase().includes(q);
         const matchName = (t.employeeName || '').toLowerCase().includes(q);
         const matchFeedback = (t.feedback || '').toLowerCase().includes(q);
@@ -523,9 +523,9 @@ export const FeedbackDashboardView: React.FC = () => {
           </div>
         ) : (
           <div className="space-y-3">
-            {filteredFeedbackList.map(t => (
+            {filteredFeedbackList.map((t, idx) => (
               <div
-                key={t.id}
+                key={`${t.id}-${idx}`}
                 className="p-5 bg-white border border-gray-200 hover:border-emerald-300 rounded-2xl shadow-2xs hover:shadow-md transition-all space-y-3"
               >
                 {/* Card Top Header: Ticket ID + Creation Date + Assigned Agent + Rating */}

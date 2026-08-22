@@ -68,17 +68,20 @@ export const KnowledgeBaseView: React.FC = () => {
   // Filtered articles
   const filteredArticles = useMemo(() => {
     return knowledgeBase.filter(a => {
-      const matchesCat = selectedCategory === 'All' || a.category.toLowerCase() === selectedCategory.toLowerCase();
+      if (!a) return false;
+      const cat = a.category || '';
+      const matchesCat = selectedCategory === 'All' || cat.toLowerCase() === selectedCategory.toLowerCase();
       const q = searchQuery.toLowerCase().trim();
       if (!q) return matchesCat;
+      const title = a.title || '';
       const matchesQuery =
-        a.title.toLowerCase().includes(q) ||
+        title.toLowerCase().includes(q) ||
         (a.summary && a.summary.toLowerCase().includes(q)) ||
         (a.content && a.content.toLowerCase().includes(q)) ||
-        (a.tags && a.tags.some(t => t.toLowerCase().includes(q))) ||
+        (a.tags && a.tags.some(t => t && t.toLowerCase().includes(q))) ||
         (a.category && a.category.toLowerCase().includes(q)) ||
         (a.department && a.department.toLowerCase().includes(q));
-      return matchesCat && matchesQuery;
+      return matchesCat && Boolean(matchesQuery);
     });
   }, [knowledgeBase, selectedCategory, searchQuery]);
 

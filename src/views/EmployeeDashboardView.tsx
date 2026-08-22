@@ -54,9 +54,9 @@ export const EmployeeDashboardView: React.FC = () => {
   const filteredTickets = myTickets.filter(t => {
     const matchesSearch =
       !globalSearchQuery ||
-      t.id.toLowerCase().includes(globalSearchQuery.toLowerCase()) ||
-      t.subject.toLowerCase().includes(globalSearchQuery.toLowerCase()) ||
-      t.category.toLowerCase().includes(globalSearchQuery.toLowerCase());
+      (t.id && t.id.toLowerCase().includes(globalSearchQuery.toLowerCase())) ||
+      (t.subject && t.subject.toLowerCase().includes(globalSearchQuery.toLowerCase())) ||
+      (t.category && t.category.toLowerCase().includes(globalSearchQuery.toLowerCase()));
 
     const matchesStatus = statusFilter === 'All' || t.status === statusFilter;
     const matchesPriority = priorityFilter === 'All' || t.priority === priorityFilter;
@@ -271,9 +271,9 @@ export const EmployeeDashboardView: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                filteredTickets.map(t => (
+                filteredTickets.map((t, idx) => (
                   <tr
-                    key={t.id}
+                    key={`${t.id}-${idx}`}
                     onClick={() => setSelectedTicketId(t.id)}
                     className="hover:bg-blue-50/40 transition-colors cursor-pointer group"
                   >

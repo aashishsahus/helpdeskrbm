@@ -124,7 +124,7 @@ function loadPersistentConfig() {
       if (parsed && typeof parsed === 'object') {
         return {
           spreadsheetId: parsed.spreadsheetId || process.env.SPREADSHEET_ID || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow',
-          webAppUrl: parsed.webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec',
+          webAppUrl: parsed.webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || '',
           driveFolderId: parsed.driveFolderId || '1e9Nu2qsZgOVn36VAnZts18LINrjR_1bR',
           smtpHost: parsed.smtpHost || process.env.SMTP_HOST || '',
           smtpPort: parsed.smtpPort ? Number(parsed.smtpPort) : (process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587),
@@ -141,7 +141,7 @@ function loadPersistentConfig() {
   }
   return {
     spreadsheetId: process.env.SPREADSHEET_ID || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow',
-    webAppUrl: process.env.GOOGLE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec',
+    webAppUrl: process.env.GOOGLE_APPS_SCRIPT_URL || '',
     driveFolderId: '1e9Nu2qsZgOVn36VAnZts18LINrjR_1bR',
     smtpHost: process.env.SMTP_HOST || '',
     smtpPort: process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587,
@@ -229,7 +229,7 @@ app.post('/api/google/diagnose-connection', async (req, res) => {
     runtimeConfig.spreadsheetId = providedSheetId;
   }
 
-  const targetUrl = providedUrl || runtimeConfig.webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
+  const targetUrl = providedUrl || runtimeConfig.webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || '';
   const targetSheetId = providedSheetId || runtimeConfig.spreadsheetId || process.env.SPREADSHEET_ID || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
 
   const diagnostics: any = {
@@ -418,7 +418,7 @@ const handlePullSheetData = async (req: express.Request, res: express.Response) 
   }
 
   const targetSheetId = (spreadsheetId && spreadsheetId.trim()) || runtimeConfig.spreadsheetId || process.env.SPREADSHEET_ID || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
-  const targetUrl = (webAppUrl && webAppUrl.trim()) || runtimeConfig.webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
+  const targetUrl = (webAppUrl && webAppUrl.trim()) || runtimeConfig.webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || '';
 
   let pulledTickets: any[] = [];
   let pulledUsers: any[] = [];
@@ -486,8 +486,19 @@ const handlePullSheetData = async (req: express.Request, res: express.Response) 
       try {
         const data = JSON.parse(rawText);
         if ((data.tickets && Array.isArray(data.tickets) && data.tickets.length > 0) || (data.users && Array.isArray(data.users) && data.users.length > 0)) {
-          pulledTickets = data.tickets || [];
-          pulledUsers = data.users || [];
+          const tMap = new Map<string, any>();
+          (data.tickets || []).forEach((t: any) => {
+            if (t && t.id) tMap.set(t.id, t);
+          });
+          pulledTickets = Array.from(tMap.values());
+
+          const uMap = new Map<string, any>();
+          (data.users || []).forEach((u: any) => {
+            const key = u.id || u.employeeId;
+            if (key) uMap.set(key, u);
+          });
+          pulledUsers = Array.from(uMap.values());
+
           pulledDepartments = data.departments || [];
           pulledCategories = data.categories || [];
           pulledComments = data.comments || [];
@@ -538,7 +549,7 @@ const handlePullSheetData = async (req: express.Request, res: express.Response) 
       if (tRows.length > 1) {
         const headerRow = tRows[0].map(h => (h || '').trim().toLowerCase());
         const is21Col = tRows[0].length >= 21 || headerRow.includes('ticket type') || headerRow.includes('module');
-        const parsedTickets = [];
+        const ticketsMap = new Map<string, any>();
         for (let i = 1; i < tRows.length; i++) {
           const r = tRows[i];
           if (!r || !r[0]) continue;
@@ -547,7 +558,7 @@ const handlePullSheetData = async (req: express.Request, res: express.Response) 
 
           if (is21Col) {
             const agentName = (r[14] || '').trim();
-            parsedTickets.push({
+            ticketsMap.set(ticketId, {
               id: ticketId,
               employeeId: r[1] || 'EMP-001',
               employeeName: r[2] || 'User',
@@ -576,7 +587,7 @@ const handlePullSheetData = async (req: express.Request, res: express.Response) 
             });
           } else {
             const agentName = (r[12] || '').trim();
-            parsedTickets.push({
+            ticketsMap.set(ticketId, {
               id: ticketId,
               employeeId: r[1] || 'EMP-001',
               employeeName: r[2] || 'User',
@@ -603,6 +614,7 @@ const handlePullSheetData = async (req: express.Request, res: express.Response) 
             });
           }
         }
+        const parsedTickets = Array.from(ticketsMap.values());
         if (parsedTickets.length > 0) {
           pulledTickets = parsedTickets;
           source = 'Google Sheets Direct Feed (Live)';
@@ -878,22 +890,37 @@ app.post('/api/google/sync-sheets', async (req, res) => {
     runtimeConfig.spreadsheetId = spreadsheetId.trim();
   }
 
-  const targetUrl = (webAppUrl && webAppUrl.trim()) || runtimeConfig.webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
+  const targetUrl = (webAppUrl && webAppUrl.trim()) || runtimeConfig.webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || '';
   const targetSheetId = (spreadsheetId && spreadsheetId.trim()) || runtimeConfig.spreadsheetId || process.env.SPREADSHEET_ID || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
 
-  // Format date in YYYY-MM-DD HH:mm format (e.g. 2026-08-18 00:00)
-  const formatSheetDate = (dateVal: any): string => {
+  // Format date in Indian Standard Time (IST / GMT+5:30) (e.g. 2026-08-22 15:45)
+  const formatSheetDate = (dateVal: any, includeSeconds: boolean = false): string => {
     if (!dateVal) return '';
     try {
       const d = typeof dateVal === 'string' || typeof dateVal === 'number' ? new Date(dateVal) : dateVal;
       if (isNaN(d.getTime())) return String(dateVal);
-      const pad = (n: number) => (n < 10 ? '0' : '') + n;
-      const year = d.getFullYear();
-      const month = pad(d.getMonth() + 1);
-      const day = pad(d.getDate());
-      const hours = pad(d.getHours());
-      const minutes = pad(d.getMinutes());
-      return `${year}-${month}-${day} ${hours}:${minutes}`;
+      const formatter = new Intl.DateTimeFormat('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      });
+      const parts = formatter.formatToParts(d);
+      const getPart = (type: string) => parts.find(p => p.type === type)?.value || '00';
+      const year = getPart('year');
+      const month = getPart('month');
+      const day = getPart('day');
+      const hours = getPart('hour');
+      const minutes = getPart('minute');
+      const seconds = getPart('second');
+
+      return includeSeconds
+        ? `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
+        : `${year}-${month}-${day} ${hours}:${minutes}`;
     } catch {
       return String(dateVal);
     }
@@ -913,30 +940,36 @@ app.post('/api/google/sync-sheets', async (req, res) => {
 
   try {
     const payload = {
-      action: action || 'syncAll',
-      method: 'batchUpdate',
+      ...req.body,
+      action: action || req.body?.action || 'syncAll',
+      method: req.body?.method || 'batchUpdate',
       spreadsheetId: targetSheetId,
-      ticket: ticket ? sanitizeTicket(ticket) : undefined,
-      user: user || undefined,
-      userId: userId || undefined,
-      comment: comment || undefined,
-      tickets: Array.isArray(tickets) ? tickets.map(sanitizeTicket) : [],
-      users: users || [],
-      archivedTickets: Array.isArray(archivedTickets) ? archivedTickets.map(sanitizeTicket) : [],
-      archivedUsers: archivedUsers || [],
-      archivedTicket: archivedTicket ? sanitizeTicket(archivedTicket) : undefined,
-      archivedUser: archivedUser || undefined,
-      rolePermissions: rolePermissions || [],
-      settings: settings || {},
-      branches: branches || [],
-      departments: departments || [],
-      categories: categories || [],
-      hierarchy: hierarchy || [],
-      ticketTypes: ticketTypes || [],
-      prioritiesList: prioritiesList || [],
-      statusesList: statusesList || [],
-      rolesList: rolesList || [],
-      designationsList: designationsList || [],
+      ticket: ticket ? sanitizeTicket(ticket) : (req.body?.ticket ? sanitizeTicket(req.body.ticket) : undefined),
+      user: user || req.body?.user || undefined,
+      userId: userId || req.body?.userId || undefined,
+      comment: comment || req.body?.comment || undefined,
+      tickets: Array.isArray(tickets) ? tickets.map(sanitizeTicket) : (Array.isArray(req.body?.tickets) ? req.body.tickets.map(sanitizeTicket) : []),
+      users: users || req.body?.users || [],
+      archivedTickets: Array.isArray(archivedTickets) ? archivedTickets.map(sanitizeTicket) : (Array.isArray(req.body?.archivedTickets) ? req.body.archivedTickets.map(sanitizeTicket) : []),
+      archivedUsers: archivedUsers || req.body?.archivedUsers || [],
+      archivedTicket: archivedTicket ? sanitizeTicket(archivedTicket) : (req.body?.archivedTicket ? sanitizeTicket(req.body.archivedTicket) : undefined),
+      archivedUser: archivedUser || req.body?.archivedUser || undefined,
+      rolePermissions: rolePermissions || req.body?.rolePermissions || [],
+      settings: settings || req.body?.settings || {},
+      branches: branches || req.body?.branches || [],
+      departments: departments || req.body?.departments || [],
+      categories: categories || req.body?.categories || [],
+      hierarchy: hierarchy || req.body?.hierarchy || [],
+      ticketTypes: ticketTypes || req.body?.ticketTypes || [],
+      prioritiesList: prioritiesList || req.body?.prioritiesList || [],
+      statusesList: statusesList || req.body?.statusesList || [],
+      rolesList: rolesList || req.body?.rolesList || [],
+      designationsList: designationsList || req.body?.designationsList || [],
+      dropdownType: req.body?.dropdownType,
+      optionValue: req.body?.optionValue,
+      optionCode: req.body?.optionCode,
+      oldValue: req.body?.oldValue,
+      newValue: req.body?.newValue,
       timestamp: formatSheetDate(new Date())
     };
 
@@ -1035,7 +1068,7 @@ app.post('/api/google/sync-ticket', async (req, res) => {
     runtimeConfig.spreadsheetId = spreadsheetId.trim();
   }
 
-  const targetUrl = (webAppUrl && webAppUrl.trim()) || runtimeConfig.webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
+  const targetUrl = (webAppUrl && webAppUrl.trim()) || runtimeConfig.webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || '';
   const targetSheetId = (spreadsheetId && spreadsheetId.trim()) || runtimeConfig.spreadsheetId || process.env.SPREADSHEET_ID || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
 
   // Explicitly assign method: 'appendRow' for creation/comments, 'batchUpdate' for updates
@@ -1127,12 +1160,181 @@ app.post('/api/google/sync-ticket', async (req, res) => {
   }
 });
 
+function formatISTDateServer(dateInput?: string | Date | null): string {
+  if (!dateInput) return 'Within SLA Target';
+  try {
+    const d = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
+    if (isNaN(d.getTime())) {
+      return String(dateInput).replace(/\s*\([^)]*\)/g, '').trim();
+    }
+    const dateFormatted = d.toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
+    });
+    const timeFormatted = d.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+    return `${dateFormatted} at ${timeFormatted} (IST)`;
+  } catch {
+    return String(dateInput);
+  }
+}
+
+function buildRichEmailHtml({
+  subject,
+  recipientName,
+  bodyText,
+  ticketId,
+  eventType
+}: {
+  subject: string;
+  recipientName: string;
+  bodyText: string;
+  ticketId?: string;
+  eventType?: string;
+}): string {
+  const lines = (bodyText || '').split(/\r?\n/);
+  const formattedHtmlLines: string[] = [];
+  let inList = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) {
+      if (inList) {
+        formattedHtmlLines.push('</ul>');
+        inList = false;
+      }
+      formattedHtmlLines.push('<div style="height: 12px;"></div>');
+      continue;
+    }
+
+    if (line.startsWith('- ') || line.startsWith('• ') || line.startsWith('* ')) {
+      if (!inList) {
+        formattedHtmlLines.push('<ul style="margin: 8px 0; padding-left: 20px; color: #334155; line-height: 1.6;">');
+        inList = true;
+      }
+      const itemContent = line.replace(/^[-•*]\s*/, '');
+      const parts = itemContent.split(':');
+      if (parts.length > 1) {
+        formattedHtmlLines.push(`<li style="margin-bottom: 6px;"><strong style="color: #0f172a;">${parts[0].trim()}:</strong> ${parts.slice(1).join(':').trim()}</li>`);
+      } else {
+        formattedHtmlLines.push(`<li style="margin-bottom: 6px;">${itemContent}</li>`);
+      }
+    } else {
+      if (inList) {
+        formattedHtmlLines.push('</ul>');
+        inList = false;
+      }
+      if (line.startsWith('Ticket Details:') || line.startsWith('Details:') || line.startsWith('TICKET DETAILS:') || line.startsWith('TICKET SPECIFICATIONS:') || line.startsWith('COMPLETION SUMMARY:')) {
+        formattedHtmlLines.push(`<div style="font-weight: 700; color: #0f172a; margin-top: 14px; margin-bottom: 8px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">${line}</div>`);
+      } else if (line.startsWith('Dear ') || line.startsWith('Hello ') || line.startsWith('Namaste ')) {
+        formattedHtmlLines.push(`<p style="font-weight: 700; color: #0f172a; font-size: 15px; margin: 0 0 10px 0;">${line}</p>`);
+      } else if (line.startsWith('Best regards,') || line.startsWith('Regards,')) {
+        formattedHtmlLines.push(`<p style="color: #64748b; font-size: 13px; margin: 18px 0 2px 0;">${line}</p>`);
+      } else if (line.startsWith('---') || line.startsWith('===') || line.startsWith('___')) {
+        formattedHtmlLines.push('<hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 12px 0;" />');
+      } else {
+        formattedHtmlLines.push(`<p style="color: #334155; font-size: 14px; line-height: 1.6; margin: 0 0 10px 0;">${line}</p>`);
+      }
+    }
+  }
+  if (inList) {
+    formattedHtmlLines.push('</ul>');
+  }
+
+  let badgeText = 'NOTIFICATION';
+  let badgeColor = '#0284c7';
+  if (eventType === 'ticket_created') {
+    badgeText = 'TICKET REGISTERED';
+    badgeColor = '#059669';
+  } else if (eventType === 'ticket_closed' || eventType === 'ticket_resolved') {
+    badgeText = 'TICKET RESOLVED';
+    badgeColor = '#16a34a';
+  } else if (eventType === 'ticket_assigned') {
+    badgeText = 'ACTION REQUIRED';
+    badgeColor = '#d97706';
+  }
+
+  const portalUrl = 'https://ais-pre-og6oceunixmom6wlssthgr-101533959483.asia-east1.run.app';
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${subject}</title>
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f1f5f9; margin: 0; padding: 24px 12px; color: #1e293b;">
+  <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0">
+    <tr>
+      <td align="center">
+        <table role="presentation" style="max-width: 620px; width: 100%; background: #ffffff; border-radius: 14px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.06); border: 1px solid #e2e8f0;" border="0" cellspacing="0" cellpadding="0">
+          <!-- Header -->
+          <tr>
+            <td style="background: #0f172a; padding: 24px 30px; border-bottom: 3px solid #059669;">
+              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td>
+                    <div style="font-size: 20px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px;">🏢 Rathi Buildmart HelpDesk</div>
+                    <div style="font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px;">Enterprise IT & Operations Support</div>
+                  </td>
+                  <td align="right">
+                    <span style="display: inline-block; padding: 5px 14px; border-radius: 20px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; background-color: ${badgeColor}; color: #ffffff;">${badgeText}</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Body Content -->
+          <tr>
+            <td style="padding: 28px 30px 24px 30px;">
+              ${ticketId ? `<div style="display: inline-block; background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; font-weight: 800; font-family: monospace; font-size: 13px; padding: 4px 10px; border-radius: 6px; margin-bottom: 16px;">Ticket Ref: ${ticketId}</div>` : ''}
+              
+              <div style="color: #334155; font-size: 14px; line-height: 1.65;">
+                ${formattedHtmlLines.join('\n')}
+              </div>
+
+              <div style="text-align: center; margin-top: 26px; padding-top: 20px; border-top: 1px solid #f1f5f9;">
+                <a href="${portalUrl}" style="display: inline-block; background-color: #0284c7; color: #ffffff !important; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-size: 14px; font-weight: 700; letter-spacing: 0.3px;" target="_blank">Open HelpDesk Portal</a>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background: #f8fafc; padding: 20px 30px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; line-height: 1.6;">
+              <div style="font-weight: 700; color: #334155; margin-bottom: 4px;">Rathi Buildmart IT Operations & HelpDesk System</div>
+              <div>Support & Escalations: <a href="mailto:misrpr@rathibuildmart.com" style="color: #0284c7; text-decoration: none; font-weight: 600;">misrpr@rathibuildmart.com</a></div>
+              <div style="font-size: 11px; color: #94a3b8; margin-top: 8px;">Dispatched automatically at ${formatISTDateServer(new Date())}</div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
 app.post('/api/google/send-email', async (req, res) => {
   const { recipientEmail, recipientName, subject, body, htmlBody, ticketId, eventType, webAppUrl, smtpConfig } = req.body;
-  const targetUrl = (webAppUrl && webAppUrl.trim()) || runtimeConfig.webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
+  const targetUrl = (webAppUrl && webAppUrl.trim()) || runtimeConfig.webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || '';
 
   const plainText = body || '';
-  const htmlContent = htmlBody || body || '';
+  // Ensure we always have full rich HTML markup
+  const isCustomHtml = htmlBody && (htmlBody.includes('<table') || htmlBody.includes('<div') || htmlBody.includes('<html') || htmlBody.includes('<p'));
+  const htmlContent = isCustomHtml ? htmlBody : buildRichEmailHtml({
+    subject: subject || 'Rathi Buildmart HelpDesk Notification',
+    recipientName: recipientName || recipientEmail,
+    bodyText: plainText,
+    ticketId,
+    eventType
+  });
+
   const encodedSubj = encodeURIComponent(subject || 'Rathi Buildmart HelpDesk Notification');
   const encodedBody = encodeURIComponent(plainText);
   const mailtoUrl = `mailto:${recipientEmail}?subject=${encodedSubj}&body=${encodedBody}`;
@@ -1246,7 +1448,7 @@ app.post('/api/google/send-email', async (req, res) => {
 
 app.post('/api/google/provision-drive-folders', async (req, res) => {
   const { webAppUrl } = req.body;
-  const targetUrl = (webAppUrl && webAppUrl.trim()) || runtimeConfig.webAppUrl || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
+  const targetUrl = (webAppUrl && webAppUrl.trim()) || runtimeConfig.webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || '';
 
   try {
     const response = await fetch(targetUrl, {
@@ -1293,7 +1495,7 @@ app.post('/api/google/clean-duplicates', async (req, res) => {
     runtimeConfig.spreadsheetId = spreadsheetId.trim();
   }
 
-  const targetUrl = (webAppUrl && webAppUrl.trim()) || runtimeConfig.webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
+  const targetUrl = (webAppUrl && webAppUrl.trim()) || runtimeConfig.webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || '';
   const targetSheetId = (spreadsheetId && spreadsheetId.trim()) || runtimeConfig.spreadsheetId || process.env.SPREADSHEET_ID || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
 
   try {
@@ -1333,7 +1535,7 @@ app.post('/api/google/clean-duplicates', async (req, res) => {
 app.post('/api/google/upload-drive-file', async (req, res) => {
   try {
     const { webAppUrl, driveFolderId, ticketId, fileName, fileType, fileSize, fileData } = req.body;
-    const targetUrl = (webAppUrl && webAppUrl.trim()) || runtimeConfig.webAppUrl || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
+    const targetUrl = (webAppUrl && webAppUrl.trim()) || runtimeConfig.webAppUrl || process.env.GOOGLE_APPS_SCRIPT_URL || '';
 
     const rawFolderId = driveFolderId || '1e9Nu2qsZgOVn36VAnZts18LINrjR_1bR';
     const folderUrl = rawFolderId.startsWith('http')

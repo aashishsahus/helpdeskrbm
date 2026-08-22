@@ -101,7 +101,7 @@ export const ProfileSelectorModal: React.FC<ProfileSelectorModalProps> = ({
             <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
               {profiles.map(profile => {
                 const isSelected = profile.id === selectedId;
-                const firstName = profile.name.split(' ')[0];
+                const firstName = (profile.name || 'User').split(' ')[0];
 
                 return (
                   <div

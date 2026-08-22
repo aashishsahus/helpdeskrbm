@@ -63,7 +63,7 @@ export const AdminDashboardView: React.FC = () => {
 
   // Department Breakdown Data
   const departmentData = departments.map(d => ({
-    name: d.name.replace('&', 'and').split(' ')[0],
+    name: (d.name || 'Dept').replace('&', 'and').split(' ')[0],
     count: filteredTickets.filter(t => t.department === d.name).length
   }));
 
@@ -356,9 +356,9 @@ export const AdminDashboardView: React.FC = () => {
               {filteredTickets
                 .filter(t => ticketStatusFilter === 'All' || t.status === ticketStatusFilter)
                 .slice(0, 15)
-                .map(t => (
+                .map((t, idx) => (
                   <tr
-                    key={t.id}
+                    key={`${t.id}-${idx}`}
                     onClick={() => setSelectedTicketId(t.id)}
                     className="hover:bg-purple-50/30 transition-colors cursor-pointer"
                   >

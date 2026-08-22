@@ -343,8 +343,8 @@ export const ArchivedVaultView: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {filteredArchivedTickets.map(ticket => (
-                    <tr key={ticket.id} className="hover:bg-gray-50/70 transition-colors">
+                  {filteredArchivedTickets.map((ticket, idx) => (
+                    <tr key={`${ticket.id}-${idx}`} className="hover:bg-gray-50/70 transition-colors">
                       <td className="py-3 px-4 font-mono font-bold text-gray-900">
                         <span className="px-2 py-0.5 rounded bg-gray-100 border border-gray-200 text-gray-700">
                           {ticket.id}

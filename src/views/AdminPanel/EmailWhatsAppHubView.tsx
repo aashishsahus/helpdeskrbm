@@ -50,7 +50,8 @@ export const EmailWhatsAppHubView: React.FC = () => {
     currentUser,
     setSelectedTicketId,
     settings,
-    updateSettings
+    updateSettings,
+    setActiveView
   } = useApp();
 
   // Active Main Tab: 'history' | 'templates' | 'quick-send' | 'settings'
@@ -967,8 +968,8 @@ export const EmailWhatsAppHubView: React.FC = () => {
                     className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium"
                   >
                     <option value="">-- No Ticket Selected (Custom) --</option>
-                    {tickets.slice(0, 30).map(t => (
-                      <option key={t.id} value={t.id}>
+                    {tickets.slice(0, 30).map((t, idx) => (
+                      <option key={`${t.id}-${idx}`} value={t.id}>
                         {t.id} - {t.employeeName} ({t.subject.slice(0, 35)}...)
                       </option>
                     ))}
@@ -987,8 +988,8 @@ export const EmailWhatsAppHubView: React.FC = () => {
                     <option value="">-- Choose Template --</option>
                     {notificationTemplates
                       .filter(t => t.channel === quickChannel)
-                      .map(t => (
-                        <option key={t.id} value={t.id}>
+                      .map((t, idx) => (
+                        <option key={`${t.id}-${idx}`} value={t.id}>
                           {t.name}
                         </option>
                       ))}
@@ -1185,25 +1186,42 @@ export const EmailWhatsAppHubView: React.FC = () => {
 
               <div className="space-y-3 text-xs">
                 <div>
-                  <label className="block font-bold text-gray-700 mb-1">Google Apps Script Web App URL</label>
-                  <input
-                    type="text"
-                    value={settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || ''}
-                    onChange={e => updateSettings({ googleAppsScriptWebAppUrl: e.target.value, appsScriptUrl: e.target.value })}
-                    placeholder="https://script.google.com/macros/s/.../exec"
-                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl font-mono text-xs font-medium"
-                  />
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-bold text-gray-700">Central Google Apps Script Endpoint</label>
+                    <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200">
+                      System Settings Managed
+                    </span>
+                  </div>
+                  <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <code className="font-mono text-xs text-gray-800 break-all select-all flex-1">
+                        {settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || 'No Web App URL configured. Please set in System Settings.'}
+                      </code>
+                    </div>
+                    <div className="pt-2 border-t border-gray-200 flex items-center justify-between gap-2">
+                      <span className="text-[11px] text-gray-500">
+                        {settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl ? '✅ Live Endpoint Active' : '⚠️ Missing Endpoint URL'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setActiveView('settings')}
+                        className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs transition-colors flex items-center gap-1"
+                      >
+                        <span>Manage in System Settings ↗</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="p-3.5 bg-blue-50/80 text-blue-900 rounded-xl text-[11px] border border-blue-200 leading-relaxed space-y-1.5">
                   <p className="font-bold">📋 Deployment Checklist for Google Apps Script:</p>
                   <ol className="list-decimal list-inside space-y-1 text-blue-800">
                     <li>Open your Google Sheet &gt; <strong>Extensions &gt; Apps Script</strong>.</li>
-                    <li>Ensure the backend script code from <strong>Google Apps Script Backend</strong> view is pasted.</li>
+                    <li>Ensure the backend script code from <strong>Apps Script</strong> view is pasted.</li>
                     <li>Click <strong>Deploy &gt; New deployment</strong> &gt; Select <strong>Web app</strong>.</li>
                     <li>Set <strong>Execute as:</strong> <code>Me ({settings.supportEmail || 'misrpr@rathibuildmart.com'})</code></li>
                     <li>Set <strong>Who has access:</strong> <code>Anyone</code> <em>(Important: Anyone access is required for automated backend calls)</em>.</li>
-                    <li>Copy the generated <code>/exec</code> URL and paste above.</li>
+                    <li>Copy the generated <code>/exec</code> URL and paste it in <strong>System Settings</strong>.</li>
                   </ol>
                 </div>
               </div>

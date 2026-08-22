@@ -521,7 +521,7 @@ export const UserManagement: React.FC = () => {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-900 font-extrabold flex items-center justify-center text-xs shrink-0 border border-emerald-200">
-                          {u.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                          {(u.name || 'User').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
                         </div>
                         <div>
                           <p className="font-bold text-gray-900">{u.name}</p>

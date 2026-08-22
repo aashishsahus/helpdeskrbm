@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Settings, Save, CheckCircle2, ShieldCheck, Database, HardDrive, Bell, RefreshCw } from 'lucide-react';
+import { Settings, Save, CheckCircle2, ShieldCheck, Database, HardDrive, Bell, RefreshCw, Copy, Check, PlayCircle, AlertTriangle } from 'lucide-react';
 
 export const SystemSettingsView: React.FC = () => {
   const { settings, updateSettings, syncWithGoogleSheets } = useApp();
@@ -9,13 +9,16 @@ export const SystemSettingsView: React.FC = () => {
   const [companyName, setCompanyName] = useState(settings.companyName);
   const [supportEmail, setSupportEmail] = useState(settings.supportEmail || 'misrpr@rathibuildmart.com');
   const [spreadsheetId, setSpreadsheetId] = useState(settings.spreadsheetId || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow');
-  const [webAppUrl, setWebAppUrl] = useState(settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec');
+  const [webAppUrl, setWebAppUrl] = useState(settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || '');
   const [driveFolderId, setDriveFolderId] = useState(settings.driveFolderId || '1e9Nu2qsZgOVn36VAnZts18LINrjR_1bR');
   const [ticketPrefix, setTicketPrefix] = useState(settings.ticketIdPrefix || 'HD-');
   const [autoAssignment, setAutoAssignment] = useState(settings.autoAssignmentEnabled ?? true);
   const [emailNotifs, setEmailNotifs] = useState(settings.emailNotificationsEnabled ?? true);
   const [slaAlerts, setSlaAlerts] = useState(settings.slaBreachAlertsEnabled ?? true);
   const [isPullingServer, setIsPullingServer] = useState(false);
+  const [isTestingEndpoint, setIsTestingEndpoint] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [copiedUrl, setCopiedUrl] = useState(false);
 
   const handlePullServerConfig = async () => {
     setIsPullingServer(true);
@@ -23,12 +26,12 @@ export const SystemSettingsView: React.FC = () => {
       const res = await fetch('/api/google/get-config');
       const data = await res.json();
       if (data.success && data.config) {
-        if (data.config.webAppUrl) setWebAppUrl(data.config.webAppUrl);
+        if (data.config.webAppUrl !== undefined) setWebAppUrl(data.config.webAppUrl);
         if (data.config.spreadsheetId) setSpreadsheetId(data.config.spreadsheetId);
         if (data.config.driveFolderId) setDriveFolderId(data.config.driveFolderId);
         updateSettings({
-          googleAppsScriptWebAppUrl: data.config.webAppUrl,
-          appsScriptUrl: data.config.webAppUrl,
+          googleAppsScriptWebAppUrl: data.config.webAppUrl || '',
+          appsScriptUrl: data.config.webAppUrl || '',
           spreadsheetId: data.config.spreadsheetId || settings.spreadsheetId,
           driveFolderId: data.config.driveFolderId || settings.driveFolderId
         });
@@ -40,15 +43,42 @@ export const SystemSettingsView: React.FC = () => {
     }
   };
 
+  const handleTestConnection = async () => {
+    if (!webAppUrl.trim()) return;
+    setIsTestingEndpoint(true);
+    setTestResult(null);
+    try {
+      const res = await fetch('/api/google/diagnose-connection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          webAppUrl: webAppUrl.trim(),
+          spreadsheetId: spreadsheetId.trim()
+        })
+      });
+      const data = await res.json();
+      const isSuccess = data.success !== false;
+      setTestResult({
+        success: isSuccess,
+        message: data.message || (isSuccess ? 'Endpoint reachable & verified with Google Sheets!' : 'Unable to verify endpoint.')
+      });
+    } catch (err: any) {
+      setTestResult({
+        success: false,
+        message: `Connection error: ${err.message}`
+      });
+    } finally {
+      setIsTestingEndpoint(false);
+    }
+  };
+
   // Auto-sync form state whenever settings are updated from any other view or modal
   useEffect(() => {
     if (settings.systemName) setSystemName(settings.systemName);
     if (settings.companyName) setCompanyName(settings.companyName);
     if (settings.supportEmail) setSupportEmail(settings.supportEmail);
     if (settings.spreadsheetId) setSpreadsheetId(settings.spreadsheetId);
-    if (settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl) {
-      setWebAppUrl(settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || '');
-    }
+    setWebAppUrl(settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || '');
     if (settings.driveFolderId) setDriveFolderId(settings.driveFolderId);
     if (settings.ticketIdPrefix) setTicketPrefix(settings.ticketIdPrefix);
   }, [settings]);
@@ -226,31 +256,67 @@ export const SystemSettingsView: React.FC = () => {
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-1 flex-wrap gap-1">
-                <label className="block font-bold text-gray-700">Google Apps Script Web App Endpoint URL</label>
+              <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
+                <label className="block font-bold text-gray-700 text-xs">Google Apps Script Web App Endpoint URL</label>
                 <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-emerald-800 bg-emerald-100 font-bold px-2 py-0.5 rounded border border-emerald-200">
+                    Central Single Source of Truth
+                  </span>
                   <button
                     type="button"
                     onClick={handlePullServerConfig}
                     disabled={isPullingServer}
-                    className="text-[10px] text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 font-bold px-2 py-0.5 rounded border border-slate-300 flex items-center gap-1 transition-all"
+                    className="text-[10px] text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 font-bold px-2 py-0.5 rounded border border-slate-300 flex items-center gap-1 transition-all disabled:opacity-50"
                     title="Pull latest URL saved on server"
                   >
                     <RefreshCw className={`w-3 h-3 ${isPullingServer ? 'animate-spin' : ''}`} />
                     <span>{isPullingServer ? 'Pulling...' : 'Pull Server URL'}</span>
                   </button>
-                  <span className="text-[10px] text-emerald-800 bg-emerald-100 font-bold px-2 py-0.5 rounded">Central Single Source</span>
+                  <button
+                    type="button"
+                    onClick={handleTestConnection}
+                    disabled={isTestingEndpoint || !webAppUrl.trim()}
+                    className="text-[10px] text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 font-bold px-2 py-0.5 rounded border border-blue-200 flex items-center gap-1 transition-all disabled:opacity-50"
+                    title="Test connection with Google Apps Script"
+                  >
+                    <PlayCircle className={`w-3 h-3 ${isTestingEndpoint ? 'animate-spin' : ''}`} />
+                    <span>{isTestingEndpoint ? 'Testing...' : 'Test Connection'}</span>
+                  </button>
+                  {webAppUrl.trim() && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(webAppUrl);
+                        setCopiedUrl(true);
+                        setTimeout(() => setCopiedUrl(false), 2000);
+                      }}
+                      className="text-[10px] text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 font-bold px-2 py-0.5 rounded border border-gray-300 flex items-center gap-1 transition-all"
+                      title="Copy URL"
+                    >
+                      {copiedUrl ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedUrl ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  )}
                 </div>
               </div>
+
               <input
                 type="text"
                 value={webAppUrl}
                 onChange={e => setWebAppUrl(e.target.value)}
-                placeholder="https://script.google.com/macros/s/.../exec"
-                className="w-full p-2 border rounded-lg font-mono text-xs"
+                placeholder="https://script.google.com/macros/s/AKfycb.../exec"
+                className="w-full p-2.5 border-2 border-emerald-300 focus:border-emerald-500 rounded-xl font-mono text-xs text-gray-900 bg-emerald-50/20 focus:bg-white shadow-inner focus:outline-hidden transition-all"
               />
-              <p className="text-[10px] text-gray-500 mt-1">
-                💡 <strong>Central Single Entry:</strong> Sirf yahan ek baar paste karke save karein. Poora helpdesk isi endpoint se automatically sync hoga aur sabhi users ke browser me real-time update ho jayega.
+
+              {testResult && (
+                <div className={`mt-2 p-2.5 rounded-lg border text-xs flex items-center gap-2 ${testResult.success ? 'bg-emerald-50 text-emerald-900 border-emerald-200' : 'bg-red-50 text-red-900 border-red-200'}`}>
+                  {testResult.success ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /> : <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />}
+                  <span>{testResult.message}</span>
+                </div>
+              )}
+
+              <p className="text-[10px] text-gray-500 mt-1.5 leading-relaxed">
+                💡 <strong>Single Global Master Control:</strong> Sirf yahan ek baar Web App URL paste karke <strong>Save All Settings</strong> karein. Poora helpdesk system, Email/WhatsApp hub, sync modal, aur sabhi user sessions automatically isi live URL par connect ho jayenge.
               </p>
             </div>
 

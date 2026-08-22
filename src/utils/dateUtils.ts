@@ -1,26 +1,53 @@
 export type DateRangeFilterType = 'today' | 'thisWeek' | 'lastWeek' | 'thisMonth' | 'lastMonth' | 'all' | 'custom';
 
-export const formatDateTime = (dateInput?: Date | string | number): string => {
+/**
+ * Formats any date into Indian Standard Time (IST, GMT+5:30)
+ * Output default: YYYY-MM-DD HH:mm (or YYYY-MM-DD HH:mm:ss if includeSeconds is true)
+ */
+export const formatDateTime = (dateInput?: Date | string | number, includeSeconds: boolean = false): string => {
   if (!dateInput) return '';
   const d = typeof dateInput === 'string' || typeof dateInput === 'number' ? new Date(dateInput) : dateInput;
   if (isNaN(d.getTime())) return String(dateInput);
 
-  const pad = (num: number) => String(num).padStart(2, '0');
-  const year = d.getFullYear();
-  const month = pad(d.getMonth() + 1);
-  const day = pad(d.getDate());
-  const hours = pad(d.getHours());
-  const minutes = pad(d.getMinutes());
+  try {
+    const formatter = new Intl.DateTimeFormat('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    });
+    const parts = formatter.formatToParts(d);
+    const getPart = (type: string) => parts.find(p => p.type === type)?.value || '00';
+    const year = getPart('year');
+    const month = getPart('month');
+    const day = getPart('day');
+    const hours = getPart('hour');
+    const minutes = getPart('minute');
+    const seconds = getPart('second');
 
-  return `${year}-${month}-${day} ${hours}:${minutes}`;
+    return includeSeconds
+      ? `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
+      : `${year}-${month}-${day} ${hours}:${minutes}`;
+  } catch {
+    const pad = (num: number) => String(num).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
 };
 
 export const formatSheetDateTime = (dateInput?: Date | string | number): string => {
-  return formatDateTime(dateInput);
+  return formatDateTime(dateInput, false);
 };
 
-export const getFormattedNow = (): string => {
-  return formatDateTime(new Date());
+export const getFormattedNow = (includeSeconds: boolean = false): string => {
+  return formatDateTime(new Date(), includeSeconds);
+};
+
+export const getFormattedNowIST = (): string => {
+  return formatDateTime(new Date(), true);
 };
 
 /**

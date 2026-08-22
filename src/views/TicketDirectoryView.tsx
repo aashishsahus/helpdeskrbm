@@ -234,17 +234,17 @@ export const TicketDirectoryView: React.FC = () => {
 
       const matchesSearch =
         !globalSearchQuery ||
-        t.id.toLowerCase().includes(globalSearchQuery.toLowerCase()) ||
-        t.subject.toLowerCase().includes(globalSearchQuery.toLowerCase()) ||
+        (t.id && t.id.toLowerCase().includes(globalSearchQuery.toLowerCase())) ||
+        (t.subject && t.subject.toLowerCase().includes(globalSearchQuery.toLowerCase())) ||
         (t.ticketType && t.ticketType.toLowerCase().includes(globalSearchQuery.toLowerCase())) ||
         (t.module && t.module.toLowerCase().includes(globalSearchQuery.toLowerCase())) ||
         (t.subCategory && t.subCategory.toLowerCase().includes(globalSearchQuery.toLowerCase())) ||
-        t.employeeName.toLowerCase().includes(globalSearchQuery.toLowerCase()) ||
+        (t.employeeName && t.employeeName.toLowerCase().includes(globalSearchQuery.toLowerCase())) ||
         (t.employeeEmail && t.employeeEmail.toLowerCase().includes(globalSearchQuery.toLowerCase())) ||
         (t.employeeId && t.employeeId.toLowerCase().includes(globalSearchQuery.toLowerCase())) ||
-        t.category.toLowerCase().includes(globalSearchQuery.toLowerCase()) ||
-        t.department.toLowerCase().includes(globalSearchQuery.toLowerCase()) ||
-        t.location.toLowerCase().includes(globalSearchQuery.toLowerCase());
+        (t.category && t.category.toLowerCase().includes(globalSearchQuery.toLowerCase())) ||
+        (t.department && t.department.toLowerCase().includes(globalSearchQuery.toLowerCase())) ||
+        (t.location && t.location.toLowerCase().includes(globalSearchQuery.toLowerCase()));
 
       const matchesStatus = statusFilter === 'All' || t.status === statusFilter;
       const matchesType = typeFilter === 'All' || t.ticketType === typeFilter;
@@ -1089,14 +1089,14 @@ export const TicketDirectoryView: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                paginatedTickets.map(t => {
+                paginatedTickets.map((t, idx) => {
                   const isDemo = t.isDemoTicket || ['HD-000001', 'HD-000002', 'HD-000003', 'HD-000004', 'HD-000005', 'HD-000006', 'HD-000007', 'HD-000008'].includes(t.id);
                   const rel = getTicketRelationship(t, currentUser);
                   const delay = getTicketDelayInfo(t);
 
                   return (
                     <tr
-                      key={t.id}
+                      key={`${t.id}-${idx}`}
                       onClick={() => setSelectedTicketId(t.id)}
                       className="hover:bg-blue-50/50 transition-colors cursor-pointer group"
                     >

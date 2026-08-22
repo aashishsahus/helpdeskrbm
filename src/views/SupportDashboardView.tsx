@@ -71,13 +71,13 @@ export const SupportDashboardView: React.FC = () => {
 
     const matchesSearch =
       !globalSearchQuery ||
-      t.id.toLowerCase().includes(globalSearchQuery.toLowerCase()) ||
-      t.subject.toLowerCase().includes(globalSearchQuery.toLowerCase()) ||
-      t.employeeName.toLowerCase().includes(globalSearchQuery.toLowerCase()) ||
+      (t.id && t.id.toLowerCase().includes(globalSearchQuery.toLowerCase())) ||
+      (t.subject && t.subject.toLowerCase().includes(globalSearchQuery.toLowerCase())) ||
+      (t.employeeName && t.employeeName.toLowerCase().includes(globalSearchQuery.toLowerCase())) ||
       (t.ticketType && t.ticketType.toLowerCase().includes(globalSearchQuery.toLowerCase())) ||
       (t.module && t.module.toLowerCase().includes(globalSearchQuery.toLowerCase())) ||
       (t.subCategory && t.subCategory.toLowerCase().includes(globalSearchQuery.toLowerCase())) ||
-      t.category.toLowerCase().includes(globalSearchQuery.toLowerCase());
+      (t.category && t.category.toLowerCase().includes(globalSearchQuery.toLowerCase()));
 
     const matchesStatus = statusFilter === 'All' || t.status === statusFilter;
     const matchesType = typeFilter === 'All' || t.ticketType === typeFilter;
@@ -302,9 +302,9 @@ export const SupportDashboardView: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                filteredQueue.map(t => (
+                filteredQueue.map((t, idx) => (
                   <tr
-                    key={t.id}
+                    key={`${t.id}-${idx}`}
                     onClick={() => setSelectedTicketId(t.id)}
                     className="hover:bg-blue-50/40 transition-colors cursor-pointer group"
                   >

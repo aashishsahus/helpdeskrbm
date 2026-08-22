@@ -107,6 +107,9 @@ interface AppContextType {
   // Hierarchy CRUD Methods
   updateHierarchy: (newItems: HierarchyItem[]) => void;
   updateTicketTypes: (newTypes: string[]) => void;
+  addTicketType: (type: string) => void;
+  editTicketType: (oldType: string, newType: string) => void;
+  deleteTicketType: (type: string) => void;
   addHierarchyItem: (item: HierarchyItem) => void;
   deleteHierarchyItem: (item: { category: string; module: string; subCategory: string; type?: string }) => void;
 
@@ -611,10 +614,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (saved) {
         const parsed: Ticket[] = JSON.parse(saved);
         const realSaved = parsed.filter(isReal);
+        const map = new Map<string, Ticket>();
+        realSaved.forEach(t => {
+          if (t && t.id) {
+            map.set(t.id, t);
+          }
+        });
+        const deduped = Array.from(map.values());
         try {
-          localStorage.setItem('hd_tickets_v2', JSON.stringify(realSaved));
+          localStorage.setItem('hd_tickets_v2', JSON.stringify(deduped));
         } catch {}
-        return realSaved;
+        return deduped;
       }
       return [];
     } catch {
@@ -633,7 +643,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (saved) {
         const parsed: TicketComment[] = JSON.parse(saved);
         const realComments = parsed.filter(c => !demoIdSet.has(c.ticketId));
-        return realComments;
+        const map = new Map<string, TicketComment>();
+        realComments.forEach(c => {
+          if (c && c.id) map.set(c.id, c);
+        });
+        return Array.from(map.values());
       }
       return [];
     } catch {
@@ -652,7 +666,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (saved) {
         const parsed: TicketHistory[] = JSON.parse(saved);
         const realHistory = parsed.filter(h => !demoIdSet.has(h.ticketId));
-        return realHistory;
+        const map = new Map<string, TicketHistory>();
+        realHistory.forEach(h => {
+          if (h && h.id) map.set(h.id, h);
+        });
+        return Array.from(map.values());
       }
       return [];
     } catch {
@@ -671,7 +689,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (saved) {
         const parsed: NotificationItem[] = JSON.parse(saved);
         const realNotifs = parsed.filter(n => !n.ticketId || !demoIdSet.has(n.ticketId));
-        return realNotifs;
+        const map = new Map<string, NotificationItem>();
+        realNotifs.forEach(n => {
+          if (n && n.id) map.set(n.id, n);
+        });
+        return Array.from(map.values());
       }
       return [];
     } catch {
@@ -1051,7 +1073,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     inFlightSyncRef.current[syncKey] = now;
 
     const sheetId = settings.spreadsheetId || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
-    const scriptUrl = settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
+    const scriptUrl = settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || '';
 
     let targetTab: 'Tickets' | 'Users' | 'ArchivedTickets' | 'ArchivedUsers' | 'RolePermissions' | 'Departments' | 'Categories' | 'MasterDropdowns' | 'TicketComments' | 'SystemSettings' | 'All' = 'Tickets';
     let recordName = 'Support Ticket Record';
@@ -1356,7 +1378,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       attachments: uploadedAttachments
     };
 
-    setTickets(prev => [newTicket, ...prev]);
+    setTickets(prev => {
+      const map = new Map<string, Ticket>();
+      map.set(newTicket.id, newTicket);
+      prev.forEach(t => {
+        if (t && t.id && !map.has(t.id)) {
+          map.set(t.id, t);
+        }
+      });
+      return Array.from(map.values());
+    });
 
     // Record history
     const newHist: TicketHistory = {
@@ -1748,7 +1779,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ticket: targetTicket,
         method: 'batchUpdate'
       });
-      const scriptUrl = settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || 'https://script.google.com/macros/s/AKfycbwIW9GcL2_foursv0rb6sYPp8FYVtN6KDK3fi2enUOkI-jSnTrNIO-kSRtZDDiV0G5G/exec';
+      const scriptUrl = settings.googleAppsScriptWebAppUrl || settings.appsScriptUrl || '';
       const sheetId = settings.spreadsheetId || '1gvVSa5rvj8b-ygXxc_dHXQ9y8dH52andFgnLaYft7ow';
       fetch('/api/google/sync-ticket', {
         method: 'POST',
@@ -1915,7 +1946,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     const updatedArchived = archivedTickets.filter(t => t.id !== ticketId);
-    const updatedTickets = [restoredTicket, ...tickets];
+    const updatedTickets = [restoredTicket, ...tickets.filter(t => t.id !== ticketId)];
 
     setArchivedTickets(updatedArchived);
     setTickets(updatedTickets);
@@ -2479,6 +2510,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       rolesList,
       designationsList
     });
+  };
+
+  const addTicketType = (typeVal: string) => {
+    if (!typeVal.trim() || ticketTypes.includes(typeVal.trim())) return;
+    const updatedTypes = [...ticketTypes, typeVal.trim()];
+    setTicketTypes(updatedTypes);
+    saveStoredTicketTypes(updatedTypes);
+    syncDirectActionToSheets({
+      action: 'addDropdownOption',
+      dropdownType: 'Ticket Request Type',
+      optionValue: typeVal.trim(),
+      optionCode: typeVal.trim().toUpperCase().replace(/[^A-Z0-9]/g, '_'),
+      ticketTypes: updatedTypes
+    });
+    addAuditLog('TICKET_TYPE_ADDED', 'Master Settings', `Added ticket type option: ${typeVal}`);
+  };
+
+  const editTicketType = (oldType: string, newType: string) => {
+    if (!newType.trim()) return;
+    const updatedTypes = ticketTypes.map(t => (t === oldType ? newType.trim() : t));
+    setTicketTypes(updatedTypes);
+    saveStoredTicketTypes(updatedTypes);
+    const updatedHierarchy = hierarchyItems.map(item => item.type === oldType ? { ...item, type: newType.trim() } : item);
+    setHierarchyItems(updatedHierarchy);
+    saveStoredHierarchy(updatedHierarchy);
+    syncDirectActionToSheets({
+      action: 'editDropdownOption',
+      dropdownType: 'Ticket Request Type',
+      oldValue: oldType,
+      newValue: newType.trim(),
+      optionCode: newType.trim().toUpperCase().replace(/[^A-Z0-9]/g, '_'),
+      ticketTypes: updatedTypes
+    });
+    addAuditLog('TICKET_TYPE_EDITED', 'Master Settings', `Renamed ticket type ${oldType} to ${newType}`);
+  };
+
+  const deleteTicketType = (typeVal: string) => {
+    const updatedTypes = ticketTypes.filter(t => t !== typeVal);
+    setTicketTypes(updatedTypes);
+    saveStoredTicketTypes(updatedTypes);
+    syncDirectActionToSheets({
+      action: 'deleteDropdownOption',
+      dropdownType: 'Ticket Request Type',
+      optionValue: typeVal,
+      ticketTypes: updatedTypes
+    });
+    addAuditLog('TICKET_TYPE_DELETED', 'Master Settings', `Deleted ticket type ${typeVal}`);
   };
 
   const addHierarchyItem = (item: HierarchyItem) => {
@@ -3441,6 +3519,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         updateHierarchy,
         updateTicketTypes,
+        addTicketType,
+        editTicketType,
+        deleteTicketType,
         addHierarchyItem,
         deleteHierarchyItem,
 

@@ -70,10 +70,16 @@ export const TicketDetailsModal: React.FC = () => {
   const ticketHistoryList = history.filter(h => h.ticketId === ticket.id);
 
   // Match currently assigned user by id, employeeId, or name
-  const currentAssignedUser = users.find(u =>
-    (ticket.assignedAgentId && (u.id === ticket.assignedAgentId || u.employeeId === ticket.assignedAgentId || u.name.toLowerCase() === ticket.assignedAgentId.toLowerCase())) ||
-    (ticket.assignedAgentName && (u.name.toLowerCase() === ticket.assignedAgentName.toLowerCase() || u.id === ticket.assignedAgentName || u.employeeId === ticket.assignedAgentName))
-  );
+  const currentAssignedUser = users.find(u => {
+    if (!u) return false;
+    const uName = (u.name || '').toLowerCase();
+    const tAgentId = (ticket.assignedAgentId || '').toLowerCase();
+    const tAgentName = (ticket.assignedAgentName || '').toLowerCase();
+    return (
+      (ticket.assignedAgentId && (u.id === ticket.assignedAgentId || u.employeeId === ticket.assignedAgentId || (uName && uName === tAgentId))) ||
+      (ticket.assignedAgentName && ((uName && uName === tAgentName) || u.id === ticket.assignedAgentName || u.employeeId === ticket.assignedAgentName))
+    );
+  });
 
   // Determine the effective value for select input
   const currentSelectValue = currentAssignedUser ? currentAssignedUser.id : (ticket.assignedAgentId || ticket.assignedAgentName || '');
@@ -199,9 +205,9 @@ export const TicketDetailsModal: React.FC = () => {
                   Google Drive Attachments ({ticket.attachments.length})
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {ticket.attachments.map(att => (
+                  {ticket.attachments.map((att, idx) => (
                     <a
-                      key={att.id}
+                      key={`${att.id}-${idx}`}
                       href={att.driveUrl}
                       target="_blank"
                       rel="noopener noreferrer"
@@ -232,11 +238,11 @@ export const TicketDetailsModal: React.FC = () => {
                 {ticketComments.length === 0 ? (
                   <p className="text-xs text-gray-400 italic">No comments added yet.</p>
                 ) : (
-                  ticketComments.map(c => {
+                  ticketComments.map((c, idx) => {
                     if (c.isInternalNote && !isStaff) return null; // Hide internal notes from normal employees
                     return (
                       <div
-                        key={c.id}
+                        key={`${c.id}-${idx}`}
                         className={`p-3.5 rounded-xl text-xs ${
                           c.isInternalNote
                             ? 'bg-amber-50/80 border border-amber-200'
@@ -499,8 +505,8 @@ export const TicketDetailsModal: React.FC = () => {
                 <History className="w-3 h-3 text-blue-600" /> Audit Timeline
               </span>
               <div className="space-y-2 max-h-48 overflow-y-auto text-[11px] font-mono">
-                {ticketHistoryList.map(h => (
-                  <div key={h.id} className="border-l-2 border-blue-500 pl-2 py-0.5">
+                {ticketHistoryList.map((h, idx) => (
+                  <div key={`${h.id}-${idx}`} className="border-l-2 border-blue-500 pl-2 py-0.5">
                     <p className="font-bold text-gray-800">{h.action}</p>
                     <p className="text-[10px] text-gray-500">{h.details}</p>
                     <span className="text-[9px] text-gray-400">{new Date(h.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>

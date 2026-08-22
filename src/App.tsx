@@ -30,6 +30,7 @@ import { EmailWhatsAppHubView } from './views/AdminPanel/EmailWhatsAppHubView';
 
 import { LoginModal } from './components/LoginModal';
 import { LoginPage } from './views/LoginPage';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 const MainLayout: React.FC = () => {
   const { activeView, currentUser } = useApp();
@@ -37,7 +38,11 @@ const MainLayout: React.FC = () => {
 
   // If user is not authenticated, show standalone Login Page first
   if (!currentUser) {
-    return <LoginPage />;
+    return (
+      <ErrorBoundary>
+        <LoginPage />
+      </ErrorBoundary>
+    );
   }
 
   const renderCurrentView = () => {
@@ -82,19 +87,15 @@ const MainLayout: React.FC = () => {
 
       case 'dropdown-settings':
       case 'admin_dropdowns':
+      case 'departments':
+      case 'admin_departments':
+      case 'categories':
+      case 'admin_categories':
         return <MasterDropdownsView />;
 
       case 'users':
       case 'admin_users':
         return <UserManagement />;
-
-      case 'departments':
-      case 'admin_departments':
-        return <DepartmentManagement />;
-
-      case 'categories':
-      case 'admin_categories':
-        return <CategoryManagement />;
 
       case 'sla':
       case 'admin_sla':
@@ -149,7 +150,9 @@ const MainLayout: React.FC = () => {
 
         {/* View Main Content Area */}
         <main className="flex-1 overflow-hidden flex flex-col relative">
-          {renderCurrentView()}
+          <ErrorBoundary>
+            {renderCurrentView()}
+          </ErrorBoundary>
         </main>
       </div>
 
@@ -165,8 +168,10 @@ const MainLayout: React.FC = () => {
 
 export default function App() {
   return (
-    <AppProvider>
-      <MainLayout />
-    </AppProvider>
+    <ErrorBoundary>
+      <AppProvider>
+        <MainLayout />
+      </AppProvider>
+    </ErrorBoundary>
   );
 }

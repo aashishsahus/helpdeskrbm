@@ -67,6 +67,9 @@ export const MasterDropdownsView: React.FC = () => {
     editCategory,
     deleteCategory,
     ticketTypes,
+    addTicketType,
+    editTicketType,
+    deleteTicketType,
     hierarchyItems,
     updateHierarchy,
     updateTicketTypes,
@@ -338,9 +341,7 @@ export const MasterDropdownsView: React.FC = () => {
 
     switch (activeTab) {
       case 'ticketTypes':
-        if (!ticketTypes.includes(newItemText.trim())) {
-          updateTypes([...ticketTypes, newItemText.trim()]);
-        }
+        addTicketType(newItemText.trim());
         break;
       case 'branches':
         addBranch(newItemText);
@@ -369,9 +370,7 @@ export const MasterDropdownsView: React.FC = () => {
 
     switch (activeTab) {
       case 'ticketTypes':
-        updateTypes(ticketTypes.map(t => (t === oldVal ? editValue.trim() : t)));
-        // Also update hierarchy entries referencing oldVal
-        updateHierarchy(hierarchyItems.map(item => item.type === oldVal ? { ...item, type: editValue.trim() } : item));
+        editTicketType(oldVal, editValue.trim());
         break;
       case 'branches':
         editBranch(oldVal, editValue);
@@ -404,7 +403,7 @@ export const MasterDropdownsView: React.FC = () => {
     const { idOrName, label, tab } = deleteConfirmModal;
     switch (tab) {
       case 'ticketTypes':
-        updateTypes(ticketTypes.filter(t => t !== idOrName));
+        deleteTicketType(idOrName);
         break;
       case 'branches':
         deleteBranch(idOrName);

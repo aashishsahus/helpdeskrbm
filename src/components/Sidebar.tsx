@@ -94,7 +94,7 @@ export const Sidebar: React.FC = () => {
     }
   ];
 
-  // Grouped Admin Settings sub-items
+  // Grouped Admin Settings sub-items (Departments and Categories are consolidated inside Dropdown Settings)
   const adminSubItems = [
     {
       id: 'settings',
@@ -115,28 +115,16 @@ export const Sidebar: React.FC = () => {
       visible: isSuperAdmin || hasPermission('canManageRolePermissions')
     },
     {
-      id: 'departments',
-      label: 'Departments',
-      icon: Building2,
-      visible: isSuperAdmin || hasPermission('canManageDepartments')
-    },
-    {
-      id: 'categories',
-      label: 'Categories & Sub',
-      icon: Tags,
-      visible: isSuperAdmin || hasPermission('canManageCategories')
+      id: 'dropdown-settings',
+      label: 'Dropdown Settings',
+      icon: MapPin,
+      visible: isSuperAdmin || hasPermission('canManageDropdowns')
     },
     {
       id: 'sla',
       label: 'SLA Config',
       icon: Clock,
       visible: isSuperAdmin || hasPermission('canManageSLA')
-    },
-    {
-      id: 'dropdown-settings',
-      label: 'Dropdown Settings',
-      icon: MapPin,
-      visible: isSuperAdmin || hasPermission('canManageDropdowns')
     },
     {
       id: 'google-drive',
